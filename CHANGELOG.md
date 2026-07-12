@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.1.0 (2026-07-11)
+## v0.1.0 (2026-07-12)
 
 First usable release. Weft is component-oriented hypermedia for Ruby: components declare their structure, their data, and their interactive behaviors, and the framework derives the routing, request handling, and client-side wiring automatically.
 
