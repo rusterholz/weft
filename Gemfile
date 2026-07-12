@@ -11,7 +11,7 @@ gem "bundler", "~> 2.7"
 gem "openssl", ">= 3.2.2"
 gem "pry-byebug", platforms: :mri
 gem "rack-test", "~> 2.1"
-gem "rake", "~> 13.0"
+gem "rake", "~> 13.4"
 gem "rspec", "~> 3.13"
 gem "rubocop", "~> 1.80"
 gem "rubocop-rake"
