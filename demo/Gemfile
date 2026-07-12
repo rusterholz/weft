@@ -1,0 +1,24 @@
+# frozen_string_literal: true
+
+source "https://rubygems.org"
+
+gem "activerecord", "~> 8.0", require: "active_record"
+gem "arbre", "~> 2.2"
+gem "clockwork", "~> 3.0"
+gem "puma", "~> 6.0"
+gem "rackup", "~> 2.2"
+gem "rake", "~> 13.0"
+gem "sinatra", "~> 4.1"
+gem "sinatra-contrib", "~> 4.1"
+gem "sqlite3", "~> 2.6"
+gem "weft", path: ".."
+gem "zeitwerk", "~> 2.7"
+# Fix for OpenSSL 3.6.0 CRL verification bug on macOS
+gem "openssl", ">= 3.2.2"
+
+group :development, :test do
+  gem "rspec", "~> 3.13"
+  gem "rubocop", "~> 1.80"
+  gem "rubocop-rake"
+  gem "rubocop-rspec" # present in parent .rubocop.yml; rubocop walks up and loads it
+end

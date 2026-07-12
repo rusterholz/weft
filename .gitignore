@@ -1,0 +1,25 @@
+/.bundle/
+!/.bundle/config
+/.yardoc
+/_yardoc/
+/coverage/
+/pkg/
+*.gem
+/spec/reports/
+/tmp/
+/log/
+
+# rspec failure tracking
+.rspec_status
+
+# demo app — runtime artifacts
+demo/db/*.sqlite3
+demo/db/*.sqlite3-*
+demo/log/
+demo/tmp/
+
+# Arbex reference docs — project context, not gem content
+docs/arbex/
+
+# docker volumes (data is stored in named volumes, not tracked in git)
+.docker/

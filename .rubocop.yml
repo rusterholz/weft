@@ -1,0 +1,94 @@
+plugins:
+  - rubocop-rake
+  - rubocop-rspec
+
+AllCops:
+  TargetRubyVersion: 3.2
+  NewCops: enable
+  Exclude:
+    # Demo's data layer (migrations, seeds) — already excluded by the demo's
+    # own .rubocop.yml when rubocop runs from inside demo/, but listed here
+    # so runs from the gem root also skip them. These files inherently use
+    # patterns rubocop dislikes (long change methods, :address_line_1 names)
+    # that follow database/postal conventions, not Ruby style conventions.
+    - "demo/db/**/*"
+
+Layout/DotPosition:
+  EnforcedStyle: trailing
+
+Layout/LineLength:
+  Max: 120
+
+Lint/UselessDefaultValueArgument:
+  Enabled: false
+
+Metrics/BlockLength:
+  Exclude:
+    - "Rakefile"
+
+Metrics/ClassLength:
+  Max: 150
+
+Metrics/MethodLength:
+  Max: 20
+
+Metrics/ModuleLength:
+  Max: 150
+
+Naming/VariableNumber:
+  Exclude:
+    - "spec/**/*"
+
+RSpec/DescribeClass:
+  Exclude:
+    - "spec/integration/**/*"
+
+RSpec/ExampleLength:
+  Max: 15
+  Exclude:
+    - "spec/integration/**/*"
+
+RSpec/MessageSpies:
+  EnforcedStyle: have_received
+
+RSpec/MultipleExpectations:
+  Max: 6
+
+RSpec/MultipleMemoizedHelpers:
+  Enabled: false
+
+RSpec/NamedSubject:
+  Enabled: false
+
+RSpec/NestedGroups:
+  Max: 5
+
+RSpec/SpecFilePathFormat:
+  Exclude:
+    - "spec/integration/**/*"
+
+Style/Documentation:
+  Enabled: false
+
+Style/DoubleNegation:
+  Enabled: false
+
+Style/EmptyClassDefinition:
+  EnforcedStyle: class_new
+
+Style/ModuleFunction:
+  Enabled: false
+
+Style/NumericLiterals:
+  Enabled: false
+
+Style/SpecialGlobalVars:
+  EnforcedStyle: use_perl_names
+
+Style/StringLiterals:
+  Enabled: true
+  EnforcedStyle: double_quotes
+
+Style/StringLiteralsInInterpolation:
+  Enabled: true
+  EnforcedStyle: single_quotes

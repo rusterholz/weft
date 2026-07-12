@@ -1,0 +1,125 @@
+# frozen_string_literal: true
+
+require_relative "config/environment"
+
+namespace :db do
+  desc "Create the database"
+  task :create do
+    db_path = File.join(APP_ROOT, "db", "development.sqlite3")
+    if File.exist?(db_path)
+      puts "Database already exists: #{db_path}"
+    else
+      FileUtils.touch(db_path)
+      puts "Created database: #{db_path}"
+    end
+  end
+
+  desc "Run pending migrations"
+  task :migrate do
+    migrations_path = File.join(APP_ROOT, "db", "migrate")
+    ActiveRecord::MigrationContext.new(migrations_path).migrate
+    puts "Migrations complete."
+  end
+
+  desc "Roll back the last migration"
+  task :rollback do
+    migrations_path = File.join(APP_ROOT, "db", "migrate")
+    ActiveRecord::MigrationContext.new(migrations_path).rollback
+    puts "Rolled back one migration."
+  end
+
+  desc "Load seed data"
+  task :seed do
+    seed_file = File.join(APP_ROOT, "db", "seeds.rb")
+    load(seed_file) if File.exist?(seed_file)
+    puts "Seed data loaded."
+  end
+
+  desc "Drop the database"
+  task :drop do
+    db_path = File.join(APP_ROOT, "db", "development.sqlite3")
+    if File.exist?(db_path)
+      File.delete(db_path)
+      puts "Dropped database: #{db_path}"
+    else
+      puts "No database to drop."
+    end
+  end
+
+  desc "Drop and recreate the database (for the current APP_ENV)"
+  task fresh: %i[drop create migrate seed]
+
+  desc "Show current migration status"
+  task :status do
+    migrations_path = File.join(APP_ROOT, "db", "migrate")
+    context = ActiveRecord::MigrationContext.new(migrations_path)
+
+    puts "\n Status   Migration ID    Migration Name"
+    puts "-" * 50
+
+    context.migrations_status.each do |status, version, name|
+      puts format(" %-8s %-15s %s", status, version, name) # rubocop:disable Style/FormatStringToken
+    end
+    puts
+  end
+end
+
+# -- Dev lifecycle --
+
+PIDFILE_DIR = File.join(APP_ROOT, "tmp", "pids")
+
+namespace :dev do
+  desc "Kill clockwork and puma, reset DB, restart both"
+  task restart: %i[down up]
+
+  desc "Reset DB, start clockwork and puma"
+  task up: ["db:fresh"] do
+    FileUtils.mkdir_p(PIDFILE_DIR)
+
+    clock_pid = spawn("bundle exec clockwork clock.rb", out: "/dev/null", err: "/dev/null")
+    Process.detach(clock_pid)
+    File.write(File.join(PIDFILE_DIR, "clockwork.pid"), clock_pid)
+
+    puma_pid = spawn("bundle exec rackup -p 9292", out: "/dev/null", err: "/dev/null")
+    Process.detach(puma_pid)
+    File.write(File.join(PIDFILE_DIR, "puma.pid"), puma_pid)
+
+    sleep 2
+    puts "Clockwork (pid #{clock_pid}) and Puma (pid #{puma_pid}) running."
+    puts "http://localhost:9292"
+  end
+
+  desc "Stop clockwork and puma"
+  task :down do
+    %w[clockwork puma].each do |name|
+      pidfile = File.join(PIDFILE_DIR, "#{name}.pid")
+      next unless File.exist?(pidfile)
+
+      pid = File.read(pidfile).strip.to_i
+      begin
+        Process.kill("TERM", pid)
+        puts "Stopped #{name} (pid #{pid})"
+      rescue Errno::ESRCH
+        puts "#{name} (pid #{pid}) already stopped"
+      end
+      File.delete(pidfile)
+    end
+    # Belt and suspenders: also kill by port/process name
+    system("kill $(lsof -ti:9292) 2>/dev/null")
+    system("kill $(pgrep -f 'clockwork clock.rb') 2>/dev/null")
+    sleep 1
+  end
+end
+
+# -- Quality checks --
+
+desc "Run rspec and rubocop"
+task :check do
+  puts "=== RSpec ==="
+  rspec_ok = system("bundle exec rspec")
+  puts
+  puts "=== RuboCop ==="
+  rubocop_ok = system("bundle exec rubocop")
+  abort("\ncheck failed") unless rspec_ok && rubocop_ok
+  puts "\nAll clear."
+end

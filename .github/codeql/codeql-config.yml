@@ -1,0 +1,8 @@
+# CodeQL configuration for weft gem
+
+name: "CodeQL Config"
+
+# Excludes the test application from security scanning since it's never deployed:
+
+paths-ignore:
+  - 'spec/demo/**'

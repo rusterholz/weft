@@ -1,0 +1,66 @@
+inherit_mode:
+  merge:
+    - Exclude
+
+plugins:
+  - rubocop-rake
+  - rubocop-rspec
+
+AllCops:
+  TargetRubyVersion: 3.2
+  NewCops: enable
+  Exclude:
+    - "db/**/*"
+    - "tmp/**/*"
+    - "log/**/*"
+
+Layout/DotPosition:
+  EnforcedStyle: trailing
+
+Layout/LineLength:
+  Max: 120
+
+Lint/UselessDefaultValueArgument:
+  Enabled: false
+
+Metrics/BlockLength:
+  Exclude:
+    - "Rakefile"
+    - "app.rb"
+
+Metrics/ClassLength:
+  Exclude:
+    - "app.rb"
+
+Metrics/MethodLength:
+  Max: 20
+
+Style/Documentation:
+  Enabled: false
+
+Style/DoubleNegation:
+  Enabled: false
+
+Style/ModuleFunction:
+  Enabled: false
+
+Style/NumericLiterals:
+  Enabled: false
+
+Style/SpecialGlobalVars:
+  EnforcedStyle: use_perl_names
+
+Style/StringLiterals:
+  EnforcedStyle: double_quotes
+
+Style/StringLiteralsInInterpolation:
+  EnforcedStyle: single_quotes
+
+RSpec/MultipleExpectations:
+  Max: 8
+
+RSpec/ExampleLength:
+  Max: 15
+
+RSpec/LetSetup:
+  Enabled: false
