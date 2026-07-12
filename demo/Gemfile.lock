@@ -74,7 +74,7 @@ GEM
     rackup (2.3.1)
       rack (>= 3)
     rainbow (3.1.1)
-    rake (13.3.1)
+    rake (13.4.2)
     regexp_parser (2.12.0)
     rspec (3.13.2)
       rspec-core (~> 3.13.0)
@@ -164,7 +164,7 @@ DEPENDENCIES
   openssl (>= 3.2.2)
   puma (~> 6.0)
   rackup (~> 2.2)
-  rake (~> 13.0)
+  rake (~> 13.4)
   rspec (~> 3.13)
   rubocop (~> 1.80)
   rubocop-rake
