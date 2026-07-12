@@ -52,7 +52,7 @@ GEM
     multi_json (1.21.1)
     mustermann (3.1.1)
     openssl (4.0.2)
-    parallel (2.1.0)
+    parallel (1.28.0)
     parser (3.3.11.1)
       ast (~> 2.4.1)
       racc
@@ -157,14 +157,15 @@ DEPENDENCIES
   arbre (~> 1.7.0)
   bundler (~> 2.7)
   openssl (>= 3.2.2)
+  parallel (~> 1.24)
   pry-byebug
   rack-test (~> 2.1)
-  rake (~> 13.0)
+  rake (~> 13.4)
   rspec (~> 3.13)
-  rubocop (~> 1.80)
+  rubocop (~> 1.88)
   rubocop-rake
   rubocop-rspec
-  webmock (~> 3.24)
+  webmock (~> 3.26)
   weft!
 
 BUNDLED WITH

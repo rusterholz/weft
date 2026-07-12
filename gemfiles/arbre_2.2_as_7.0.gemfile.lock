@@ -59,7 +59,7 @@ GEM
     mustermann (3.1.0)
     mutex_m (0.3.0)
     openssl (4.0.1)
-    parallel (2.0.1)
+    parallel (1.28.0)
     parser (3.3.11.1)
       ast (~> 2.4.1)
       racc
@@ -84,7 +84,7 @@ GEM
     rack-test (2.2.0)
       rack (>= 1.3)
     rainbow (3.1.1)
-    rake (13.3.1)
+    rake (13.4.2)
     regexp_parser (2.12.0)
     reline (0.6.3)
       io-console (~> 0.5)
@@ -102,7 +102,7 @@ GEM
       diff-lcs (>= 1.2.0, < 2.0)
       rspec-support (~> 3.13.0)
     rspec-support (3.13.7)
-    rubocop (1.86.1)
+    rubocop (1.88.2)
       json (~> 2.3)
       language_server-protocol (~> 3.17.0.2)
       lint_roller (~> 1.1.0)
@@ -162,14 +162,15 @@ DEPENDENCIES
   arbre (~> 2.2.0)
   bundler (~> 2.7)
   openssl (>= 3.2.2)
+  parallel (~> 1.24)
   pry-byebug
   rack-test (~> 2.1)
-  rake (~> 13.0)
+  rake (~> 13.4)
   rspec (~> 3.13)
-  rubocop (~> 1.80)
+  rubocop (~> 1.88)
   rubocop-rake
   rubocop-rspec
-  webmock (~> 3.24)
+  webmock (~> 3.26)
   weft!
 
 BUNDLED WITH
