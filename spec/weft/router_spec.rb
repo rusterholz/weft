@@ -250,9 +250,9 @@ RSpec.describe Weft::Router do
       expect(last_response.status).to eq(200)
       expect(last_response.body).to include("contact-card")
       # ContactCard does not declare these — they must not surface as HTML attributes.
-      expect(last_response.body).not_to match(/first_name=/)
-      expect(last_response.body).not_to match(/last_name=/)
-      expect(last_response.body).not_to match(/email=/)
+      expect(last_response.body).not_to include("first_name=")
+      expect(last_response.body).not_to include("last_name=")
+      expect(last_response.body).not_to include("email=")
     end
 
     it "carries the target's shared attrs and applies the target's defaults for absent keys" do
@@ -279,7 +279,7 @@ RSpec.describe Weft::Router do
 
       # Declared key the callable updated survives; undeclared key does not leak.
       expect(last_response.body).to include("id=kept")
-      expect(last_response.body).not_to match(/surprise/)
+      expect(last_response.body).not_to include("surprise")
     end
   end
 
@@ -981,8 +981,8 @@ RSpec.describe Weft::Router do
       expect(last_response.status).to eq(500)
       expect(last_response.body).to include("rendered-ok")
       # Carve-outs not declared on target must NOT appear as wrapper attrs.
-      expect(last_response.body).not_to match(/request_path=/)
-      expect(last_response.body).not_to match(/status_code=/)
+      expect(last_response.body).not_to include("request_path=")
+      expect(last_response.body).not_to include("status_code=")
     end
 
     it "suppresses :exception on the redirect path even if the Page declares it" do # rubocop:disable RSpec/ExampleLength
@@ -1075,7 +1075,7 @@ RSpec.describe Weft::Router do
       # Declared auto-attr still injected and rendered on the target.
       expect(last_response.body).to include("recovered-1-RuntimeError")
       # The failing component's :secret is undeclared on the target — no leak.
-      expect(last_response.body).not_to match(/secret=/)
+      expect(last_response.body).not_to include("secret=")
       expect(last_response.body).not_to include("sensitive")
     end
 
@@ -1108,7 +1108,7 @@ RSpec.describe Weft::Router do
       expect(last_response.body).to include("recovery-page-body")
       # order_id belongs to the originating page's schema, not the recovery
       # page's — it must not land on the <html> element.
-      expect(last_response.body).not_to match(/order_id=/)
+      expect(last_response.body).not_to include("order_id=")
     end
   end
 

@@ -82,7 +82,7 @@ RSpec.describe Weft::Context do
       end.to_s
 
       # The span should have no htmx attrs
-      expect(html).to match(%r{<span>plain</span>})
+      expect(html).to include("<span>plain</span>")
     end
 
     it "preserves HTML action attribute (string value) on forms" do
