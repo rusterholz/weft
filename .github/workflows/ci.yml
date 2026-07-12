@@ -44,19 +44,36 @@ jobs:
       run: bundle exec appraisal install
     - name: Appraisal RSpec
       run: bundle exec appraisal rspec
+  demo-check:
+    name: "Demo (rake check)"
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+    - name: Install Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: '.ruby-version'
+        working-directory: demo
+        bundler-cache: true
+    - name: Rake check
+      run: bundle exec rake check
+      working-directory: demo
   final-results:
     name: Final Results
     runs-on: ubuntu-latest
-    needs: [lint, test]
+    needs: [lint, test, demo-check]
     if: always()
     steps:
       - name: Check results
         run: |
           if [ "${{ needs.lint.result }}" != "success" ] || \
-             [ "${{ needs.test.result }}" != "success" ]; then
+             [ "${{ needs.test.result }}" != "success" ] || \
+             [ "${{ needs.demo-check.result }}" != "success" ]; then
             echo "One or more jobs failed"
             echo "  lint: ${{ needs.lint.result }}"
             echo "  test: ${{ needs.test.result }}"
+            echo "  demo: ${{ needs.demo-check.result }}"
             exit 1
           fi
           echo "All checks passed"
