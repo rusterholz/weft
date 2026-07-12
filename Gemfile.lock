@@ -64,7 +64,7 @@ GEM
     multi_json (1.19.1)
     mustermann (3.0.4)
       ruby2_keywords (~> 0.0.1)
-    openssl (4.0.1)
+    openssl (4.0.2)
     parallel (1.27.0)
     parser (3.3.10.2)
       ast (~> 2.4.1)
