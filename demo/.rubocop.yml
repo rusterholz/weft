@@ -10,9 +10,11 @@ AllCops:
   TargetRubyVersion: 3.2
   NewCops: enable
   Exclude:
+    - ".git/**/*"
     - "db/**/*"
     - "tmp/**/*"
     - "log/**/*"
+    - "vendor/**/*"
 
 Layout/DotPosition:
   EnforcedStyle: trailing

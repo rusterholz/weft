@@ -6,6 +6,14 @@ AllCops:
   TargetRubyVersion: 3.2
   NewCops: enable
   Exclude:
+    # Restore defaults (overridden when specifying custom excludes). Without
+    # vendor/, CI's vendored bundle gets scanned and rubocop chokes on other
+    # gems' own .rubocop.yml files.
+    - ".git/**/*"
+    - "node_modules/**/*"
+    - "tmp/**/*"
+    - "vendor/**/*"
+    - "demo/vendor/**/*"
     # Demo's data layer (migrations, seeds) — already excluded by the demo's
     # own .rubocop.yml when rubocop runs from inside demo/, but listed here
     # so runs from the gem root also skip them. These files inherently use
