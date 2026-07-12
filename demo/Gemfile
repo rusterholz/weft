@@ -12,7 +12,7 @@ gem "sinatra", "~> 4.1"
 gem "sinatra-contrib", "~> 4.1"
 gem "sqlite3", "~> 2.6"
 gem "weft", path: ".."
-gem "zeitwerk", "~> 2.7"
+gem "zeitwerk", "~> 2.8"
 # Fix for OpenSSL 3.6.0 CRL verification bug on macOS
 gem "openssl", ">= 3.2.2"
 
