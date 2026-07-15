@@ -8,12 +8,12 @@ module Weft
     class NotFoundComponent < Weft::Component
       abstract!
 
-      # Opt into the :component_id auto-injected attribute for parity with
+      # Opt into the :component_id auto-injected param for parity with
       # ErrorComponent — preserves DOM identity when a component-context
       # NotFound recovers through this.
-      attribute :component_id
-      attribute :request_path
-      attribute :status_code
+      param :component_id
+      param :request_path
+      param :status_code
 
       STYLE = "padding:1rem; border:1px solid #cbd5e1; border-radius:6px; " \
               "background:#f8fafc; color:#0f172a; font-size:0.875rem"
@@ -25,19 +25,19 @@ module Weft
         set_attribute "style", STYLE
 
         div(style: "font-weight:600") { text_node "Not found" }
-        render_verbose if Weft.configuration.verbose_error_pages && @attrs.request_path
+        render_verbose if Weft.configuration.verbose_error_pages && @params.request_path
       end
 
       # Preserve the failing component's DOM identity when the Router injected
       # :component_id. Otherwise fall back to the class-derived default.
       def weft_id
-        @attrs.component_id || super
+        @params.component_id || super
       end
 
       private
 
       def render_verbose
-        div(style: MONO_STYLE) { text_node @attrs.request_path.to_s }
+        div(style: MONO_STYLE) { text_node @params.request_path.to_s }
       end
     end
   end

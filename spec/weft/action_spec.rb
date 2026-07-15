@@ -6,7 +6,7 @@ RSpec.describe Weft::Action do
   let(:component_class) do
     Class.new(Weft::Component) do
       def self.name = "OrderHeader"
-      attribute :order_id
+      param :order_id
     end
   end
 

@@ -15,7 +15,7 @@ module Weft
       module ClassMethods
         # Declare a recovery edge: how this class handles a specific error.
         #
-        #   recovers from: Weft::Unprocessable do |attrs, error|
+        #   recovers from: Weft::Unprocessable do |params, error|
         #     { error_messages: error.messages }
         #   end
         #
@@ -25,9 +25,9 @@ module Weft
         # HTTPError#status), Range, or Array of any of the above.
         # `with:` accepts a Class (Page or Component) or Symbol (resolved against
         # Weft.configuration at error-handling time). Default: self.
-        # The optional block receives `|attrs, error|` and returns a hash of
-        # additional attrs that merge with the original on the recovery edge.
-        # Symmetric with performs/transfers contracts (attrs first; error is the
+        # The optional block receives `|params, error|` and returns a hash of
+        # additional params that merge with the original on the recovery edge.
+        # Symmetric with performs/transfers contracts (params first; error is the
         # recovery-specific extra). The block never returns HTML.
         def recovers(from:, with: nil, &block)
           own_recoveries << { from: from, with: with, block: block }

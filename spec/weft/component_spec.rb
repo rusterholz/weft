@@ -3,65 +3,65 @@
 require "arbre"
 
 RSpec.describe Weft::Component do
-  describe "attribute DSL" do
+  describe "param DSL" do
     it "declares attributes with defaults" do
       component_class = Class.new(described_class) do
         def self.name = "TestCard"
-        attribute :status, default: "active"
+        param :status, default: "active"
       end
 
-      expect(component_class.attributes).to eq(status: { default: "active" })
+      expect(component_class.params).to eq(status: { default: "active" })
     end
 
     it "declares attributes without defaults" do
       component_class = Class.new(described_class) do
         def self.name = "TestCard"
-        attribute :order_id
+        param :order_id
       end
 
-      expect(component_class.attributes).to eq(order_id: { default: nil })
+      expect(component_class.params).to eq(order_id: { default: nil })
     end
 
     it "accepts an optional type: kwarg" do
       component_class = Class.new(described_class) do
         def self.name = "TestCard"
-        attribute :page, default: 1, type: :integer
+        param :page, default: 1, type: :integer
       end
 
-      expect(component_class.attributes[:page]).to eq(default: 1, type: :integer)
+      expect(component_class.params[:page]).to eq(default: 1, type: :integer)
     end
 
     it "accumulates multiple attributes in declaration order" do
       component_class = Class.new(described_class) do
         def self.name = "TestCard"
-        attribute :order_id
-        attribute :status, default: "pending"
+        param :order_id
+        param :status, default: "pending"
       end
 
-      expect(component_class.attributes.keys).to eq(%i[order_id status])
+      expect(component_class.params.keys).to eq(%i[order_id status])
     end
 
     it "inherits parent attributes in subclasses" do
       parent = Class.new(described_class) do
         def self.name = "BaseCard"
-        attribute :status
+        param :status
       end
       child = Class.new(parent) do
         def self.name = "SpecialCard"
-        attribute :priority, default: "low"
+        param :priority, default: "low"
       end
 
-      expect(child.attributes.keys).to eq(%i[status priority])
+      expect(child.params.keys).to eq(%i[status priority])
       # Parent is unaffected
-      expect(parent.attributes.keys).to eq(%i[status])
+      expect(parent.params.keys).to eq(%i[status])
     end
   end
 
   describe "weft_id" do
-    it "derives ID from class name and primary attribute value" do
+    it "derives ID from class name and primary param value" do
       component_class = Class.new(described_class) do
         def self.name = "StatCard"
-        attribute :status
+        param :status
       end
 
       ctx = Arbre::Context.new do
@@ -88,7 +88,7 @@ RSpec.describe Weft::Component do
     it "handles namespaced class names" do
       component_class = Class.new(described_class) do
         def self.name = "Oms::OrderHeader"
-        attribute :order_id
+        param :order_id
       end
 
       ctx = Arbre::Context.new do
@@ -161,7 +161,7 @@ RSpec.describe Weft::Component do
     it "raises a helpful error for a routable class whose name has no usable stem" do
       component_class = Class.new(described_class) do
         def self.name = "Foo::Component"
-        attribute :id
+        param :id
       end
 
       expect { component_class.resolved_component_path }.
@@ -231,7 +231,7 @@ RSpec.describe Weft::Component do
     it "is routable when attributes are declared" do
       component_class = Class.new(described_class) do
         def self.name = "WithAttrs"
-        attribute :status
+        param :status
       end
 
       expect(component_class).to be_routable
@@ -264,7 +264,7 @@ RSpec.describe Weft::Component do
       expect(component_class).to be_routable
     end
 
-    it "is not routable when bare (no attrs, verbs, or declarations)" do
+    it "is not routable when bare (no params, verbs, or declarations)" do
       component_class = Class.new(described_class) do
         def self.name = "BareComponent"
       end
@@ -294,7 +294,7 @@ RSpec.describe Weft::Component do
     it "is routable when parent is routable (inherits attributes)" do
       parent = Class.new(described_class) do
         def self.name = "RoutableParent"
-        attribute :id
+        param :id
       end
       child = Class.new(parent) do
         def self.name = "ChildOfRoutable"
@@ -307,7 +307,7 @@ RSpec.describe Weft::Component do
       it "abstract! makes a routable class non-routable" do
         component_class = Class.new(described_class) do
           def self.name = "AbstractedComponent"
-          attribute :id
+          param :id
           abstract!
         end
 
@@ -317,7 +317,7 @@ RSpec.describe Weft::Component do
       it "abstract! does not percolate — concrete subclass is routable again" do
         parent = Class.new(described_class) do
           def self.name = "AbstractParent"
-          attribute :id
+          param :id
           abstract!
         end
         child = Class.new(parent) do
@@ -356,7 +356,7 @@ RSpec.describe Weft::Component do
     it "registers a named action with a callable" do
       component_class = Class.new(described_class) do
         def self.name = "ActionTest"
-        attribute :order_id
+        param :order_id
         performs(:advance) { nil }
       end
 
@@ -421,7 +421,7 @@ RSpec.describe Weft::Component do
     it "generates polling htmx attributes with every:" do
       component_class = Class.new(described_class) do
         def self.name = "PollingCard"
-        attribute :status, default: "all"
+        param :status, default: "all"
         refreshes every: 10
       end
 
@@ -435,7 +435,7 @@ RSpec.describe Weft::Component do
     it "accepts an ActiveSupport duration for every:" do
       component_class = Class.new(described_class) do
         def self.name = "DurationCard"
-        attribute :status, default: "all"
+        param :status, default: "all"
         refreshes every: 5.seconds
       end
 
@@ -447,7 +447,7 @@ RSpec.describe Weft::Component do
     it "renders sub-second every: values in milliseconds" do
       component_class = Class.new(described_class) do
         def self.name = "FastCard"
-        attribute :status, default: "all"
+        param :status, default: "all"
         refreshes every: 0.6
       end
 
@@ -459,7 +459,7 @@ RSpec.describe Weft::Component do
     it "renders fractional multi-second every: values in milliseconds" do
       component_class = Class.new(described_class) do
         def self.name = "FractionalCard"
-        attribute :status, default: "all"
+        param :status, default: "all"
         refreshes every: 2.5
       end
 
@@ -473,7 +473,7 @@ RSpec.describe Weft::Component do
 
       component_class = Class.new(described_class) do
         def self.name = "TooFastCard"
-        attribute :status, default: "all"
+        param :status, default: "all"
         refreshes every: 0.0000001
       end
 
@@ -486,7 +486,7 @@ RSpec.describe Weft::Component do
     it "generates event-driven htmx attributes with on:" do
       component_class = Class.new(described_class) do
         def self.name = "EventCard"
-        attribute :driver_id
+        param :driver_id
         refreshes on: "delivery-completed"
       end
 
@@ -500,7 +500,7 @@ RSpec.describe Weft::Component do
     it "combines multiple refresh declarations into one hx-trigger" do
       component_class = Class.new(described_class) do
         def self.name = "CombinedCard"
-        attribute :id
+        param :id
         refreshes every: 30
         refreshes on: "item-updated"
       end
@@ -513,7 +513,7 @@ RSpec.describe Weft::Component do
     it "does not set refresh attributes when no refreshes declared" do
       component_class = Class.new(described_class) do
         def self.name = "StaticCard"
-        attribute :label
+        param :label
       end
 
       html = component_class.render(label: "test")
@@ -529,7 +529,7 @@ RSpec.describe Weft::Component do
       end
       child = Class.new(parent) do
         def self.name = "RefreshChild"
-        attribute :id
+        param :id
         refreshes on: "updated"
       end
 
@@ -539,11 +539,11 @@ RSpec.describe Weft::Component do
       expect(html).to include("updated from:body")
     end
 
-    it "omits nil attrs from the refresh URL" do
+    it "omits nil params from the refresh URL" do
       component_class = Class.new(described_class) do
         def self.name = "NilAttrCard"
-        attribute :status
-        attribute :label, default: "test"
+        param :status
+        param :label, default: "test"
         refreshes every: 5
       end
 
@@ -558,7 +558,7 @@ RSpec.describe Weft::Component do
     it "generates SSE htmx attributes with every:" do
       component_class = Class.new(described_class) do
         def self.name = "PushCard"
-        attribute :order_id
+        param :order_id
 
         def build(attributes = {})
           super
@@ -580,7 +580,7 @@ RSpec.describe Weft::Component do
       Weft.configuration.stream_suffix = "sse"
       component_class = Class.new(described_class) do
         def self.name = "SuffixPushCard"
-        attribute :order_id
+        param :order_id
         pushes every: 5
       end
 
@@ -594,7 +594,7 @@ RSpec.describe Weft::Component do
     it "does not set SSE attributes when no pushes declared" do
       component_class = Class.new(described_class) do
         def self.name = "StaticCard"
-        attribute :label
+        param :label
       end
 
       html = component_class.render(label: "test")
@@ -611,7 +611,7 @@ RSpec.describe Weft::Component do
       end
       child = Class.new(parent) do
         def self.name = "PushChild"
-        attribute :id
+        param :id
 
         def build(attributes = {})
           super
@@ -628,7 +628,7 @@ RSpec.describe Weft::Component do
     it "keeps a fractional pushes interval fractional" do
       component_class = Class.new(described_class) do
         def self.name = "FastTicker"
-        attribute :label
+        param :label
         pushes every: 0.5
       end
 
@@ -640,7 +640,7 @@ RSpec.describe Weft::Component do
 
       component_class = Class.new(described_class) do
         def self.name = "TooFastTicker"
-        attribute :label
+        param :label
         pushes every: 0.0000001
       end
 
@@ -668,7 +668,7 @@ RSpec.describe Weft::Component do
     it "uses the DOM ID as the SSE event name (sse-swap value)" do
       component_class = Class.new(described_class) do
         def self.name = "Oms::ShipmentCard"
-        attribute :order_id
+        param :order_id
         pushes every: 5
       end
 
@@ -677,11 +677,11 @@ RSpec.describe Weft::Component do
       expect(html).to include('sse-swap="oms-shipment-card-99"')
     end
 
-    it "omits nil attrs from the stream URL" do
+    it "omits nil params from the stream URL" do
       component_class = Class.new(described_class) do
         def self.name = "NilPush"
-        attribute :status
-        attribute :label, default: "test"
+        param :status
+        param :label, default: "test"
         pushes every: 5
       end
 
@@ -719,7 +719,7 @@ RSpec.describe Weft::Component do
       component_class = Class.new(described_class) do
         def self.name = "IncMapSource"
       end
-      component_class.includes(included) { |attrs| { id: attrs[:order_id] } }
+      component_class.includes(included) { |params| { id: params[:order_id] } }
 
       expect(component_class.inclusions.first[:block]).to be_a(Proc)
     end
@@ -789,7 +789,7 @@ RSpec.describe Weft::Component do
     it "generates htmx delete attributes via action: kwarg" do
       component_class = Class.new(described_class) do
         def self.name = "DismissRender"
-        attribute :item_id
+        param :item_id
         dismisses :close
 
         def build(attributes = {})
@@ -806,11 +806,11 @@ RSpec.describe Weft::Component do
   end
 
   describe "#weft_url" do
-    it "returns the component path with current attrs" do
+    it "returns the component path with current params" do
       component_class = Class.new(described_class) do
         def self.name = "Panel"
-        attribute :status
-        attribute :page, default: 1
+        param :status
+        param :page, default: 1
       end
 
       ctx = Weft::Context.new({}, nil) { insert_tag(component_class, status: "shipped", page: 2) }
@@ -819,11 +819,11 @@ RSpec.describe Weft::Component do
       expect(component.weft_url).to eq("/_components/panel?status=shipped&page=2")
     end
 
-    it "overrides specific attrs" do
+    it "overrides specific params" do
       component_class = Class.new(described_class) do
         def self.name = "Panel"
-        attribute :status
-        attribute :page, default: 1
+        param :status
+        param :page, default: 1
       end
 
       ctx = Weft::Context.new({}, nil) { insert_tag(component_class, status: "shipped", page: 2) }
@@ -835,8 +835,8 @@ RSpec.describe Weft::Component do
     it "omits nil values from the URL" do
       component_class = Class.new(described_class) do
         def self.name = "Panel"
-        attribute :status
-        attribute :page, default: 1
+        param :status
+        param :page, default: 1
       end
 
       ctx = Weft::Context.new({}, nil) { insert_tag(component_class, status: nil, page: 1) }
@@ -850,11 +850,11 @@ RSpec.describe Weft::Component do
     it "renders a component to an HTML string outside any DSL context" do
       component_class = Class.new(described_class) do
         def self.name = "Renderable"
-        attribute :status
+        param :status
 
         def build(attributes = {})
           super
-          div { text_node "status=#{attrs.status}" }
+          div { text_node "status=#{params.status}" }
         end
       end
 
@@ -880,12 +880,12 @@ RSpec.describe Weft::Component do
     it "extracts declared attributes from the arbre attributes hash" do
       component_class = Class.new(described_class) do
         def self.name = "TestCard"
-        attribute :status
-        attribute :count, default: 0
+        param :status
+        param :count, default: 0
 
         def build(attributes = {})
           super
-          div { text_node "status=#{attrs[:status]}, count=#{attrs[:count]}" }
+          div { text_node "status=#{params[:status]}, count=#{params[:count]}" }
         end
       end
 
@@ -897,11 +897,11 @@ RSpec.describe Weft::Component do
     it "applies defaults for missing attributes" do
       component_class = Class.new(described_class) do
         def self.name = "TestCard"
-        attribute :status, default: "pending"
+        param :status, default: "pending"
 
         def build(attributes = {})
           super
-          div { text_node "status=#{attrs[:status]}" }
+          div { text_node "status=#{params[:status]}" }
         end
       end
 
@@ -913,7 +913,7 @@ RSpec.describe Weft::Component do
     it "sets the DOM id from weft_id" do
       component_class = Class.new(described_class) do
         def self.name = "StatCard"
-        attribute :status
+        param :status
       end
 
       ctx = Arbre::Context.new { insert_tag(component_class, status: "shipped") }
@@ -925,7 +925,7 @@ RSpec.describe Weft::Component do
     it "does not mutate the caller's attributes hash" do
       component_class = Class.new(described_class) do
         def self.name = "NonMutating"
-        attribute :status
+        param :status
       end
 
       shared = { status: "shipped", class: "big" }
@@ -957,7 +957,7 @@ RSpec.describe Weft::Component do
     # against subclass-own entries (the first N of recoveries), with the gem
     # default trailing as inherited.
     it "stores a single entry with from:, with: nil, and the block" do
-      handler = ->(_attrs, _error) { { message: "oops" } }
+      handler = ->(_params, _error) { { message: "oops" } }
       component_class = Class.new(described_class) do
         def self.name = "Recoverable"
       end

@@ -14,30 +14,30 @@ module Weft
   # Convenience wrapper:
   #   Weft.redirect(OrderDetailPage, order_id: order.id)
   class Redirect
-    attr_reader :target, :attrs
+    attr_reader :target, :params
 
     # @api private
     # Use {Redirect.to} (or {Weft.redirect}) — +new+ is private.
-    def initialize(target, **attrs)
+    def initialize(target, **params)
       @target = target
-      @attrs = attrs
+      @params = params
     end
 
     # Resolve the redirect URL.
-    # Page targets: interpolate attrs into page_path pattern.
+    # Page targets: interpolate params into page_path pattern.
     # String targets: use as-is.
     def url
       case @target
       when String
         @target
       else
-        @target.resolve_page_path(@attrs)
+        @target.resolve_page_path(@params)
       end
     end
 
     # Primary constructor.
-    def self.to(target, **attrs)
-      new(target, **attrs)
+    def self.to(target, **params)
+      new(target, **params)
     end
 
     private_class_method :new

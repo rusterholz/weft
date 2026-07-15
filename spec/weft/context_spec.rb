@@ -6,7 +6,7 @@ RSpec.describe Weft::Context do
   let(:component_class) do
     Class.new(Weft::Component) do
       def self.name = "OrderHeader"
-      attribute :order_id
+      param :order_id
       performs(:advance) { nil }
 
       def build(attributes = {})
@@ -224,7 +224,7 @@ RSpec.describe Weft::Context do
     it "finds the action on the innermost enclosing component" do # rubocop:disable RSpec/ExampleLength
       inner_class = Class.new(Weft::Component) do
         def self.name = "InnerCard"
-        attribute :item_id
+        param :item_id
         performs(:wombat) { nil }
 
         def build(attributes = {})
@@ -251,7 +251,7 @@ RSpec.describe Weft::Context do
     it "walks up to a parent component if the inner one lacks the action" do # rubocop:disable RSpec/ExampleLength
       inner_class = Class.new(Weft::Component) do
         def self.name = "PlainInner"
-        attribute :item_id
+        param :item_id
 
         def build(attributes = {})
           super
@@ -279,11 +279,11 @@ RSpec.describe Weft::Context do
     let(:target_class) do
       Class.new(Weft::Component) do
         def self.name = "ShipmentSummary"
-        attribute :shipment_id
+        param :shipment_id
 
         def build(attributes = {})
           super
-          span "summary-#{attrs.shipment_id}"
+          span "summary-#{params.shipment_id}"
         end
       end
     end
@@ -458,7 +458,7 @@ RSpec.describe Weft::Context do
     it "works alongside loads:" do
       target = Class.new(Weft::Component) do
         def self.name = "PushTarget"
-        attribute :id
+        param :id
       end
       klass = component_class
       html = described_class.new({}, nil) do
@@ -478,11 +478,11 @@ RSpec.describe Weft::Context do
     let(:target_class) do
       Class.new(Weft::Component) do
         def self.name = "ShorthandTarget"
-        attribute :item_id
+        param :item_id
 
         def build(attributes = {})
           super
-          span "item-#{attrs.item_id}"
+          span "item-#{params.item_id}"
         end
       end
     end
@@ -649,7 +649,7 @@ RSpec.describe Weft::Context do
     let(:target_class) do
       Class.new(Weft::Component) do
         def self.name = "PresetTarget"
-        attribute :id
+        param :id
       end
     end
 
@@ -741,7 +741,7 @@ RSpec.describe Weft::Context do
     it "supports action: kwargs in render output" do
       klass = Class.new(Weft::Component) do
         def self.name = "RenderTest"
-        attribute :order_id
+        param :order_id
         performs(:go) { nil }
 
         def build(attributes = {})

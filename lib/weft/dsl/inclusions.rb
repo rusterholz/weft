@@ -15,16 +15,16 @@ module Weft
         # Declare that another component should be OOB-swapped alongside
         # this component's action responses and SSE pushes.
         #
-        #   includes OrderHeader                          # pass-through attrs
+        #   includes OrderHeader                          # pass-through params
         #   includes OrderHeader, on: :advance            # only on :advance action
-        #   includes OrderHeader do |attrs|               # explicit attr mapping
-        #     { order_id: attrs.order_id, compact: true }
+        #   includes OrderHeader do |params|              # explicit param mapping
+        #     { order_id: params.order_id, compact: true }
         #   end
         #
         # Without a block, the included component resolves from the same
         # request params as the primary component. With a block, the block
-        # receives the primary component's resolved attrs and returns wire
-        # attrs for the included component's Resolver.
+        # receives the primary component's resolved params and returns wire
+        # params for the included component's Resolver.
         def includes(component_class, on: nil, &block)
           own_inclusions << { component_class: component_class, on: on, block: block }
         end

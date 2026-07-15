@@ -50,7 +50,7 @@ module Weft
 
       def push_component_event(out, component_class)
         component = build_component(component_class)
-        html = component.content + render_oob_includes(component_class, component.attrs)
+        html = component.content + render_oob_includes(component_class, component.params)
         out << format_sse_event(component.weft_id, html)
       end
 

@@ -1,12 +1,12 @@
 # frozen_string_literal: true
 
 module Weft
-  # Maps request params (string keys/values) to component attribute hashes.
-  # Coerces types based on attribute defaults. Future home of the reification
+  # Maps request params (string keys/values) to component param hashes.
+  # Coerces types based on param defaults. Future home of the reification
   # step (wire primitives → rich objects).
   class Resolver
     def resolve(component_class, params)
-      component_class.attributes.each_with_object({}) do |(name, meta), result|
+      component_class.params.each_with_object({}) do |(name, meta), result|
         raw = params[name.to_s] || params[name]
         result[name] = raw.nil? ? meta[:default] : coerce(raw, meta[:default])
       end

@@ -127,24 +127,26 @@ module Weft
     # Render a component as HTML. inner: true returns children only
     # (for SSE innerHTML swap where the wrapper element must persist).
     def render_component(component_class, inner: false)
-      resolved_attrs = resolver.resolve(component_class, filtered_params)
-      component = build_component_with_attrs(component_class, resolved_attrs)
+      resolved_params = resolver.resolve(component_class, filtered_params)
+      component = build_component_with_params_as_attrs(component_class, resolved_params)
       inner ? component.content : component.to_s
     rescue StandardError => e
-      render_error(component_class, resolved_attrs || {}, e)
+      render_error(component_class, resolved_params || {}, e)
     end
 
     # Build a component instance from the current request params.
     def build_component(component_class)
-      resolved_attrs = resolver.resolve(component_class, filtered_params)
-      build_component_with_attrs(component_class, resolved_attrs)
+      resolved_params = resolver.resolve(component_class, filtered_params)
+      build_component_with_params_as_attrs(component_class, resolved_params)
     end
 
-    # Build a component instance from pre-resolved attributes.
-    def build_component_with_attrs(component_class, resolved_attrs)
+    # Build a component from resolved params, splatting them through Arbre's
+    # builder (attrs) channel. That splat is the border crossing M4 removes:
+    # once params reach the instance on their own channel, this method loses
+    # its `_as_attrs` and the smuggle goes away.
+    def build_component_with_params_as_attrs(component_class, resolved_params)
       klass = component_class
-      attrs = resolved_attrs
-      context = Weft::Context.new({}, nil) { insert_tag(klass, **attrs) }
+      context = Weft::Context.new({}, nil) { insert_tag(klass, **resolved_params) }
       context.children.first
     end
 
@@ -155,14 +157,14 @@ module Weft
     # (B1 / C1 page-context); the gem-default catches StandardError.
     def render_page(page_class, route_params)
       merged_params = filtered_params.merge(route_params)
-      resolved_attrs = resolver.resolve(page_class, merged_params)
+      resolved_params = resolver.resolve(page_class, merged_params)
       klass = page_class
-      attrs = resolved_attrs
-      Weft::Context.new({}, nil) { insert_tag(klass, **attrs) }.to_s
+      # params → Arbre attrs channel here (M4 splat target).
+      Weft::Context.new({}, nil) { insert_tag(klass, **resolved_params) }.to_s
     rescue StandardError => e
       handle_page_chain_failure(e,
                                 originating_page_class: page_class,
-                                originating_attrs: resolved_attrs || {})
+                                originating_params: resolved_params || {})
     end
 
     def htmx_request?

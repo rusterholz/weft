@@ -13,7 +13,7 @@ RSpec.describe "Weft::Defaults" do
     end
 
     it "declares the auto-injected attributes" do
-      keys = described_class.attributes.keys
+      keys = described_class.params.keys
       expect(keys).to include(:exception, :request_path, :status_code)
     end
 
@@ -49,7 +49,7 @@ RSpec.describe "Weft::Defaults" do
     end
 
     it "declares the auto-injected attributes" do
-      keys = described_class.attributes.keys
+      keys = described_class.params.keys
       expect(keys).to include(:exception, :request_path, :status_code)
     end
 
@@ -75,7 +75,7 @@ RSpec.describe "Weft::Defaults" do
     end
 
     it "declares :request_path and :status_code auto-injected attributes" do
-      keys = described_class.attributes.keys
+      keys = described_class.params.keys
       expect(keys).to include(:request_path, :status_code)
     end
 

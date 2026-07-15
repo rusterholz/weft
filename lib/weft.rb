@@ -8,8 +8,8 @@ require "active_support/core_ext/string/inflections"
 require "arbre"
 
 require "weft/error"
-require "weft/attributes"
-require "weft/dsl/attributes"
+require "weft/params"
+require "weft/dsl/params"
 require "weft/dsl/recoveries"
 require "weft/dsl/triggers"
 require "weft/dsl/inclusions"
@@ -57,8 +57,8 @@ module Weft
     end
 
     # Convenience wrapper for Weft::Redirect.to.
-    def redirect(target, **attrs)
-      Redirect.to(target, **attrs)
+    def redirect(target, **params)
+      Redirect.to(target, **params)
     end
 
     # Register a named interaction shorthand. Delegates to Weft::Shorthands.

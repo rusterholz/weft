@@ -12,7 +12,7 @@ module Weft
   #
   #   class OrderDetailPage < Weft::Page
   #     self.page_path = "/orders/:order_id"
-  #     attribute :order_id
+  #     param :order_id
   #   end
   #
   # Subclasses without an explicit page_path auto-infer one from the class
@@ -24,7 +24,7 @@ module Weft
     extend Weft::Registry::Eligibility
 
     include Weft::Context::Interception
-    include Weft::DSL::Attributes
+    include Weft::DSL::Params
     include Weft::DSL::Recoveries
     include Weft::DSL::Containers
 
@@ -47,7 +47,7 @@ module Weft
 
     class << self
       # Class-level page path pattern. Sinatra-style string with :param segments.
-      # Bidirectional: forward (interpolate attrs → URL) and reverse (match request → params).
+      # Bidirectional: forward (interpolate params → URL) and reverse (match request → params).
       #
       #   self.page_path = "/orders/:order_id"
       def page_path
@@ -60,28 +60,28 @@ module Weft
 
       attr_writer :page_path
 
-      # Resolve the page path by interpolating attrs into the pattern.
+      # Resolve the page path by interpolating params into the pattern.
       #   OrderDetailPage.resolve_page_path(order_id: "42") # => "/orders/42"
-      def resolve_page_path(attrs = {})
+      def resolve_page_path(params = {})
         pattern = page_path || default_page_path
-        pattern.gsub(/:(\w+)/) { attrs[::Regexp.last_match(1).to_sym] || ":#{::Regexp.last_match(1)}" }
+        pattern.gsub(/:(\w+)/) { params[::Regexp.last_match(1).to_sym] || ":#{::Regexp.last_match(1)}" }
       end
 
-      # Build a redirect URL targeting this page with the given attrs.
-      # Path :param segments interpolate from attrs; declared-but-not-param
-      # attrs become query string entries. Anything not in the page's
+      # Build a redirect URL targeting this page with the given params.
+      # Path :param segments interpolate from params; declared-but-not-path
+      # params become query string entries. Anything not in the page's
       # declared schema is discarded — never leaks into the URL.
       #
       #   class OrderDetailPage < Weft::Page
       #     self.page_path = "/orders/:order_id"
-      #     attribute :order_id
-      #     attribute :highlight_section
+      #     param :order_id
+      #     param :highlight_section
       #   end
       #   OrderDetailPage.redirect_url(order_id: 42, highlight_section: "items", junk: "x")
       #   # => "/orders/42?highlight_section=items"
-      def redirect_url(attrs = {})
-        path = resolve_page_path(attrs)
-        query = attrs.slice(*(attributes.keys - path_param_keys)).compact
+      def redirect_url(params = {})
+        path = resolve_page_path(params)
+        query = params.slice(*(self.params.keys - path_param_keys)).compact
         query.empty? ? path : "#{path}?#{::URI.encode_www_form(query)}"
       end
 
@@ -97,12 +97,12 @@ module Weft
       # A page is inferred-routable if it has an explicit page_path, or if its
       # class name yields a usable default — i.e. the demodulized name has a
       # non-empty stem after stripping any trailing "Page" suffix. The suffix
-      # is optional: FooBarPage and BazBar both route. Pages with attributes
+      # is optional: FooBarPage and BazBar both route. Pages with params
       # are not inferred-routable; they require an explicit page_path (a
       # parameterized route can't be derived from the name; see default_page_path).
       def inferred_routable?
         return true if instance_variable_defined?(:@page_path)
-        return false if attributes.any?
+        return false if params.any?
 
         !name.to_s.delete_suffix("Page").demodulize.empty?
       end
@@ -201,10 +201,10 @@ module Weft
       end
 
       def default_page_path
-        if attributes.any?
+        if params.any?
           raise Weft::InvalidDefinition,
-                "#{name} declares attributes but no explicit page_path. " \
-                "Set self.page_path = \"/your/path/:#{attributes.keys.first}\""
+                "#{name} declares params but no explicit page_path. " \
+                "Set self.page_path = \"/your/path/:#{params.keys.first}\""
         end
 
         stem = name.to_s.delete_suffix("Page")
@@ -221,8 +221,8 @@ module Weft
     end
 
     def build(attributes = {})
-      schema = self.class.attributes
-      @attrs = Weft::Attributes.extract_from(attributes, using: schema) if schema.any?
+      schema = self.class.params
+      @params = Weft::Params.extract_from(attributes, using: schema) if schema.any?
       @page_title = attributes.delete(:title) || "Weft"
       super(attributes.except(*schema.keys))
       build_head

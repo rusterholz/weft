@@ -8,16 +8,16 @@ module Weft
     class NotFoundPage < Weft::Page
       self.page_path = "/_weft/not_found"
 
-      attribute :request_path
-      attribute :status_code
+      param :request_path
+      param :status_code
 
       def build(attributes = {})
         attributes[:title] ||= "Not found"
         super
         insert_tag(
           Weft::Defaults::NotFoundComponent,
-          request_path: @attrs.request_path,
-          status_code: @attrs.status_code
+          request_path: @params.request_path,
+          status_code: @params.status_code
         )
       end
     end

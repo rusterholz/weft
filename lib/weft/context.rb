@@ -113,7 +113,7 @@ module Weft
     end
 
     def resolve_with(attrs)
-      attrs[:with] || find_nearest_component&.attrs&.to_h || {}
+      attrs[:with] || find_nearest_component&.params&.to_h || {}
     end
 
     def validate_loads_kwargs!(attrs)

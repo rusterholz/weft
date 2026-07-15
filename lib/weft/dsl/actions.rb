@@ -12,12 +12,12 @@ module Weft
       module ClassMethods
         # Declare a user-initiated action on this component.
         #
-        #   performs :advance do |attrs|
-        #     order = Order.find(attrs.order_id)
+        #   performs :advance do |params|
+        #     order = Order.find(params.order_id)
         #     Oms::PrepareOrder.call(order)
         #   end
         #
-        #   performs method: :delete, swap: :delete do |attrs| ... end
+        #   performs method: :delete, swap: :delete do |params| ... end
         def performs(name = nil, method: :post, swap: :outer_html, target: nil, &block)
           action = Weft::Action.new(name: name, method: method, swap: swap,
                                     target: target, renders: self, callable: block)
@@ -29,8 +29,8 @@ module Weft
         # the return value is rendered but htmx ignores the response body.
         #
         #   dismisses :close                          # no side effects
-        #   dismisses :remove do |attrs|              # with side effects
-        #     Item.find(attrs.item_id).archive!
+        #   dismisses :remove do |params|             # with side effects
+        #     Item.find(params.item_id).archive!
         #   end
         def dismisses(name = nil, method: :delete, &)
           performs(name, method: method, swap: :delete, &)
@@ -38,7 +38,7 @@ module Weft
 
         # Declare a transfer — an action that renders a different component.
         #
-        #   transfers :edit, to: EditableOrderHeader do |attrs|
+        #   transfers :edit, to: EditableOrderHeader do |params|
         #     { mode: "full" }
         #   end
         def transfers(name = nil, to:, method: :post, swap: :outer_html, target: nil, &block)
