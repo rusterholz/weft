@@ -51,7 +51,7 @@ end
 
 ## How it works
 
-**The placeholder is an ordinary element with one extra kwarg.** [`lazy:`](../dsl.md#shorthands) is a preset over the [`loads:`](../dsl.md#loads) machinery: trigger `:visible`, swap `:fill`, target `:self`. When the div scrolls into view, fetch `RevenueTable` and swap it into the div's interior. Because trigger, swap, *and* target all have an obvious right answer here, the call site needs nothing beyond the component class and its params.
+**The placeholder is an ordinary element with one extra kwarg.** [`lazy:`](../dsl.md#presets) is a preset over the [`loads:`](../dsl.md#loads) machinery: trigger `:visible`, swap `:fill`, target `:self`. When the div scrolls into view, fetch `RevenueTable` and swap it into the div's interior. Because trigger, swap, *and* target all have an obvious right answer here, the call site needs nothing beyond the component class and its params.
 
 **The div's children are the loading state.** Because the swap is `:fill` (`innerHTML`), the placeholder element itself survives; only its contents — the "Loading revenue…" paragraph — are replaced by the fetched component. Whatever you put in the block is what users see until the content arrives.
 
@@ -93,4 +93,4 @@ Scrolling it into view issues `GET /_components/revenue_table?year=2025`, and th
 
 - [Infinite Scroll](infinite-scroll.md) — the same `:visible` trigger, used repeatedly to grow a table page by page.
 - [Click to Load](click-to-load.md) — deferred loading where the user asks for more, instead of scrolling to it.
-- The [shorthands table](../dsl.md#shorthands) and the [trigger values](../dsl.md#trigger-values) in the DSL reference.
+- The [presets table](../dsl.md#presets) and the [trigger values](../dsl.md#trigger-values) in the DSL reference.

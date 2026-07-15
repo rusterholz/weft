@@ -42,7 +42,7 @@ end
 
 ## How it works
 
-**Opening is a load into a stable slot.** [`modal:`](../dsl.md#shorthands) presets trigger `:click` and swap `:fill`; the call site supplies the target. Clicking the button fetches `TourDialog` and fills the empty `#modal-slot` div with it. The slot is permanent page structure — it outlives any dialog placed in it, so the modal can be opened again after closing.
+**Opening is a load into a stable slot.** [`modal:`](../dsl.md#presets) presets trigger `:click` and swap `:fill`; the call site supplies the target. Clicking the button fetches `TourDialog` and fills the empty `#modal-slot` div with it. The slot is permanent page structure — it outlives any dialog placed in it, so the modal can be opened again after closing.
 
 **Closing is a dismissal.** `dismisses :close` declares a DELETE action whose swap removes the component from the page entirely — and for a modal, removed from the DOM *is* closed. The dialog vanishes, the slot div stays, and the page underneath was never touched. Give the dismissal a block (`dismisses :close do |params| ... end`) if closing should also do something server-side, like recording that the tour offer was seen.
 
@@ -85,4 +85,4 @@ Clicking either one issues `DELETE /_components/tour_dialog/close`. The response
 
 - [Browser Dialogs](browser-dialogs.md) — when a native `confirm()` box is dialog enough.
 - [Keyboard Shortcuts](keyboard-shortcuts.md) — the [`trigger:`](../dsl.md#trigger) grammar that could add Escape-to-close to this dialog.
-- [`dismisses`](../dsl.md#dismisses--remove-from-the-dom) and the [shorthands table](../dsl.md#shorthands) in the DSL reference.
+- [`dismisses`](../dsl.md#dismisses--remove-from-the-dom) and the [presets table](../dsl.md#presets) in the DSL reference.

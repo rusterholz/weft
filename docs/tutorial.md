@@ -365,7 +365,7 @@ You've built pages that route themselves, components that compose and self-addre
 
 **The reference docs**, when you want the full picture:
 
-- [The Weft DSL](dsl.md) — every verb (`transfers`, `pushes`, `dismisses`, `triggers`…), the element kwargs, and the interaction shorthands (tooltips, modals, lazy loading) this tutorial didn't touch.
+- [The Weft DSL](dsl.md) — every verb (`transfers`, `pushes`, `dismisses`, `triggers`…), the element kwargs, and the interaction presets (tooltips, modals, lazy loading) this tutorial didn't touch.
 - [Arbre: the HTML layer](arbre.md) — the HTML builder underneath every `build` method: its argument conventions, text handling, container patterns, and gotchas beyond `para`.
 - [Routing](routing.md) — how paths derive, what's routable, collision detection.
 - [Error handling](error-handling.md) — the error family, recovery chains, branding your error pages.

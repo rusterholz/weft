@@ -6,6 +6,8 @@
 
 - **`attribute` → `param`, `attrs` → `params`.** The DSL for a component's or page's inputs is renamed. Declare inputs with `param :name` (was `attribute :name`), and read the resolved values through `params` instead of `attrs` (`params.status`, `params[:page]`, `params.to_h`). The block argument to verb declarations — `performs`, `transfers`, `dismisses`, `recovers`, `includes` — is now `params`. Arbre's own HTML tag attributes are unaffected: `build(attributes = {})`, `set_attribute`, and element hashes like `class:` and `data:` keep their names. To migrate, rename `attribute` → `param` and `attrs` → `params` across your components, pages, and verb blocks.
 
+- **`shorthand` → `preset`; `register_css` → `register_inline_css`.** The named interaction presets — `tooltip:`, `modal:`, `lazy:`, `load_more:`, `infinite_scroll:`, `live_search:`, `tabs:`, `inline_expand:`, and `retry:` — are now registered and looked up as *presets*: `Weft::Shorthands` → `Weft::Presets`, `Weft.register_shorthand` → `Weft.register_preset`, and `Weft.shorthand` → `Weft.preset`. The element kwargs are unchanged — `tooltip:`, `modal:`, `lazy:` and friends still work exactly as before. Separately, `Weft::Page.register_css` → `register_inline_css`, restoring naming parity with `register_stylesheet`. To migrate, rename any custom `register_shorthand` calls to `register_preset`, and `register_css` to `register_inline_css`.
+
 ## v0.1.0 (2026-07-12)
 
 First usable release. Weft is component-oriented hypermedia for Ruby: components declare their structure, their data, and their interactive behaviors, and the framework derives the routing, request handling, and client-side wiring automatically.

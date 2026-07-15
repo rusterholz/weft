@@ -47,13 +47,13 @@ Components declare their dynamic behaviors with verbs:
 | `includes Other` | Companion components ride along in action responses, out-of-band |
 | `recovers from: Err, with: Fallback` | Declares what renders when something raises |
 
-Elements get their own vocabulary — `action:`, `loads:`, `trigger:` kwargs and interaction shorthands like `tooltip:`, `modal:`, `lazy:`, `infinite_scroll:` — all covered in [the DSL reference](docs/dsl.md).
+Elements get their own vocabulary — `action:`, `loads:`, `trigger:` kwargs and interaction presets like `tooltip:`, `modal:`, `lazy:`, `infinite_scroll:` — all covered in [the DSL reference](docs/dsl.md).
 
 ## Documentation
 
 - **[Build your first Weft app](docs/tutorial.md)** — the tutorial: empty directory to a working app with pages, components, a validated form action, and live updates.
 - **[Examples](docs/examples/README.md)** — twenty-one worked patterns with captured wire traffic. Coming from htmx? This catalog deliberately covers the ground of htmx's own examples.
-- **[The Weft DSL](docs/dsl.md)** — every verb, element kwarg, and interaction shorthand.
+- **[The Weft DSL](docs/dsl.md)** — every verb, element kwarg, and interaction preset.
 - **[Application patterns](docs/app-patterns.md)** — the app around the components: service objects, databases, background jobs, authentication, CSRF, assets, and testing.
 - **[Arbre: the HTML layer](docs/arbre.md)** — the HTML builder inside every `build` method, in depth.
 - **[Routing](docs/routing.md)** — how classes become URLs, what's routable, and collision detection.
@@ -64,7 +64,7 @@ Elements get their own vocabulary — `action:`, `loads:`, `trigger:` kwargs and
 
 | Version | Features | Status |
 |---------|---------|--------|
-| v0.1.0 | First usable release: the verb DSL, auto-routing with collision detection, interaction shorthands, SSE, error recovery, full documentation set | **Current** |
+| v0.1.0 | First usable release: the verb DSL, auto-routing with collision detection, interaction presets, SSE, error recovery, full documentation set | **Current** |
 | v0.2 | Attribute hydration (resolver reification), child-component ergonomics, SSE error recovery, Zeitwerk integration | Next |
 
 ## Installation

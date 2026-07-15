@@ -2,7 +2,7 @@
 
 A search box that filters a result list as the user types. Each (debounced) keystroke asks the server for matches, and the results region is refilled with the answer — search-as-you-type with all the logic living server-side.
 
-This is Weft's take on [htmx's active-search example](https://htmx.org/examples/active-search/), searching the same kind of small contact directory by name or email. One preset detail differs and is worth stating precisely: Weft's `live_search:` shorthand fires on `input changed delay:300ms` — the `input` event, debounced by 300 milliseconds — where htmx's published example uses `keyup changed delay:500ms`. If you want htmx's exact timing (or any other), the `trigger:` kwarg overrides the preset, as shown below.
+This is Weft's take on [htmx's active-search example](https://htmx.org/examples/active-search/), searching the same kind of small contact directory by name or email. One preset detail differs and is worth stating precisely: Weft's `live_search:` preset fires on `input changed delay:300ms` — the `input` event, debounced by 300 milliseconds — where htmx's published example uses `keyup changed delay:500ms`. If you want htmx's exact timing (or any other), the `trigger:` kwarg overrides the preset, as shown below.
 
 ## The components
 
@@ -65,7 +65,7 @@ end
 
 ## How it works
 
-**The input's `name` is the search parameter.** [`live_search:`](../dsl.md#shorthands) presets trigger `:input` and swap `:fill`; the call site supplies the target. Notice that the generated URL below carries no query string — htmx includes the triggering input's own `name`/value with the request, which is how the typed text travels. The two halves must agree: the input says `name: "q"`, and `ContactResults` declares `param :q` to receive it. An empty default keeps the blank-box case (matching everyone) working.
+**The input's `name` is the search parameter.** [`live_search:`](../dsl.md#presets) presets trigger `:input` and swap `:fill`; the call site supplies the target. Notice that the generated URL below carries no query string — htmx includes the triggering input's own `name`/value with the request, which is how the typed text travels. The two halves must agree: the input says `name: "q"`, and `ContactResults` declares `param :q` to receive it. An empty default keeps the blank-box case (matching everyone) working.
 
 **Debounced by the preset, adjustable at the call site.** The `:input` semantic trigger expands to `input changed delay:300ms`: fire on input events, only when the value actually changed, at most once per 300ms lull. To reproduce htmx's example exactly, override it in place — the preset's request, swap, and target are all kept:
 
@@ -121,5 +121,5 @@ And a query with no matches (`GET /_components/contact_results?q=zz`) returns th
 ## Related
 
 - [Tabs](tabs.md) — the same fill-a-stable-container shape, driven by clicks instead of keystrokes.
-- The [shorthands table](../dsl.md#shorthands) and [trigger values](../dsl.md#trigger-values) in the DSL reference.
+- The [presets table](../dsl.md#presets) and [trigger values](../dsl.md#trigger-values) in the DSL reference.
 - The [tutorial](../tutorial.md) covers the pairing of form field names with declared params in depth.

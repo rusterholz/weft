@@ -59,7 +59,7 @@ end
 
 ## How it works
 
-**Every button aims at the same panel.** [`tabs:`](../dsl.md#shorthands) presets trigger `:click` and swap `:fill`; the call site supplies the shared target. Clicking a tab fetches its component and replaces the panel's contents. The default tab is simply pre-rendered into the panel — the initial state is the same component a click would fetch.
+**Every button aims at the same panel.** [`tabs:`](../dsl.md#presets) presets trigger `:click` and swap `:fill`; the call site supplies the shared target. Clicking a tab fetches its component and replaces the panel's contents. The default tab is simply pre-rendered into the panel — the initial state is the same component a click would fetch.
 
 **`routable!` makes contentful-but-stateless tabs fetchable.** A component normally earns its route by declaring params or verbs ([Routing](../routing.md)); these tabs declare neither, so without help they would render fine *and* be unreachable over the wire — the buttons would point at URLs that 404. `routable!` opts them in explicitly. (Tabs that take wire state — an `order_id`, say — get their routes the ordinary way and don't need it.)
 
@@ -99,4 +99,4 @@ Clicking Shipping issues `GET /_components/shipping_tab`, and the response fills
 
 - [Active Search](active-search.md) — the same fill-a-stable-container shape, driven by typing instead of clicks.
 - [`abstract!` and `routable!`](../routing.md#abstract-and-routable) in the routing reference.
-- The [shorthands table](../dsl.md#shorthands) in the DSL reference.
+- The [presets table](../dsl.md#presets) in the DSL reference.

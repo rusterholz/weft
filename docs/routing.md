@@ -30,7 +30,7 @@ One prerequisite worth knowing: registration happens when a class is *defined* (
 
 ## Component routes
 
-Every routable component is addressable at a GET route that renders it as an HTML fragment — the mechanism behind `refreshes`, `navigate:`, `loads:`, and the shorthands, and equally usable directly (`curl` it; you'll get the component's HTML).
+Every routable component is addressable at a GET route that renders it as an HTML fragment — the mechanism behind `refreshes`, `navigate:`, `loads:`, and the presets, and equally usable directly (`curl` it; you'll get the component's HTML).
 
 The path derives from the class name: strip a trailing `Component` if present, snake-case what's left, prefix `/_components/`. Namespaces become path segments.
 
@@ -110,7 +110,7 @@ end
 
 "Routable" means *addressable at its own GET URL* — and that is orthogonal to being a **render target**. Verbs with transfer semantics (`transfers to:`, `recovers with:`) render their target on the server, inside an in-flight response; the target class needs params to render with, but no route of its own. Weft's own default error components work exactly this way: they're `abstract!`, unreachable by URL, and rendered constantly.
 
-Navigation-semantic wiring (`refreshes`, `navigate:`, `loads:`, shorthands) *does* need its target addressable — and here the inference has a gap to watch. Declaring `refreshes` makes a component routable, but being the *target* of another component's `loads:` or shorthand kwarg confers nothing: a target with no params and no verbs of its own quietly stays off the route table, and the element wired to load it gets a not-found response at interaction time. Most real targets declare params and route on their own; for a purely presentational one, declare `routable!` explicitly. Where you'll reach for `abstract!` is the opposite case: a transfer target that declares params (so it can render) but should never be an endpoint — declare it abstract and it carries params for rendering while staying off the route table.
+Navigation-semantic wiring (`refreshes`, `navigate:`, `loads:`, presets) *does* need its target addressable — and here the inference has a gap to watch. Declaring `refreshes` makes a component routable, but being the *target* of another component's `loads:` or preset kwarg confers nothing: a target with no params and no verbs of its own quietly stays off the route table, and the element wired to load it gets a not-found response at interaction time. Most real targets declare params and route on their own; for a purely presentational one, declare `routable!` explicitly. Where you'll reach for `abstract!` is the opposite case: a transfer target that declares params (so it can render) but should never be an endpoint — declare it abstract and it carries params for rendering while staying off the route table.
 
 ## Collision detection
 

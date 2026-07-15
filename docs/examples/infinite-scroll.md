@@ -59,7 +59,7 @@ end
 
 ## How it works
 
-**The last row is the sentinel.** [`infinite_scroll:`](../dsl.md#shorthands) presets trigger `:visible` and swap `:after`; the call site adds the target. Placed on the final `tr` of a batch, it means: when this row scrolls into view, fetch the next batch and insert it after the closest `tbody`. The trigger expands to htmx's `revealed`, which fires once per element — each sentinel row does its job exactly one time.
+**The last row is the sentinel.** [`infinite_scroll:`](../dsl.md#presets) presets trigger `:visible` and swap `:after`; the call site adds the target. Placed on the final `tr` of a batch, it means: when this row scrolls into view, fetch the next batch and insert it after the closest `tbody`. The trigger expands to htmx's `revealed`, which fires once per element — each sentinel row does its job exactly one time.
 
 **`target: "closest tbody"` keeps the table valid.** The fetched component is a whole `<tbody>` (that's the `tag_name` override), and swapping it `afterend` of the *row* would nest table sections illegally. Aiming the swap at the closest `tbody` instead makes each batch a sibling section — the shape HTML already sanctions for row grouping. This is why the preset leaves the target to you: only the call site knows what the insertion point should be.
 
@@ -95,4 +95,4 @@ Scrolling that row into view issues `GET /_components/contact_rows?page=2`, whos
 
 - [Click to Load](click-to-load.md) — the same batch-by-batch growth, but on the reader's explicit request.
 - [Lazy Loading](lazy-loading.md) — the `:visible` trigger deferring a single section instead of paginating many.
-- The [shorthands table](../dsl.md#shorthands) and [targets](../dsl.md#targets) in the DSL reference.
+- The [presets table](../dsl.md#presets) and [targets](../dsl.md#targets) in the DSL reference.

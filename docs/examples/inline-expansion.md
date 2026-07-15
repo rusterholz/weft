@@ -2,7 +2,7 @@
 
 A compact row with a disclosure control. Clicking it fetches the row's detail from the server and inserts it directly beneath — the list stays a list, and depth appears exactly where the reader asked for it.
 
-There's no counterpart for this in the htmx examples catalog; `inline_expand:` is Weft-native sugar over the same [`loads:`](../dsl.md#loads) machinery as the other shorthands. It's the pattern for master-detail tables where the detail is cheap to want and expensive to preload for every row.
+There's no counterpart for this in the htmx examples catalog; `inline_expand:` is Weft-native sugar over the same [`loads:`](../dsl.md#loads) machinery as the other presets. It's the pattern for master-detail tables where the detail is cheap to want and expensive to preload for every row.
 
 ## The components
 
@@ -61,7 +61,7 @@ end
 
 ## How it works
 
-**The detail arrives *after* the trigger's row.** [`inline_expand:`](../dsl.md#shorthands) presets trigger `:click` and swap `:after` (htmx's `afterend`); the call site supplies the target. `target: "closest tr"` walks up from the button to its row, so the fetched component is inserted as the next sibling row — which is why `OrderItemsRow` overrides `tag_name` to render as a `<tr>`. A `colspan` spanning the table's columns lets the detail breathe across the full width.
+**The detail arrives *after* the trigger's row.** [`inline_expand:`](../dsl.md#presets) presets trigger `:click` and swap `:after` (htmx's `afterend`); the call site supplies the target. `target: "closest tr"` walks up from the button to its row, so the fetched component is inserted as the next sibling row — which is why `OrderItemsRow` overrides `tag_name` to render as a `<tr>`. A `colspan` spanning the table's columns lets the detail breathe across the full width.
 
 **`trigger: "click once"` guards against double insertion.** The preset's `:click` fires on *every* click — left alone, a second click would insert a second copy of the detail row. The `trigger:` kwarg overrides the preset with htmx's raw trigger grammar, and `once` caps the interaction at a single firing. (There's currently no semantic symbol for "click once" the way `:hover` bakes in `mouseenter once`, so the raw string is the honest spelling.)
 
@@ -93,6 +93,6 @@ Clicking issues `GET /_components/order_items_row?order_id=1001`, and the respon
 
 ## Related
 
-- [Tooltip](tooltip.md) — the other Weft-native shorthand: hover-driven detail loaded into a bubble instead of a row.
+- [Tooltip](tooltip.md) — the other Weft-native preset: hover-driven detail loaded into a bubble instead of a row.
 - [Click to Edit](click-to-edit.md) — two-state rows that swap in place rather than expanding.
-- The [shorthands table](../dsl.md#shorthands) and [trigger values](../dsl.md#trigger-values) in the DSL reference.
+- The [presets table](../dsl.md#presets) and [trigger values](../dsl.md#trigger-values) in the DSL reference.

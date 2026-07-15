@@ -35,7 +35,7 @@ end
   - [`recovers` — declare error behavior](#recovers--declare-error-behavior)
   - [Other class-body declarations](#other-class-body-declarations)
 - [Element kwargs](#element-kwargs): [`action:`](#action), [`navigate:`](#navigate), [`loads:`](#loads), [`trigger:`](#trigger), [`push_url:`](#push_url) — plus the [swap](#swap-values), [trigger](#trigger-values), and [target](#targets) value tables
-- [Shorthands](#shorthands)
+- [Presets](#presets)
 
 ## Params
 
@@ -241,7 +241,7 @@ button "Show manifest", loads: Logistics::ShipmentManifest,
                         swap: :fill, target: "#detail-pane"
 ```
 
-Loads a *different* component into a chosen DOM location on click (or whatever `trigger:` you add). `swap:` and `target:` are required — `loads:` is the fully-explicit primitive underneath the [shorthands](#shorthands), which exist to fill those in for common patterns. `with:` supplies the target component's wire params; omitted, it defaults to the enclosing component's current params.
+Loads a *different* component into a chosen DOM location on click (or whatever `trigger:` you add). `swap:` and `target:` are required — `loads:` is the fully-explicit primitive underneath the [presets](#presets), which exist to fill those in for common patterns. `with:` supplies the target component's wire params; omitted, it defaults to the enclosing component's current params.
 
 ### `trigger:`
 
@@ -250,7 +250,7 @@ div(loads: Preview, with: { id: id }, swap: :fill, target: :self,
     trigger: :visible)
 ```
 
-Sets when the element's request fires. Accepts the semantic symbols in the [trigger table](#trigger-values) or any raw [htmx trigger string](https://htmx.org/params/hx-trigger/) for full control (`"mouseenter once from:closest .card"`). Works standalone or alongside `action:` / `navigate:` / `loads:` / a shorthand.
+Sets when the element's request fires. Accepts the semantic symbols in the [trigger table](#trigger-values) or any raw [htmx trigger string](https://htmx.org/params/hx-trigger/) for full control (`"mouseenter once from:closest .card"`). Works standalone or alongside `action:` / `navigate:` / `loads:` / a preset.
 
 ### `push_url:`
 
@@ -288,9 +288,9 @@ Weft accepts semantic swap names (preferred), the htmx-native names as symbols, 
 
 Wherever a `target:` is accepted: `:self` targets the element itself, a string is a CSS selector passed through to htmx (including forms like `"closest tr"`), and an Arbre element reference targets that element by its id. In verb declarations (`performs`/`transfers`), only the selector-string form applies — `:self` and element references describe elements, which don't exist yet at class-declaration time.
 
-## Shorthands
+## Presets
 
-Shorthands are named presets over the `loads:` machinery — one kwarg that says what the interaction *is*, with the trigger and swap details baked in:
+Presets bundle the `loads:` machinery into named interaction patterns — one kwarg that says what the interaction *is*, with the trigger and swap details baked in:
 
 ```ruby
 button "▸", inline_expand: Oms::OrderInlineDetail,
@@ -300,7 +300,7 @@ button "▸", inline_expand: Oms::OrderInlineDetail,
 
 The kwarg's value is the component class to load (`with:` supplies its params, same as `loads:`). The gem ships these presets:
 
-| Shorthand | Trigger | Swap | Target | Example |
+| Preset | Trigger | Swap | Target | Example |
 | --- | --- | --- | --- | --- |
 | `tooltip:` | `:hover` | `:fill` | supply `target:` | [Tooltip](examples/tooltip.md) |
 | `inline_expand:` | `:click` | `:after` | supply `target:` | [Inline Expansion](examples/inline-expansion.md) |
@@ -323,7 +323,7 @@ button "Retry", retry: params.retry_url
 ### Registering your own
 
 ```ruby
-Weft.register_shorthand :paginate, trigger: :click, swap: :replace
+Weft.register_preset :paginate, trigger: :click, swap: :replace
 ```
 
 A registration names the preset and provides any of `trigger:`, `swap:`, and `target:`. From then on, `paginate:` works as an element kwarg everywhere — same machinery, your vocabulary. Naming interactions after their intent keeps call sites readable: `button "Next", paginate: OrdersPanel, with: { page: 2 }` says more than the four htmx params it expands to.

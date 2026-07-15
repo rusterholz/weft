@@ -106,4 +106,4 @@ Choosing Toyota sends `GET /_components/model_select?make=toyota`, which returns
 
 - [Click to Edit](click-to-edit.md) — the same `loads:` machinery swapping whole UI states instead of one control.
 - [`loads:`](../dsl.md#loads) and [`trigger:`](../dsl.md#trigger) in the DSL reference; [Params](../dsl.md#params) for how parameters become `params`.
-- The [`live_search:` shorthand](../dsl.md#shorthands) is this same fetch-into-a-slot pattern, triggered by typing instead of selecting.
+- The [`live_search:` preset](../dsl.md#presets) is this same fetch-into-a-slot pattern, triggered by typing instead of selecting.

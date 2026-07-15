@@ -2,7 +2,7 @@
 
 Hovering over an element fetches a small piece of server-rendered detail — a profile card, a definition, a status readout — and places it in a bubble beside the trigger. The detail is rendered fresh from the server on first hover, then stays put.
 
-There's no counterpart for this in the htmx examples catalog; `tooltip:` is Weft-native sugar over the same [`loads:`](../dsl.md#loads) machinery as the other shorthands. It earns its keep when the tooltip content is worth a server round-trip — live data, per-record queries — rather than static text a `title=` attribute could carry.
+There's no counterpart for this in the htmx examples catalog; `tooltip:` is Weft-native sugar over the same [`loads:`](../dsl.md#loads) machinery as the other presets. It earns its keep when the tooltip content is worth a server round-trip — live data, per-record queries — rather than static text a `title=` attribute could carry.
 
 ## The components
 
@@ -51,7 +51,7 @@ end
 
 ## How it works
 
-**Hover fetches; the bubble receives.** [`tooltip:`](../dsl.md#shorthands) presets trigger `:hover` and swap `:fill`; the call site says where the content lands. Each name targets its own empty bubble div (`target: "#peek-#{handle}"`), so every row has an independent tooltip slot. The bubbles start empty and cost nothing until hovered.
+**Hover fetches; the bubble receives.** [`tooltip:`](../dsl.md#presets) presets trigger `:hover` and swap `:fill`; the call site says where the content lands. Each name targets its own empty bubble div (`target: "#peek-#{handle}"`), so every row has an independent tooltip slot. The bubbles start empty and cost nothing until hovered.
 
 **`:hover` means *first* hover.** The semantic trigger expands to htmx's `mouseenter once` — the fetch happens the first time the pointer enters, and never again. Be clear about what that buys and what it doesn't: Weft delivers the *content*, once, lazily. It does not show and hide the bubble as the pointer comes and goes — that's presentation, and it belongs to CSS (a `.peek-bubble` hidden until `li:hover`, for instance). After the first hover, showing the tooltip again is free, because the content is already in the page.
 
@@ -83,6 +83,6 @@ The first hover over Priya issues `GET /_components/member_peek?handle=priya`, a
 
 ## Related
 
-- [Inline Expansion](inline-expansion.md) — the other Weft-native shorthand: click-driven detail that lands *after* its trigger instead of in a bubble.
+- [Inline Expansion](inline-expansion.md) — the other Weft-native preset: click-driven detail that lands *after* its trigger instead of in a bubble.
 - [Lazy Loading](lazy-loading.md) — the same load-once deferral, triggered by visibility instead of the pointer.
-- The [shorthands table](../dsl.md#shorthands) in the DSL reference.
+- The [presets table](../dsl.md#presets) in the DSL reference.

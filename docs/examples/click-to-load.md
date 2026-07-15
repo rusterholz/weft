@@ -35,7 +35,7 @@ Render `agent_rows(page: 1)` wherever the list lives, and the pattern takes care
 
 ## How it works
 
-**One shorthand, no ceremony.** [`load_more:`](../dsl.md#shorthands) is a preset over the [`loads:`](../dsl.md#loads) machinery: trigger `:click`, swap `:replace`, target `:self`. In plain terms — when this button is clicked, fetch the named component and put it where the button was. The call site supplies only what varies: which component to load (`AgentRows`, the component's own class) and its wire params (`with: { page: params.page + 1 }`).
+**One preset, no ceremony.** [`load_more:`](../dsl.md#presets) is a preset over the [`loads:`](../dsl.md#loads) machinery: trigger `:click`, swap `:replace`, target `:self`. In plain terms — when this button is clicked, fetch the named component and put it where the button was. The call site supplies only what varies: which component to load (`AgentRows`, the component's own class) and its wire params (`with: { page: params.page + 1 }`).
 
 **The component is a chunk, not the whole list.** Each `AgentRows` instance renders one page of agents and, when more remain, the button that fetches the next chunk *in its own place*. Clicking never touches the agents already on screen; the button alone is replaced, and the new chunk arrives with its own button. The recursion bottoms out naturally — the `if` guard means the final chunk simply renders no button.
 
@@ -73,5 +73,5 @@ The last page (`GET /_components/agent_rows?page=4`) renders its agents and no b
 
 - [Infinite Scroll](infinite-scroll.md) — the same next-page mechanic, triggered by scrolling instead of a click, in a real table.
 - [Lazy Loading](lazy-loading.md) — deferring one expensive section rather than paginating many.
-- The [shorthands table](../dsl.md#shorthands) in the DSL reference, including how to register your own preset.
+- The [presets table](../dsl.md#presets) in the DSL reference, including how to register your own preset.
 - For pagination that *replaces* the current page instead of accumulating, [`navigate:`](../dsl.md#navigate) is the better verb.

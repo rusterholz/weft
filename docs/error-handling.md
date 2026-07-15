@@ -122,9 +122,9 @@ Notes on the individual values:
 
 - **These five names are reserved** on any class used as a recovery target. Declaring a param with one of these names *means* "inject the recovery value here" — so don't reuse them for your own data on error components, or on any component/page reachable through a `recovers` edge.
 - **`:component_id`** preserves DOM identity: render your error wrapper with it as the element id (the gem's defaults do) and the error lands under the failing component's original id — so multiple simultaneous failures each swap into their own slot rather than colliding.
-- **`:retry_url`** feeds the [`retry:` shorthand](dsl.md#shorthands): one button attribute, and the user can re-request the failed component in place. For a failed *action*, the URL renders the underlying component's view — a fresh look, not a replay of the failed action.
+- **`:retry_url`** feeds the [`retry:` preset](dsl.md#presets): one button attribute, and the user can re-request the failed component in place. For a failed *action*, the URL renders the underlying component's view — a fresh look, not a replay of the failed action.
 - When a recovery resolves to a **redirect** (page target from component context), only `:request_path` and `:status_code` travel — the others have no meaning in a URL.
-- Keep the `weft-error` CSS class on custom error components: it's the DOM marker the `retry:` shorthand targets, and a useful styling hook besides.
+- Keep the `weft-error` CSS class on custom error components: it's the DOM marker the `retry:` preset targets, and a useful styling hook besides.
 
 ## Presentation settings
 
