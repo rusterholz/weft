@@ -61,16 +61,16 @@ module Weft
       Redirect.to(target, **params)
     end
 
-    # Register a named interaction shorthand. Delegates to Weft::Shorthands.
+    # Register a named interaction preset. Delegates to Weft::Presets.
     #
-    #   Weft.register_shorthand :tooltip, trigger: :hover, swap: :fill
-    def register_shorthand(name, **defaults)
-      Shorthands.register(name, **defaults)
+    #   Weft.register_preset :tooltip, trigger: :hover, swap: :fill
+    def register_preset(name, **defaults)
+      Presets.register(name, **defaults)
     end
 
-    # Look up a registered shorthand by name. Delegates to Weft::Shorthands.
-    def shorthand(name)
-      Shorthands.lookup(name)
+    # Look up a registered preset by name. Delegates to Weft::Presets.
+    def preset(name)
+      Presets.lookup(name)
     end
 
     private
@@ -120,5 +120,5 @@ module Weft
   end
 end
 
-require "weft/shorthands"
+require "weft/presets"
 require "weft/defaults"

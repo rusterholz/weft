@@ -53,7 +53,7 @@ module Weft
       end
 
       # Retry by re-issuing a GET to refresh the failing component. The :retry
-      # shorthand supplies the htmx wiring (outerHTML-swap the closest
+      # preset supplies the htmx wiring (outerHTML-swap the closest
       # .weft-error box), so it works whether or not :component_id was carved out.
       def render_retry_button
         button "Retry", retry: @params.retry_url, style: BUTTON_STYLE

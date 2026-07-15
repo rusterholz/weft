@@ -361,11 +361,11 @@ RSpec.describe Weft::Page do
     end
   end
 
-  describe "register_css" do
+  describe "register_inline_css" do
     it "emits the registered inline CSS inside a <style> tag in the head" do
       page_class = Class.new(described_class) do
         def self.name = "InlineStyledPage"
-        register_css ".foo { color: red; }"
+        register_inline_css ".foo { color: red; }"
       end
 
       html = Arbre::Context.new { insert_tag(page_class) }.to_s
@@ -375,8 +375,8 @@ RSpec.describe Weft::Page do
     it "emits each entry as its own <style> tag (source attribution stays visible)" do
       page_class = Class.new(described_class) do
         def self.name = "MultiStyledPage"
-        register_css ".one { color: red; }"
-        register_css ".two { color: blue; }"
+        register_inline_css ".one { color: red; }"
+        register_inline_css ".two { color: blue; }"
       end
 
       html = Arbre::Context.new { insert_tag(page_class) }.to_s
@@ -387,11 +387,11 @@ RSpec.describe Weft::Page do
     it "inherits parent CSS and appends child CSS (composable, not replacing)" do
       parent = Class.new(described_class) do
         def self.name = "BaseStyledPage"
-        register_css ".base { color: red; }"
+        register_inline_css ".base { color: red; }"
       end
       child = Class.new(parent) do
         def self.name = "ChildStyledPage"
-        register_css ".child { color: blue; }"
+        register_inline_css ".child { color: blue; }"
       end
 
       html = Arbre::Context.new { insert_tag(child) }.to_s
@@ -402,7 +402,7 @@ RSpec.describe Weft::Page do
     it "does not strip or escape the CSS (it goes in literally)" do
       page_class = Class.new(described_class) do
         def self.name = "RawCssPage"
-        register_css "/* comment */ a > b::after { content: '>'; }"
+        register_inline_css "/* comment */ a > b::after { content: '>'; }"
       end
 
       html = Arbre::Context.new { insert_tag(page_class) }.to_s

@@ -152,10 +152,10 @@ module Weft
       # Each registered string emits as its own <style> tag (subclasses
       # add on top of their parent's contributions; nothing replaces).
       #
-      #   register_css <<~CSS
+      #   register_inline_css <<~CSS
       #     .card { padding: 1rem; }
       #   CSS
-      def register_css(css)
+      def register_inline_css(css)
         own_inline_css << css
       end
 

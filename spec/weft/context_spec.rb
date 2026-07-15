@@ -474,10 +474,10 @@ RSpec.describe Weft::Context do
     end
   end
 
-  describe "shorthand kwarg dispatch" do
+  describe "preset kwarg dispatch" do
     let(:target_class) do
       Class.new(Weft::Component) do
-        def self.name = "ShorthandTarget"
+        def self.name = "PresetTarget"
         param :item_id
 
         def build(attributes = {})
@@ -488,14 +488,14 @@ RSpec.describe Weft::Context do
     end
 
     before do
-      Weft.register_shorthand :test_short, trigger: :hover, swap: :fill
+      Weft.register_preset :test_short, trigger: :hover, swap: :fill
     end
 
     after do
-      Weft::Shorthands.send(:registry).delete(:test_short)
+      Weft::Presets.send(:registry).delete(:test_short)
     end
 
-    it "dispatches a registered shorthand kwarg through loads: expansion" do
+    it "dispatches a registered preset kwarg through loads: expansion" do
       target = target_class
       klass = component_class
       html = described_class.new({}, nil) do
@@ -505,7 +505,7 @@ RSpec.describe Weft::Context do
         end
       end.to_s
 
-      expect(html).to include('hx-get="/_components/shorthand_target?item_id=5"')
+      expect(html).to include('hx-get="/_components/preset_target?item_id=5"')
       expect(html).to include('hx-swap="innerHTML"')
       expect(html).to include('hx-target="#tip"')
     end
@@ -536,8 +536,8 @@ RSpec.describe Weft::Context do
       expect(html).not_to include("mouseenter")
     end
 
-    it "uses preset target when provided by the shorthand" do
-      Weft.register_shorthand :self_target, trigger: :visible, swap: :fill, target: :self
+    it "uses preset target when provided by the preset" do
+      Weft.register_preset :self_target, trigger: :visible, swap: :fill, target: :self
       target = target_class
       klass = component_class
       html = described_class.new({}, nil) do
@@ -547,7 +547,7 @@ RSpec.describe Weft::Context do
       end.to_s
 
       expect(html).to include('hx-target="this"')
-      Weft::Shorthands.send(:registry).delete(:self_target)
+      Weft::Presets.send(:registry).delete(:self_target)
     end
 
     it "requires target when preset has no default target" do
@@ -573,7 +573,7 @@ RSpec.describe Weft::Context do
       expect(html).not_to include("hx-get")
     end
 
-    it "preserves other attributes alongside shorthand attrs" do
+    it "preserves other attributes alongside preset attrs" do
       target = target_class
       klass = component_class
       html = described_class.new({}, nil) do
@@ -596,18 +596,18 @@ RSpec.describe Weft::Context do
         end
       end.to_s
 
-      expect(html).to include('hx-get="/_components/shorthand_target?order_id=42"')
+      expect(html).to include('hx-get="/_components/preset_target?order_id=42"')
     end
   end
 
-  # Retry-style shorthands carry a URL string (not a target Class): the caller
+  # Retry-style presets carry a URL string (not a target Class): the caller
   # already has the exact URL to re-fetch, so there's nothing to derive. The URL
   # becomes hx-get directly; swap/target/trigger still come from the preset.
-  describe "URL-valued shorthand dispatch" do
-    before { Weft.register_shorthand :test_url, trigger: :click, swap: :fill, target: "#box" }
-    after  { Weft::Shorthands.send(:registry).delete(:test_url) }
+  describe "URL-valued preset dispatch" do
+    before { Weft.register_preset :test_url, trigger: :click, swap: :fill, target: "#box" }
+    after  { Weft::Presets.send(:registry).delete(:test_url) }
 
-    it "expands a String-valued shorthand kwarg into a direct hx-get to that URL" do
+    it "expands a String-valued preset kwarg into a direct hx-get to that URL" do
       klass = component_class
       html = described_class.new({}, nil) do
         insert_tag(klass, order_id: 1) do
@@ -633,7 +633,7 @@ RSpec.describe Weft::Context do
       expect(html).to include('hx-swap="outerHTML"')
     end
 
-    it "does not treat a String value for an unregistered kwarg name as a shorthand" do
+    it "does not treat a String value for an unregistered kwarg name as a preset" do
       klass = component_class
       html = described_class.new({}, nil) do
         insert_tag(klass, order_id: 1) do
@@ -645,7 +645,7 @@ RSpec.describe Weft::Context do
     end
   end
 
-  describe "shipped shorthand presets" do
+  describe "shipped preset presets" do
     let(:target_class) do
       Class.new(Weft::Component) do
         def self.name = "PresetTarget"
@@ -653,10 +653,10 @@ RSpec.describe Weft::Context do
       end
     end
 
-    def render_with_shorthand(shorthand_name, **kwargs)
+    def render_with_preset(preset_name, **kwargs)
       target = target_class
       klass = component_class
-      name = shorthand_name
+      name = preset_name
       described_class.new({}, nil) do
         insert_tag(klass, order_id: 1) do
           div({ name => target, with: { id: "1" } }.merge(kwargs))
@@ -665,21 +665,21 @@ RSpec.describe Weft::Context do
     end
 
     it "tooltip: hover + fill" do
-      html = render_with_shorthand(:tooltip, target: "#tip")
+      html = render_with_preset(:tooltip, target: "#tip")
 
       expect(html).to include('hx-trigger="mouseenter once"')
       expect(html).to include('hx-swap="innerHTML"')
     end
 
     it "inline_expand: click + after" do
-      html = render_with_shorthand(:inline_expand, target: "closest tr")
+      html = render_with_preset(:inline_expand, target: "closest tr")
 
       expect(html).to include('hx-swap="afterend"')
       expect(html).to include('hx-trigger="click"')
     end
 
     it "lazy: visible + fill + self" do
-      html = render_with_shorthand(:lazy)
+      html = render_with_preset(:lazy)
 
       expect(html).to include('hx-trigger="revealed"')
       expect(html).to include('hx-swap="innerHTML"')
@@ -687,14 +687,14 @@ RSpec.describe Weft::Context do
     end
 
     it "modal: click + fill" do
-      html = render_with_shorthand(:modal, target: "#modal-body")
+      html = render_with_preset(:modal, target: "#modal-body")
 
       expect(html).to include('hx-swap="innerHTML"')
       expect(html).to include('hx-trigger="click"')
     end
 
     it "load_more: click + replace + self" do
-      html = render_with_shorthand(:load_more)
+      html = render_with_preset(:load_more)
 
       expect(html).to include('hx-swap="outerHTML"')
       expect(html).to include('hx-target="this"')
@@ -702,21 +702,21 @@ RSpec.describe Weft::Context do
     end
 
     it "infinite_scroll: visible + after" do
-      html = render_with_shorthand(:infinite_scroll, target: :self)
+      html = render_with_preset(:infinite_scroll, target: :self)
 
       expect(html).to include('hx-trigger="revealed"')
       expect(html).to include('hx-swap="afterend"')
     end
 
     it "live_search: debounced input + fill" do
-      html = render_with_shorthand(:live_search, target: "#results")
+      html = render_with_preset(:live_search, target: "#results")
 
       expect(html).to include('hx-trigger="input changed delay:300ms"')
       expect(html).to include('hx-swap="innerHTML"')
     end
 
     it "tabs: click + fill" do
-      html = render_with_shorthand(:tabs, target: "#panel")
+      html = render_with_preset(:tabs, target: "#panel")
 
       expect(html).to include('hx-swap="innerHTML"')
       expect(html).to include('hx-trigger="click"')

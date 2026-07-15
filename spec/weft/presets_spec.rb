@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
-RSpec.describe Weft::Shorthands do
+RSpec.describe Weft::Presets do
   describe ".register and .lookup" do
-    after { described_class.send(:registry).delete(:test_spec_shorthand) }
+    after { described_class.send(:registry).delete(:test_spec_preset) }
 
-    it "registers and looks up a shorthand by name" do
-      described_class.register :test_spec_shorthand, trigger: :click, swap: :fill
+    it "registers and looks up a preset by name" do
+      described_class.register :test_spec_preset, trigger: :click, swap: :fill
 
-      result = described_class.lookup(:test_spec_shorthand)
+      result = described_class.lookup(:test_spec_preset)
       expect(result).to eq(trigger: :click, swap: :fill)
     end
 
@@ -72,23 +72,23 @@ RSpec.describe Weft::Shorthands do
     end
   end
 
-  describe "Weft.register_shorthand delegation" do
+  describe "Weft.register_preset delegation" do
     after { described_class.send(:registry).delete(:delegated_test) }
 
-    it "delegates to Weft::Shorthands.register" do
-      Weft.register_shorthand :delegated_test, trigger: :hover, swap: :fill
+    it "delegates to Weft::Presets.register" do
+      Weft.register_preset :delegated_test, trigger: :hover, swap: :fill
 
       expect(described_class.lookup(:delegated_test)).to eq(trigger: :hover, swap: :fill)
     end
   end
 
-  describe "Weft.shorthand delegation" do
-    it "delegates to Weft::Shorthands.lookup" do
-      expect(Weft.shorthand(:tooltip)).to eq(trigger: :hover, swap: :fill)
+  describe "Weft.preset delegation" do
+    it "delegates to Weft::Presets.lookup" do
+      expect(Weft.preset(:tooltip)).to eq(trigger: :hover, swap: :fill)
     end
 
     it "returns nil for unregistered names" do
-      expect(Weft.shorthand(:nonexistent)).to be_nil
+      expect(Weft.preset(:nonexistent)).to be_nil
     end
   end
 end
