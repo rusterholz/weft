@@ -14,7 +14,7 @@ class ContactRows < Weft::Component
 
   PER_PAGE = 10
 
-  attribute :page, default: 1
+  param :page, default: 1
 
   def tag_name
     "tbody"
@@ -22,10 +22,10 @@ class ContactRows < Weft::Component
 
   def build(attributes = {})
     super
-    rows = DIRECTORY[(attrs.page - 1) * PER_PAGE, PER_PAGE]
+    rows = DIRECTORY[(params.page - 1) * PER_PAGE, PER_PAGE]
     rows.each_with_index do |contact, index|
       if index == rows.size - 1 && more_pages?
-        tr(infinite_scroll: ContactRows, with: { page: attrs.page + 1 }, target: "closest tbody") do
+        tr(infinite_scroll: ContactRows, with: { page: params.page + 1 }, target: "closest tbody") do
           td contact[:name]; td contact[:email]
         end
       else
@@ -37,7 +37,7 @@ class ContactRows < Weft::Component
   private
 
   def more_pages?
-    attrs.page * PER_PAGE < DIRECTORY.size
+    params.page * PER_PAGE < DIRECTORY.size
   end
 end
 
@@ -65,7 +65,7 @@ end
 
 **The chain stops itself.** The sentinel wiring is only rendered while `more_pages?` holds. The final batch is just rows — nothing left to trigger, nothing fetched past the end of the data.
 
-**`page` travels as wire state.** `attribute :page, default: 1` makes each batch independently addressable (`/_components/contact_rows?page=3`) and coerces the URL string to an Integer, since the default is one. The `ContactDirectory` wrapper, by contrast, declares nothing — it's plain composition and renders only as part of a page.
+**`page` travels as wire state.** `param :page, default: 1` makes each batch independently addressable (`/_components/contact_rows?page=3`) and coerces the URL string to an Integer, since the default is one. The `ContactDirectory` wrapper, by contrast, declares nothing — it's plain composition and renders only as part of a page.
 
 ## On the wire
 

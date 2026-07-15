@@ -14,16 +14,16 @@ class AgentRows < Weft::Component
 
   PER_PAGE = 6
 
-  attribute :page, default: 1
+  param :page, default: 1
 
   def build(attributes = {})
     super
-    batch = AGENTS[(attrs.page - 1) * PER_PAGE, PER_PAGE]
+    batch = AGENTS[(params.page - 1) * PER_PAGE, PER_PAGE]
     batch.each do |agent|
       div { strong agent[:name]; text_node " — #{agent[:email]} (##{agent[:number]})" }
     end
-    if attrs.page * PER_PAGE < AGENTS.size
-      button "Load More Agents...", load_more: AgentRows, with: { page: attrs.page + 1 }
+    if params.page * PER_PAGE < AGENTS.size
+      button "Load More Agents...", load_more: AgentRows, with: { page: params.page + 1 }
     end
   end
 end
@@ -35,11 +35,11 @@ Render `agent_rows(page: 1)` wherever the list lives, and the pattern takes care
 
 ## How it works
 
-**One shorthand, no ceremony.** [`load_more:`](../dsl.md#shorthands) is a preset over the [`loads:`](../dsl.md#loads) machinery: trigger `:click`, swap `:replace`, target `:self`. In plain terms — when this button is clicked, fetch the named component and put it where the button was. The call site supplies only what varies: which component to load (`AgentRows`, the component's own class) and its wire attrs (`with: { page: attrs.page + 1 }`).
+**One shorthand, no ceremony.** [`load_more:`](../dsl.md#shorthands) is a preset over the [`loads:`](../dsl.md#loads) machinery: trigger `:click`, swap `:replace`, target `:self`. In plain terms — when this button is clicked, fetch the named component and put it where the button was. The call site supplies only what varies: which component to load (`AgentRows`, the component's own class) and its wire params (`with: { page: params.page + 1 }`).
 
 **The component is a chunk, not the whole list.** Each `AgentRows` instance renders one page of agents and, when more remain, the button that fetches the next chunk *in its own place*. Clicking never touches the agents already on screen; the button alone is replaced, and the new chunk arrives with its own button. The recursion bottoms out naturally — the `if` guard means the final chunk simply renders no button.
 
-**Attributes make the chunk addressable.** Declaring `attribute :page, default: 1` gives the component a route ([Routing](../routing.md)) and coerces the wire value: `page=2` arrives as the string `"2"` and reaches `attrs.page` as the Integer `2`, because the default is an Integer.
+**Params make the chunk addressable.** Declaring `param :page, default: 1` gives the component a route ([Routing](../routing.md)) and coerces the wire value: `page=2` arrives as the string `"2"` and reaches `params.page` as the Integer `2`, because the default is an Integer.
 
 **A component can load itself.** `load_more: AgentRows` inside `AgentRows`'s own `build` is unremarkable — the class reference is evaluated at render time, so self-reference needs no tricks.
 

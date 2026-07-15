@@ -35,7 +35,7 @@ The ordering carries the same rule the tutorial explains: files that *define* th
 
 Components own what the user **sees and does** — the markup, the affordances, and the immediate response to an action. They should not own your business rules.
 
-The dividing line runs through the action callable. A callable is a translation layer: attributes in, one operation invoked, a hash out for the re-render. The moment the middle step grows past a few lines — multiple records, a transaction, an email, a job — it belongs in a plain Ruby service object:
+The dividing line runs through the action callable. A callable is a translation layer: params in, one operation invoked, a hash out for the re-render. The moment the middle step grows past a few lines — multiple records, a transaction, an email, a job — it belongs in a plain Ruby service object:
 
 ```ruby
 # app/services/comment_poster.rb
@@ -53,16 +53,16 @@ end
 
 ```ruby
 # in the component
-performs :post do |attrs|
-  CommentPoster.call(author: attrs.author, body: attrs.body)
+performs :post do |params|
+  CommentPoster.call(author: params.author, body: params.body)
   { author: nil, body: nil }
 end
 ```
 
 The service knows nothing about components or HTML; the component knows nothing about how a post actually happens. Two details worth noticing:
 
-- **End the callable with the hash you mean.** A callable's return value merges into the attributes for the re-render *if it's a hash* — anything else is discarded (see [the callable contract](dsl.md#the-callable-contract)). Delegating to a service and then returning your own hash, as above, keeps the wire state deliberate even when the service's return value changes.
-- **The service returns plain Ruby values** (`:posted`, `:blank`, a record, a result object — whatever fits). When the component needs to branch on the outcome, branch in the callable and translate to attributes; the service still shouldn't know what a DOM id is.
+- **End the callable with the hash you mean.** A callable's return value merges into the params for the re-render *if it's a hash* — anything else is discarded (see [the callable contract](dsl.md#the-callable-contract)). Delegating to a service and then returning your own hash, as above, keeps the wire state deliberate even when the service's return value changes.
+- **The service returns plain Ruby values** (`:posted`, `:blank`, a record, a result object — whatever fits). When the component needs to branch on the outcome, branch in the callable and translate to params; the service still shouldn't know what a DOM id is.
 
 ## Databases
 
@@ -76,7 +76,7 @@ Weft doesn't run jobs, but it has a natural shape for showing their progress: **
 
 The pattern in three steps:
 
-1. **The action dispatches and returns.** A user action that starts long work shouldn't wait for it — the callable enqueues the job (Sidekiq, SolidQueue, GoodJob, a `Thread` in development — Weft doesn't care) and returns immediately with whatever attributes render the "started" state.
+1. **The action dispatches and returns.** A user action that starts long work shouldn't wait for it — the callable enqueues the job (Sidekiq, SolidQueue, GoodJob, a `Thread` in development — Weft doesn't care) and returns immediately with whatever params render the "started" state.
 2. **The job writes progress to the shared store** as it works: a status column, a percentage, a result row. The job knows nothing about components.
 3. **The component re-renders on a cadence** — [`refreshes every:`](dsl.md#refreshes--the-client-re-fetches) polls, [`pushes every:`](dsl.md#pushes--the-server-sends-updates) streams over SSE — and each render just reads the store. Completion isn't an event to handle; it's data the next render picks up.
 
@@ -86,7 +86,7 @@ The [Progress Bar](examples/progress-bar.md) example is this exact lifecycle, ve
 
 Weft is deliberately session-agnostic: no cookie handling, no `current_user`, no login machinery. Identity is your app's concern, handled with standard Rack pieces in front of the Router. What Weft *does* define is the seam, and it's narrower than you might expect:
 
-> Components and callables receive exactly their **resolved attributes** — values from request parameters, filtered through each component's declared schema. Session state and request headers are not part of that channel.
+> Components and callables receive exactly their **resolved params** — values from request parameters, filtered through each component's declared schema. Session state and request headers are not part of that channel.
 
 So per-request identity needs its own channel. The pattern that fits — the same one Rails blesses as `Current` — is a [`CurrentAttributes`](https://api.rubyonrails.org/classes/ActiveSupport/CurrentAttributes.html) object set by middleware. Weft already depends on ActiveSupport, so it's available without adding anything:
 

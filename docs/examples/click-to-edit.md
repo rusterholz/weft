@@ -14,16 +14,16 @@ CONTACTS = {
 class ContactCard < Weft::Component
   builder_method :contact_card
 
-  attribute :contact_id
+  param :contact_id
 
   def build(attributes = {})
     super
-    contact = CONTACTS.fetch(attrs.contact_id)
+    contact = CONTACTS.fetch(params.contact_id)
     div { strong "First Name: "; text_node contact[:first_name] }
     div { strong "Last Name: ";  text_node contact[:last_name] }
     div { strong "Email: ";      text_node contact[:email] }
     button "Click To Edit",
-           loads: ContactEditor, with: { contact_id: attrs.contact_id },
+           loads: ContactEditor, with: { contact_id: params.contact_id },
            swap: :replace, target: self
   end
 end
@@ -31,23 +31,23 @@ end
 class ContactEditor < Weft::Component
   builder_method :contact_editor
 
-  attribute :contact_id
-  attribute :first_name
-  attribute :last_name
-  attribute :email
+  param :contact_id
+  param :first_name
+  param :last_name
+  param :email
 
-  transfers :save, to: ContactCard do |attrs|
-    CONTACTS.fetch(attrs.contact_id).merge!(
-      first_name: attrs.first_name, last_name: attrs.last_name, email: attrs.email
+  transfers :save, to: ContactCard do |params|
+    CONTACTS.fetch(params.contact_id).merge!(
+      first_name: params.first_name, last_name: params.last_name, email: params.email
     )
     nil
   end
 
   def build(attributes = {})
     super
-    contact = CONTACTS.fetch(attrs.contact_id)
+    contact = CONTACTS.fetch(params.contact_id)
     form(action: :save) do
-      input(type: "hidden", name: "contact_id", value: attrs.contact_id)
+      input(type: "hidden", name: "contact_id", value: params.contact_id)
       div do
         label("First Name ", for: "first_name")
         input(type: "text", name: "first_name", id: "first_name", value: contact[:first_name])
@@ -62,7 +62,7 @@ class ContactEditor < Weft::Component
       end
       input(type: "submit", value: "Submit")
       button "Cancel", type: "button",
-             loads: ContactCard, with: { contact_id: attrs.contact_id },
+             loads: ContactCard, with: { contact_id: params.contact_id },
              swap: :replace, target: self
     end
   end
@@ -79,7 +79,7 @@ end
 
 **The two components reference each other — without a cycle.** `transfers :save, to: ContactCard` runs in the class body, so `ContactCard` must already be defined; but `loads: ContactEditor` isn't evaluated until render. Defining the display component first therefore breaks the loop with no forward-declaration tricks. This ordering trick generalizes to any two-state component pair.
 
-**Form fields pair with declared attributes.** The editor declares `first_name`, `last_name`, and `email` so its fields reach the save callable as `attrs.first_name` and friends — and `contact_id` rides along as a hidden input, because it's part of the component's identity rather than something the user edits. (This pairing is covered in depth in [the tutorial](../tutorial.md#7-taking-rsvps).)
+**Form fields pair with declared params.** The editor declares `first_name`, `last_name`, and `email` so its fields reach the save callable as `params.first_name` and friends — and `contact_id` rides along as a hidden input, because it's part of the component's identity rather than something the user edits. (This pairing is covered in depth in [the tutorial](../tutorial.md#7-taking-rsvps).)
 
 **It still works without JavaScript.** `form(action: :save)` emits plain `action`/`method` attributes alongside the htmx wiring, so the save degrades to a normal POST. Note `type: "button"` on Cancel — inside a form, a bare `<button>` is a submit button.
 

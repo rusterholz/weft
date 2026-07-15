@@ -88,4 +88,4 @@ Each multi-line rendering becomes consecutive `data:` lines in one event, per th
 
 - [Progress Bar](progress-bar.md) — the polling counterpart: the client re-fetches on a timer instead of holding a connection.
 - [`pushes`](../dsl.md#pushes--the-server-sends-updates) in the DSL reference; [`stream_suffix`](../configuration.md#stream_suffix) and [`include_sse_ext`](../configuration.md#include_sse_ext) in configuration.
-- A component with attributes streams too — its wire state rides the `sse-connect` URL as query parameters, so each subscriber gets frames for *its* instance.
+- A component with params streams too — its wire state rides the `sse-connect` URL as query parameters, so each subscriber gets frames for *its* instance.

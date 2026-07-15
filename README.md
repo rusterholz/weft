@@ -6,18 +6,18 @@ Weft lets you write your application in terms of its interface: components decla
 
 ```ruby
 class DeliveryStatus < Weft::Component
-  attribute :delivery_id
+  param :delivery_id
 
   refreshes every: 5.seconds
 
-  performs :cancel do |attrs|
-    delivery = Delivery.find(attrs.delivery_id)
+  performs :cancel do |params|
+    delivery = Delivery.find(params.delivery_id)
     CancelDelivery.call(delivery)
   end
 
   def build(attributes = {})
     super
-    delivery = Delivery.find(attrs.delivery_id)
+    delivery = Delivery.find(params.delivery_id)
     div(class: "delivery-status") do
       progress value: delivery.progress, max: 100
       button "Cancel", action: :cancel if delivery.cancelable?

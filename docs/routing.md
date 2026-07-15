@@ -42,7 +42,7 @@ The path derives from the class name: strip a trailing `Component` if present, s
 
 The suffix-stripping means `OrdersPanel` and `OrdersPanelComponent` are the same route — pick whichever naming style your app prefers, consistently. The `/_components/` prefix keeps the fragment namespace visibly separate from your page URLs; the leading underscore marks it as infrastructure.
 
-Attributes arrive as query parameters (`/_components/orders_panel?status=shipped&page=2`) and resolve through the component's declared schema — undeclared parameters are ignored, and declared ones are type-coerced from their defaults (see [Attributes](dsl.md#attributes)).
+Params arrive as query parameters (`/_components/orders_panel?status=shipped&page=2`) and resolve through the component's declared schema — undeclared parameters are ignored, and declared ones are type-coerced from their defaults (see [Params](dsl.md#params)).
 
 To change the path for one class, set `component_path` on it — a string, or a proc receiving the class:
 
@@ -69,30 +69,30 @@ A component declaring `pushes` also gets an SSE endpoint at its path plus the st
 
 ## Page routes
 
-Pages route as full HTML documents at people-facing URLs — no prefix, no derivation from fragments. A page declares its pattern with `page_path`, Sinatra-style, with `:param` segments mapping to attributes:
+Pages route as full HTML documents at people-facing URLs — no prefix, no derivation from fragments. A page declares its pattern with `page_path`, Sinatra-style, with `:param` segments mapping to params:
 
 ```ruby
 class OrderDetailPage < Weft::Page
   self.page_path = "/orders/:order_id"
-  attribute :order_id
+  param :order_id
 end
 ```
 
-A request for `/orders/42` renders the page with `attrs.order_id == "42"`. Path parameters merge with query and body parameters (path wins on conflicts), and the combined set resolves through the page's attribute schema like any other wire state.
+A request for `/orders/42` renders the page with `params.order_id == "42"`. Path parameters merge with query and body parameters (path wins on conflicts), and the combined set resolves through the page's param schema like any other wire state.
 
-The pattern is bidirectional — it also builds URLs. `Weft.redirect(OrderDetailPage, order_id: 42)` interpolates the attrs into the pattern, and `OrderDetailPage.redirect_url(order_id: 42, highlight: "items")` additionally turns declared-but-not-in-path attrs into a query string (undeclared keys are discarded, never leaked into URLs).
+The pattern is bidirectional — it also builds URLs. `Weft.redirect(OrderDetailPage, order_id: 42)` interpolates the params into the pattern, and `OrderDetailPage.redirect_url(order_id: 42, highlight: "items")` additionally turns declared-but-not-in-path params into a query string (undeclared keys are discarded, never leaked into URLs).
 
 Pages without an explicit `page_path` infer one from the class name: demodulized, snake-cased, with a trailing `Page` stripped if present — `DashboardPage` and `Dashboard` both route at `/dashboard`. Two edges of the inference to know:
 
-- A page with **attributes** must declare `page_path` explicitly — a parameterized pattern can't be guessed from a name, so Weft raises with the pattern it suggests rather than inventing one.
+- A page with **params** must declare `page_path` explicitly — a parameterized pattern can't be guessed from a name, so Weft raises with the pattern it suggests rather than inventing one.
 - A page named such that nothing usable remains after stripping (`Admin::Page`) also raises, with the remediation options spelled out.
 
 ## What routes — and what doesn't
 
 Registration and routability are separate ideas. *Every* `Weft::Component` and `Weft::Page` subclass registers; whether it gets a route is inferred from what it declares:
 
-- A **component** is routable when it declares interactive behavior: any attribute, action, `refreshes`, or `pushes`. A purely presentational component — just a `build` method — registers but is never served; there's nothing to address it *for*.
-- A **page** is routable when it has a usable path: an explicit `page_path`, or a name the default can be derived from (and no attributes, per the edge above).
+- A **component** is routable when it declares interactive behavior: any param, action, `refreshes`, or `pushes`. A purely presentational component — just a `build` method — registers but is never served; there's nothing to address it *for*.
+- A **page** is routable when it has a usable path: an explicit `page_path`, or a name the default can be derived from (and no params, per the edge above).
 
 ### `abstract!` and `routable!`
 
@@ -108,9 +108,9 @@ end
 
 ### Routable vs. render target
 
-"Routable" means *addressable at its own GET URL* — and that is orthogonal to being a **render target**. Verbs with transfer semantics (`transfers to:`, `recovers with:`) render their target on the server, inside an in-flight response; the target class needs attributes to render with, but no route of its own. Weft's own default error components work exactly this way: they're `abstract!`, unreachable by URL, and rendered constantly.
+"Routable" means *addressable at its own GET URL* — and that is orthogonal to being a **render target**. Verbs with transfer semantics (`transfers to:`, `recovers with:`) render their target on the server, inside an in-flight response; the target class needs params to render with, but no route of its own. Weft's own default error components work exactly this way: they're `abstract!`, unreachable by URL, and rendered constantly.
 
-Navigation-semantic wiring (`refreshes`, `navigate:`, `loads:`, shorthands) *does* need its target addressable — and here the inference has a gap to watch. Declaring `refreshes` makes a component routable, but being the *target* of another component's `loads:` or shorthand kwarg confers nothing: a target with no attributes and no verbs of its own quietly stays off the route table, and the element wired to load it gets a not-found response at interaction time. Most real targets declare attributes and route on their own; for a purely presentational one, declare `routable!` explicitly. Where you'll reach for `abstract!` is the opposite case: a transfer target that declares attributes (so it can render) but should never be an endpoint — declare it abstract and it carries attributes for rendering while staying off the route table.
+Navigation-semantic wiring (`refreshes`, `navigate:`, `loads:`, shorthands) *does* need its target addressable — and here the inference has a gap to watch. Declaring `refreshes` makes a component routable, but being the *target* of another component's `loads:` or shorthand kwarg confers nothing: a target with no params and no verbs of its own quietly stays off the route table, and the element wired to load it gets a not-found response at interaction time. Most real targets declare params and route on their own; for a purely presentational one, declare `routable!` explicitly. Where you'll reach for `abstract!` is the opposite case: a transfer target that declares params (so it can render) but should never be an endpoint — declare it abstract and it carries params for rendering while staying off the route table.
 
 ## Collision detection
 

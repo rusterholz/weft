@@ -16,12 +16,12 @@ TEAM = {
 class MemberPeek < Weft::Component
   builder_method :member_peek
 
-  attribute :handle
+  param :handle
 
   def build(attributes = {})
     super
-    member = TEAM.fetch(attrs.handle)
-    strong attrs.handle.capitalize
+    member = TEAM.fetch(params.handle)
+    strong params.handle.capitalize
     para "#{member[:role]} — #{member[:timezone]}"
     para "Focus: #{member[:focus]}"
   end
@@ -55,7 +55,7 @@ end
 
 **`:hover` means *first* hover.** The semantic trigger expands to htmx's `mouseenter once` — the fetch happens the first time the pointer enters, and never again. Be clear about what that buys and what it doesn't: Weft delivers the *content*, once, lazily. It does not show and hide the bubble as the pointer comes and goes — that's presentation, and it belongs to CSS (a `.peek-bubble` hidden until `li:hover`, for instance). After the first hover, showing the tooltip again is free, because the content is already in the page.
 
-**Per-row wire attrs, one component.** Every trigger loads the same `MemberPeek` class with a different `with: { handle: ... }` — the component is written once and addressed per record, which is the same shape as every list-plus-detail pattern in this catalog.
+**Per-row wire params, one component.** Every trigger loads the same `MemberPeek` class with a different `with: { handle: ... }` — the component is written once and addressed per record, which is the same shape as every list-plus-detail pattern in this catalog.
 
 ## On the wire
 

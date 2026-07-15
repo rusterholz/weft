@@ -44,7 +44,7 @@ end
 
 **Opening is a load into a stable slot.** [`modal:`](../dsl.md#shorthands) presets trigger `:click` and swap `:fill`; the call site supplies the target. Clicking the button fetches `TourDialog` and fills the empty `#modal-slot` div with it. The slot is permanent page structure — it outlives any dialog placed in it, so the modal can be opened again after closing.
 
-**Closing is a dismissal.** `dismisses :close` declares a DELETE action whose swap removes the component from the page entirely — and for a modal, removed from the DOM *is* closed. The dialog vanishes, the slot div stays, and the page underneath was never touched. Give the dismissal a block (`dismisses :close do |attrs| ... end`) if closing should also do something server-side, like recording that the tour offer was seen.
+**Closing is a dismissal.** `dismisses :close` declares a DELETE action whose swap removes the component from the page entirely — and for a modal, removed from the DOM *is* closed. The dialog vanishes, the slot div stays, and the page underneath was never touched. Give the dismissal a block (`dismisses :close do |params| ... end`) if closing should also do something server-side, like recording that the tour offer was seen.
 
 **The underlay closes too — same action, different element.** [`action:`](../dsl.md#action) isn't just for buttons: on the underlay div it expands to exactly the same wiring as the Close button, and htmx's default trigger for a div is a click. Because the underlay and the content panel are *siblings* — the underlay covers the viewport, the panel floats above it — a click on the panel never bubbles to the underlay, so only clicks on the dimmed backdrop dismiss.
 

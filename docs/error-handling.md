@@ -9,7 +9,7 @@ Two layers cooperate to make this work. On the server, the Router catches errors
 - [The error classes](#the-error-classes)
 - [The `recovers` chain](#the-recovers-chain) — matching, targets, blocks, and [the built-in edges](#the-built-in-edges)
 - [What happens when something raises](#what-happens-when-something-raises)
-- [Auto-injected recovery attributes](#auto-injected-recovery-attributes)
+- [Auto-injected recovery params](#auto-injected-recovery-params)
 - [Presentation settings](#presentation-settings)
 
 ## The error classes
@@ -36,7 +36,7 @@ Components and pages declare how they handle errors with `recovers`:
 
 ```ruby
 class OrderEditor < Weft::Component
-  recovers from: Weft::Unprocessable do |attrs, error|
+  recovers from: Weft::Unprocessable do |params, error|
     { error_message: error.message }
   end
   recovers from: Weft::Unauthorized, with: LoginPage
@@ -53,9 +53,9 @@ Each declaration is an edge: *when this kind of error escapes me, render that in
 - a **Range** — matches statuses in the range (`from: 500..599`);
 - an **Array** of any of the above — matches if any element does.
 
-**`with:`** names the recovery target — what renders in place of the failure. It accepts a component or page class, or a symbol naming a [configuration knob](configuration.md#the-four-fallback-targets) (`with: :error_component`), resolved at error-handling time so reconfiguration propagates. Omitted, it defaults to the declaring class itself — "on this error, re-render me" — which pairs naturally with a block that adjusts attrs.
+**`with:`** names the recovery target — what renders in place of the failure. It accepts a component or page class, or a symbol naming a [configuration knob](configuration.md#the-four-fallback-targets) (`with: :error_component`), resolved at error-handling time so reconfiguration propagates. Omitted, it defaults to the declaring class itself — "on this error, re-render me" — which pairs naturally with a block that adjusts params.
 
-**The block**, if given, receives `(attrs, error)` — the same resolved attrs an action callable sees, plus the exception — and returns a hash merged into the attrs the recovery target renders with (returned keys win). It's for *carrying information onto the error rendering*, like the validation messages above; it never returns HTML.
+**The block**, if given, receives `(params, error)` — the same resolved params an action callable sees, plus the exception — and returns a hash merged into the params the recovery target renders with (returned keys win). It's for *carrying information onto the error rendering*, like the validation messages above; it never returns HTML.
 
 Edges are consulted in a defined order: a class's own declarations first (in declaration order), then its ancestors' — so subclass declarations beat inherited ones, and within a class, first match wins. Put more-specific edges before catch-alls.
 
@@ -87,17 +87,17 @@ One wrinkle worth knowing: for actions with a destructive swap (`dismisses`, or 
 
 Errors during SSE pushes don't kill the stream: the frame is skipped, the error logged, and pushing resumes on the next interval.
 
-## Auto-injected recovery attributes
+## Auto-injected recovery params
 
-A recovery target usually wants context: what failed, where, with what status. The Router offers five values, injected **schema-gated**: each is passed only if the target *declares an attribute of that name*. Declaring the attribute is the opt-in; anything not declared is never injected, so nothing leaks into renders (or URLs) uninvited.
+A recovery target usually wants context: what failed, where, with what status. The Router offers five values, injected **schema-gated**: each is passed only if the target *declares a param of that name*. Declaring the param is the opt-in; anything not declared is never injected, so nothing leaks into renders (or URLs) uninvited.
 
-| Attribute | Value |
+| Param | Value |
 | --- | --- |
 | `:exception` | The exception object itself. |
 | `:request_path` | The path of the failing request. |
 | `:status_code` | The resolved HTTP status (the exception's, or 500). |
 | `:component_id` | The failing component's DOM id. |
-| `:retry_url` | A GET URL that re-renders the failing component with its current attrs. |
+| `:retry_url` | A GET URL that re-renders the failing component with its current params. |
 
 So a custom error component opts in by declaration:
 
@@ -105,22 +105,22 @@ So a custom error component opts in by declaration:
 class MyApp::ErrorComponent < Weft::Component
   abstract!
 
-  attribute :exception
-  attribute :retry_url
+  param :exception
+  param :retry_url
 
   def build(attributes = {})
     super
     add_class "weft-error"
     div { text_node "Something went wrong." }
-    div @attrs.exception.message if Weft.configuration.verbose_error_pages
-    button "Retry", retry: @attrs.retry_url if @attrs.retry_url
+    div @params.exception.message if Weft.configuration.verbose_error_pages
+    button "Retry", retry: @params.retry_url if @params.retry_url
   end
 end
 ```
 
 Notes on the individual values:
 
-- **These five names are reserved** on any class used as a recovery target. Declaring an attribute with one of these names *means* "inject the recovery value here" — so don't reuse them for your own data on error components, or on any component/page reachable through a `recovers` edge.
+- **These five names are reserved** on any class used as a recovery target. Declaring a param with one of these names *means* "inject the recovery value here" — so don't reuse them for your own data on error components, or on any component/page reachable through a `recovers` edge.
 - **`:component_id`** preserves DOM identity: render your error wrapper with it as the element id (the gem's defaults do) and the error lands under the failing component's original id — so multiple simultaneous failures each swap into their own slot rather than colliding.
 - **`:retry_url`** feeds the [`retry:` shorthand](dsl.md#shorthands): one button attribute, and the user can re-request the failed component in place. For a failed *action*, the URL renders the underlying component's view — a fresh look, not a replay of the failed action.
 - When a recovery resolves to a **redirect** (page target from component context), only `:request_path` and `:status_code` travel — the others have no meaning in a URL.

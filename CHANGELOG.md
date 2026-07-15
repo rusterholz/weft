@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.0 (unreleased)
+
+### Breaking changes:
+
+- **`attribute` → `param`, `attrs` → `params`.** The DSL for a component's or page's inputs is renamed. Declare inputs with `param :name` (was `attribute :name`), and read the resolved values through `params` instead of `attrs` (`params.status`, `params[:page]`, `params.to_h`). The block argument to verb declarations — `performs`, `transfers`, `dismisses`, `recovers`, `includes` — is now `params`. Arbre's own HTML tag attributes are unaffected: `build(attributes = {})`, `set_attribute`, and element hashes like `class:` and `data:` keep their names. To migrate, rename `attribute` → `param` and `attrs` → `params` across your components, pages, and verb blocks.
+
 ## v0.1.0 (2026-07-12)
 
 First usable release. Weft is component-oriented hypermedia for Ruby: components declare their structure, their data, and their interactive behaviors, and the framework derives the routing, request handling, and client-side wiring automatically.

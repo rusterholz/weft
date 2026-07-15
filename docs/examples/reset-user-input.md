@@ -14,12 +14,12 @@ GUEST_COMMENTS = [
 class CommentSection < Weft::Component
   builder_method :comment_section
 
-  attribute :author
-  attribute :body
+  param :author
+  param :body
 
-  performs :post do |attrs|
-    author = attrs.author.to_s.strip
-    body = attrs.body.to_s.strip
+  performs :post do |params|
+    author = params.author.to_s.strip
+    body = params.body.to_s.strip
     GUEST_COMMENTS << { author: author, body: body } unless author.empty? || body.empty?
     { author: nil, body: nil }
   end
@@ -52,7 +52,7 @@ end
 
 **The response replaces the form, typed text and all.** `build` renders the list from the store and the inputs with no `value:` at all — so every render of this component has empty fields. The action's `outerHTML` swap replaces the old elements wholesale: the inputs holding the typed text leave the DOM, and fresh, empty ones arrive in the same response that shows the new comment in the list. What htmx solves with an after-request reset handler, the render model here dissolves.
 
-**Clearing the params in the return keeps the identity stable.** The callable ends with `{ author: nil, body: nil }` — a returned hash merges into the attrs for the re-render ([the callable contract](../dsl.md#the-callable-contract)), and Weft derives a component's DOM id from its first declared attribute. Cleared, the wrapper comes back as the same `#comment-section` the htmx wiring points at; left populated, the submitted name would leak into the re-rendered component's identity.
+**Clearing the params in the return keeps the identity stable.** The callable ends with `{ author: nil, body: nil }` — a returned hash merges into the params for the re-render ([the callable contract](../dsl.md#the-callable-contract)), and Weft derives a component's DOM id from its first declared param. Cleared, the wrapper comes back as the same `#comment-section` the htmx wiring points at; left populated, the submitted name would leak into the re-rendered component's identity.
 
 **Blank submits are the callable's problem, and it handles them.** The browser happily posts `author=&body=`; the strip-and-check guard appends nothing, and the response is simply the current state re-rendered. Client-side `required` attributes would be a fine courtesy on top, but the server-side guard is the one that holds.
 
@@ -97,5 +97,5 @@ In a real browser the captured round trip reads the same: the POST body carries 
 ## Related
 
 - [File Upload](file-upload.md) — clearing a param in the return for a different reason.
-- [Click to Edit](click-to-edit.md) — when you *do* want fields pre-filled, pair them with declared attributes.
+- [Click to Edit](click-to-edit.md) — when you *do* want fields pre-filled, pair them with declared params.
 - [`performs`](../dsl.md#performs--user-initiated-actions) and [the callable contract](../dsl.md#the-callable-contract) in the DSL reference.

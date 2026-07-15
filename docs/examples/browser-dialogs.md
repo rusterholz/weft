@@ -38,7 +38,7 @@ end
 
 **The action is ordinary Weft.** `performs :deactivate` runs the write and re-renders the component, which now shows the deactivated state — the standard action contract, unaware that a dialog ever happened.
 
-**`hx-prompt` doesn't carry over.** htmx's companion attribute asks for a line of text and sends the answer as an `HX-Prompt` *request header* — but a Weft action callable receives only the component's resolved attributes, which come from request parameters, so the prompted value never reaches your code. When an action needs user input, give the component a real input: a form field paired with a declared attribute, as in [Click to Edit](click-to-edit.md).
+**`hx-prompt` doesn't carry over.** htmx's companion attribute asks for a line of text and sends the answer as an `HX-Prompt` *request header* — but a Weft action callable receives only the component's resolved params, which come from request parameters, so the prompted value never reaches your code. When an action needs user input, give the component a real input: a form field paired with a declared param, as in [Click to Edit](click-to-edit.md).
 
 ## On the wire
 
@@ -67,5 +67,5 @@ The same POST sent from outside the browser — no htmx, no dialog — is accept
 ## Related
 
 - [Modal Dialog](modal-dialog.md) — when you want a dialog you own instead of the browser's.
-- [Click to Edit](click-to-edit.md) — form fields paired with attributes: the Weft answer to "prompt the user for a value."
+- [Click to Edit](click-to-edit.md) — form fields paired with params: the Weft answer to "prompt the user for a value."
 - [`action:`](../dsl.md#action) and [`performs`](../dsl.md#performs--user-initiated-actions) in the DSL reference.

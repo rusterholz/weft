@@ -17,11 +17,11 @@ TEAM_MEMBERS = {
 class MemberRoster < Weft::Component
   builder_method :member_roster
 
-  attribute :active_ids, default: []
-  attribute :status
+  param :active_ids, default: []
+  param :status
 
-  performs :update, target: "#member-roster" do |attrs|
-    checked = attrs.active_ids
+  performs :update, target: "#member-roster" do |params|
+    checked = params.active_ids
     activated = deactivated = 0
     TEAM_MEMBERS.each do |id, member|
       active = checked.include?(id)
@@ -56,7 +56,7 @@ class MemberRoster < Weft::Component
       end
       input type: "submit", value: "Bulk Update"
     end
-    para attrs.status if attrs.status
+    para params.status if params.status
   end
 end
 ```
@@ -65,15 +65,15 @@ end
 
 ## How it works
 
-**Bracket naming turns the checkboxes into one array.** Every checkbox shares the name `active_ids[]`, and Rack's parameter parsing folds those into a single array under the bracket-less key — so the component's declared `active_ids` attribute receives `["1", "2", "4"]`, and the callable reads it as `attrs.active_ids`. The values arrive as strings, which is why the data stub's keys are strings too. Checkboxes the user leaves unchecked simply aren't in the submission; that's the whole trick of the pattern.
+**Bracket naming turns the checkboxes into one array.** Every checkbox shares the name `active_ids[]`, and Rack's parameter parsing folds those into a single array under the bracket-less key — so the component's declared `active_ids` param receives `["1", "2", "4"]`, and the callable reads it as `params.active_ids`. The values arrive as strings, which is why the data stub's keys are strings too. Checkboxes the user leaves unchecked simply aren't in the submission; that's the whole trick of the pattern.
 
-**The `default: []` is load-bearing.** When *no* boxes are checked, the browser sends no `active_ids` parameter at all, and the attribute falls back to its default. An empty array makes that case mean "deactivate everyone" — and guarantees the callable always has a real array to call `include?` on, rather than `nil`.
+**The `default: []` is load-bearing.** When *no* boxes are checked, the browser sends no `active_ids` parameter at all, and the param falls back to its default. An empty array makes that case mean "deactivate everyone" — and guarantees the callable always has a real array to call `include?` on, rather than `nil`.
 
-**The callable diffs, then reports through its return value.** It compares each member's stored state against the submitted array, counts the flips, and writes the new state. Returning a hash merges it into the attrs for the re-render (see [the callable contract](../dsl.md#the-callable-contract)), so `{ status: "Activated 1 and deactivated 1 members." }` is how the count reaches the status line — `attrs.status` is `nil` on a fresh render and the paragraph only appears after an update.
+**The callable diffs, then reports through its return value.** It compares each member's stored state against the submitted array, counts the flips, and writes the new state. Returning a hash merges it into the params for the re-render (see [the callable contract](../dsl.md#the-callable-contract)), so `{ status: "Activated 1 and deactivated 1 members." }` is how the count reaches the status line — `params.status` is `nil` on a fresh render and the paragraph only appears after an update.
 
-**An array can't anchor a DOM id.** Weft derives a component's DOM id from its first declared attribute — perfect when that's a record id, unusable when it's an array (`id="member-roster-[]"` is not a selector htmx can target). So this component pins its own identity: `set_attribute :id, "member-roster"` fixes the wrapper's id inside `build`, and `performs :update, target: "#member-roster"` points the action's swap at that same anchor. Both live server-side, so every re-rendered fragment carries the same stable wiring.
+**An array can't anchor a DOM id.** Weft derives a component's DOM id from its first declared param — perfect when that's a record id, unusable when it's an array (`id="member-roster-[]"` is not a selector htmx can target). So this component pins its own identity: `set_attribute :id, "member-roster"` fixes the wrapper's id inside `build`, and `performs :update, target: "#member-roster"` points the action's swap at that same anchor. Both live server-side, so every re-rendered fragment carries the same stable wiring.
 
-**The checkboxes tell the truth after the write.** `build` renders each checkbox from the data store, not from the submitted attrs — the response reflects what was actually saved. And since `form(action: :update)` also emits plain `action`/`method` attributes, the whole thing degrades to a normal POST without JavaScript.
+**The checkboxes tell the truth after the write.** `build` renders each checkbox from the data store, not from the submitted params — the response reflects what was actually saved. And since `form(action: :update)` also emits plain `action`/`method` attributes, the whole thing degrades to a normal POST without JavaScript.
 
 ## On the wire
 
@@ -117,6 +117,6 @@ Submitting with every box unchecked sends an empty body; the default kicks in an
 
 ## Related
 
-- [Click to Edit](click-to-edit.md) — the basics of pairing form fields with declared attributes.
+- [Click to Edit](click-to-edit.md) — the basics of pairing form fields with declared params.
 - [Delete Row](delete-row.md) and [Edit Row](edit-row.md) — acting on table rows one at a time instead of all at once.
 - [`performs`](../dsl.md#performs--user-initiated-actions) and [the callable contract](../dsl.md#the-callable-contract) in the DSL reference.

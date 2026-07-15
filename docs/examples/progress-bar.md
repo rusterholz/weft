@@ -42,7 +42,7 @@ class JobMonitor < Weft::Component
 
   refreshes every: 1
 
-  performs :start do |_attrs|
+  performs :start do |_params|
     FakeJob.start!
     nil
   end

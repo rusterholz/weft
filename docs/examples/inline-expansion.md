@@ -16,7 +16,7 @@ ORDERS = {
 class OrderItemsRow < Weft::Component
   builder_method :order_items_row
 
-  attribute :order_id
+  param :order_id
 
   def tag_name
     "tr"
@@ -24,7 +24,7 @@ class OrderItemsRow < Weft::Component
 
   def build(attributes = {})
     super
-    order = ORDERS.fetch(attrs.order_id)
+    order = ORDERS.fetch(params.order_id)
     td colspan: 4 do
       strong "Items: "
       text_node order[:items].join(", ")

@@ -16,7 +16,7 @@ PEOPLE = {
 class PersonRow < Weft::Component
   builder_method :person_row
 
-  attribute :person_id
+  param :person_id
 
   def tag_name
     "tr"
@@ -24,11 +24,11 @@ class PersonRow < Weft::Component
 
   def build(attributes = {})
     super
-    person = PEOPLE.fetch(attrs.person_id)
+    person = PEOPLE.fetch(params.person_id)
     td person[:name]
     td person[:email]
     td do
-      button "Edit", loads: PersonRowEditor, with: { person_id: attrs.person_id },
+      button "Edit", loads: PersonRowEditor, with: { person_id: params.person_id },
                      swap: :replace, target: self
     end
   end
@@ -37,12 +37,12 @@ end
 class PersonRowEditor < Weft::Component
   builder_method :person_row_editor
 
-  attribute :person_id
-  attribute :name
-  attribute :email
+  param :person_id
+  param :name
+  param :email
 
-  transfers :save, to: PersonRow do |attrs|
-    PEOPLE.fetch(attrs.person_id).merge!(name: attrs.name, email: attrs.email)
+  transfers :save, to: PersonRow do |params|
+    PEOPLE.fetch(params.person_id).merge!(name: params.name, email: params.email)
     nil
   end
 
@@ -52,16 +52,16 @@ class PersonRowEditor < Weft::Component
 
   def build(attributes = {})
     super
-    person = PEOPLE.fetch(attrs.person_id)
-    save_form = "save-person-#{attrs.person_id}"
+    person = PEOPLE.fetch(params.person_id)
+    save_form = "save-person-#{params.person_id}"
     td { input type: "text", name: "name", value: person[:name], form: save_form }
     td { input type: "text", name: "email", value: person[:email], form: save_form }
     td do
       form(action: :save, id: save_form) do
-        input type: "hidden", name: "person_id", value: attrs.person_id
+        input type: "hidden", name: "person_id", value: params.person_id
         input type: "submit", value: "Save"
         button "Cancel", type: "button",
-               loads: PersonRow, with: { person_id: attrs.person_id },
+               loads: PersonRow, with: { person_id: params.person_id },
                swap: :replace, target: self
       end
     end
@@ -87,7 +87,7 @@ end
 
 ## How it works
 
-**It's click-to-edit, once per row.** Both components render as `<tr>` (the `tag_name` override), with the identifying attribute declared first so each carries a usable DOM id. Entering edit mode changes nothing on the server, so Edit is a [`loads:`](../dsl.md#loads) — a GET that fetches the editor row and replaces the display row (`swap: :replace, target: self`). Saving is a [`transfers`](../dsl.md#transfers--actions-that-render-something-else): the write runs, then the *display* row renders in the editor's place. Cancel is the Edit button's mirror image, pointed back at `PersonRow`. As in click-to-edit, defining the display component first lets `transfers :save, to: PersonRow` resolve in the editor's class body, while `loads: PersonRowEditor` waits until render.
+**It's click-to-edit, once per row.** Both components render as `<tr>` (the `tag_name` override), with the identifying param declared first so each carries a usable DOM id. Entering edit mode changes nothing on the server, so Edit is a [`loads:`](../dsl.md#loads) — a GET that fetches the editor row and replaces the display row (`swap: :replace, target: self`). Saving is a [`transfers`](../dsl.md#transfers--actions-that-render-something-else): the write runs, then the *display* row renders in the editor's place. Cancel is the Edit button's mirror image, pointed back at `PersonRow`. As in click-to-edit, defining the display component first lets `transfers :save, to: PersonRow` resolve in the editor's class body, while `loads: PersonRowEditor` waits until render.
 
 **A form can't wrap table cells — so the cells point at the form.** HTML won't allow a `<form>` to span `<td>`s inside a row, which is the structural puzzle of this pattern. htmx's original solves it with `hx-include="closest tr"`; here plain HTML does the same job: the form lives in the last cell, and the name and email inputs associate with it from their own cells via the standard [`form` attribute](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input#form). Form-associated elements are part of the form's submission set, so both htmx's payload *and* the no-JavaScript fallback submission include all three fields — nothing about the association needs scripting.
 
@@ -137,7 +137,7 @@ Submitting `POST /_components/person_row_editor/save` with the edited fields ret
 </tr>
 ```
 
-Only the attributes `PersonRow` itself declares travel into that render — the editor's `name` and `email` were consumed by the save and play no part in the row's element.
+Only the params `PersonRow` itself declares travel into that render — the editor's `name` and `email` were consumed by the save and play no part in the row's element.
 
 ## Related
 
