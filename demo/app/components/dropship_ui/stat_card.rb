@@ -5,7 +5,7 @@ module DropshipUI
   # color. label/value/accent are builder-method kwargs (extracted from
   # the attributes hash in build), not wire state — they describe how to
   # render, not what to remember across requests. Subclasses that DO want
-  # wire state (e.g. Oms::OrderStatusCard's `attribute :status`) declare
+  # wire state (e.g. Oms::OrderStatusCard's `param :status`) declare
   # it themselves and derive label/value/accent in their own build.
   class StatCard < Weft::Component
     builder_method :stat_card

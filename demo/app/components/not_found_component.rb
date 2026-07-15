@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # Dropship Co.'s app-level not-found display. Subclasses
-# Weft::Defaults::NotFoundComponent for the auto-injected attribute schema
+# Weft::Defaults::NotFoundComponent for the auto-injected param schema
 # and overrides visuals to match the DropshipUI design system.
 class NotFoundComponent < Weft::Defaults::NotFoundComponent
   # Rendered via Weft.configuration.not_found_component and the recovers chain,
@@ -20,9 +20,9 @@ class NotFoundComponent < Weft::Defaults::NotFoundComponent
       span(class: "badge-status badge-busy") { text_node "404" }
     end
     div(class: "content-card-body") do
-      if Weft.configuration.verbose_error_pages && @attrs.request_path
+      if Weft.configuration.verbose_error_pages && @params.request_path
         div(class: "mono", style: "font-size:0.8rem; color:#475569") do
-          text_node @attrs.request_path
+          text_node @params.request_path
         end
       end
       a("Back to dashboard", href: "/", class: "btn btn-sm btn-outline-primary mt-3")

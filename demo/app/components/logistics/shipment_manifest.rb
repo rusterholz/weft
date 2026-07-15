@@ -6,11 +6,11 @@ module Logistics
   class ShipmentManifest < Weft::Component
     builder_method :shipment_manifest
 
-    attribute :shipment_id
+    param :shipment_id
 
     def build(attributes = {})
       super
-      shipment = Logistics::Shipment.find(attrs.shipment_id)
+      shipment = Logistics::Shipment.find(params.shipment_id)
       items = shipment.items || []
       if items.empty?
         div { text_node "No items in this shipment." }

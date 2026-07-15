@@ -9,7 +9,7 @@ RSpec.describe DropshipUI::Pager, type: :component do
   let(:fake_target_class) do
     Class.new(Weft::Component) do
       def self.name = "FakeTarget"
-      attribute :page, default: 1
+      param :page, default: 1
     end
   end
 

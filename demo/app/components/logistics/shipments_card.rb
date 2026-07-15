@@ -7,7 +7,7 @@ module Logistics
   class ShipmentsCard < DropshipUI::Card
     builder_method :shipments_card
 
-    attribute :order_id
+    param :order_id
     pushes every: 5
     includes Oms::OrderHeader
 

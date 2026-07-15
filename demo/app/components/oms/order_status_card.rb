@@ -7,7 +7,7 @@ module Oms
   class OrderStatusCard < DropshipUI::StatCard
     builder_method :order_status_card
 
-    attribute :status
+    param :status
 
     refreshes every: 10
 

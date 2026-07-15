@@ -4,20 +4,20 @@ module Delivery
   class DriverAssignmentSection < Weft::Component
     builder_method :driver_assignment_section
 
-    attribute :driver_id
+    param :driver_id
 
     refreshes on: "delivery-completed"
     triggers "delivery-completed"
 
-    performs :complete_delivery do |attrs|
-      driver = Delivery::Driver.find(attrs.driver_id)
+    performs :complete_delivery do |params|
+      driver = Delivery::Driver.find(params.driver_id)
       shipment = Logistics::Shipment.find_by(id: driver.current_shipment_id)
       Logistics::CompleteDelivery.call(shipment) if shipment&.status == "in_transit"
     end
 
     def build(attributes = {})
       super
-      driver = Delivery::Driver.find(attrs.driver_id)
+      driver = Delivery::Driver.find(params.driver_id)
       shipment = Logistics::Shipment.find_by(id: driver.current_shipment_id)
 
       if shipment

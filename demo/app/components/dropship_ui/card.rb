@@ -7,7 +7,7 @@ module DropshipUI
   # subclass becomes "a kind of card" structurally — one HTML wrapper, not
   # two.
   #
-  # Subclasses pass chrome attrs through `super` and add body children
+  # Subclasses pass chrome params through `super` and add body children
   # directly; the @body container redirects them via add_child.
   class Card < Weft::Component
     builder_method :card

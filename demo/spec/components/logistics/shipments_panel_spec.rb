@@ -29,7 +29,7 @@ RSpec.describe Logistics::ShipmentsPanel, type: :component do
     expect(html).to include("Next")
   end
 
-  it "respects the page attribute" do
+  it "respects the page param" do
     28.times { Logistics::Shipment.create!(order_id: order.id, warehouse: warehouse, status: "planned") }
     html = render_weft_html { shipments_panel(page: 2) }
     expect(html).to include("Page 2 of")

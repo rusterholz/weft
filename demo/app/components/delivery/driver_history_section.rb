@@ -4,13 +4,13 @@ module Delivery
   class DriverHistorySection < Weft::Component
     builder_method :driver_history_section
 
-    attribute :driver_id
+    param :driver_id
 
     refreshes on: "delivery-completed"
 
     def build(attributes = {})
       super
-      driver = Delivery::Driver.find(attrs.driver_id)
+      driver = Delivery::Driver.find(params.driver_id)
       completed = Logistics::Shipment.where(driver_id: driver.id, status: "delivered").
                   order(updated_at: :desc).limit(10)
 

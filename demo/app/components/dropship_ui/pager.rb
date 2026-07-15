@@ -12,7 +12,7 @@ module DropshipUI
   #     page_num: page_num, per_page: PER_PAGE, total: total,
   #     target_class: self.class, target_id: weft_id,
   #     target_page_class: OrdersPage,           # for push_url derivation
-  #     extra_params: { status: attrs.status }   # preserved across pages
+  #     extra_params: { status: params.status }   # preserved across pages
   #   )
   class Pager < Weft::Component
     builder_method :pager

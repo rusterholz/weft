@@ -6,13 +6,13 @@ module Delivery
 
     PER_PAGE = 25
 
-    attribute :page, default: 1
+    param :page, default: 1
 
     def build(attributes = {})
       super
 
       scope = Delivery::Driver.by_mileage
-      page_num = [attrs.page.to_i, 1].max
+      page_num = [params.page.to_i, 1].max
       total = scope.count
       records = scope.offset((page_num - 1) * PER_PAGE).limit(PER_PAGE)
 

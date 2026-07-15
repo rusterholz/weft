@@ -6,7 +6,7 @@ RSpec.describe DropshipUI::Tooltip, type: :component do
   let(:content_class) do
     Class.new(Weft::Component) do
       def self.name = "TooltipContentStub"
-      attribute :id
+      param :id
     end
   end
 

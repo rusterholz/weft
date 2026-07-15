@@ -4,10 +4,10 @@ module Oms
   class OrderHeader < Weft::Component
     builder_method :order_header
 
-    attribute :order_id
+    param :order_id
 
-    performs :advance do |attrs|
-      order = Oms::Order.find(attrs.order_id)
+    performs :advance do |params|
+      order = Oms::Order.find(params.order_id)
       case order.status
       when "submitted"
         Oms::PrepareOrder.call(order)
@@ -23,7 +23,7 @@ module Oms
       super
       add_class "page-header d-flex justify-content-between align-items-center"
 
-      order = Oms::Order.find(attrs.order_id)
+      order = Oms::Order.find(params.order_id)
 
       h1 do
         text_node "Order "
