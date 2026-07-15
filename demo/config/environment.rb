@@ -54,9 +54,9 @@ if APP_ENV == "development"
   Weft::Router.before { loader.reload && loader.eager_load }
 end
 
-# Demo-defined Weft shorthand registrations. Not autoloaded — pure
+# Demo-defined Weft preset registrations. Not autoloaded — pure
 # side-effect code that runs once at boot.
-require File.join(__dir__, "shorthands")
+require File.join(__dir__, "presets")
 
 # Wire branded error/not-found pages. The gem-default recovers entries on
 # Weft::Component and Weft::Page use Symbol form (`with: :error_component`

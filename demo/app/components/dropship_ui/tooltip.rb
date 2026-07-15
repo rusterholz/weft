@@ -3,7 +3,7 @@
 module DropshipUI
   # Lazy-loaded hover tooltip. Wraps a trigger element (the visible content
   # the user hovers over) and a popover whose content is fetched via the
-  # tooltip: shorthand on the first hover. The content is a Weft::Component
+  # tooltip: preset on the first hover. The content is a Weft::Component
   # class; the wire params go through `with:`.
   #
   # Usage:

@@ -3,8 +3,8 @@
 module DropshipUI
   # Pagination widget for any panel that lists pageable records.
   # Renders offset text ("26–50 of 120") plus Prev / Page N of M / Next
-  # buttons. The buttons use the demo's `:paginate` shorthand (registered
-  # in config/shorthands.rb), which expands to htmx attrs that load the
+  # buttons. The buttons use the demo's `:paginate` preset (registered
+  # in config/presets.rb), which expands to htmx attrs that load the
   # caller's target_class into the target_id selector.
   #
   # Usage from a paneled component:

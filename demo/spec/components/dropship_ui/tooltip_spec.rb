@@ -19,7 +19,7 @@ RSpec.describe DropshipUI::Tooltip, type: :component do
     expect(html).to include("weft-tooltip")
   end
 
-  it "wires the popover with htmx attrs via the tooltip: shorthand" do
+  it "wires the popover with htmx attrs via the tooltip: preset" do
     klass = content_class
     html = render_weft_html { tooltip(content: klass, with: { id: 1 }) { text_node "hover" } }
     expect(html).to include('hx-get="/_components/tooltip_content_stub?id=1"')

@@ -6,7 +6,7 @@
 # :component_id, :retry_url), restyle it however you like, and wire it in via
 # Weft.configuration.error_component (see config/environment.rb).
 #
-# Note that the retry control is rendered through the gem's :retry shorthand
+# Note that the retry control is rendered through the gem's :retry preset
 # (see #render_retry_button) rather than hand-written htmx — the app expresses
 # only intent ("retry, using this URL") and inherits the standard
 # re-fetch-and-outerHTML-swap-the-error-box behavior for free.
@@ -42,7 +42,7 @@ class ErrorComponent < Weft::Defaults::ErrorComponent
     end
   end
 
-  # The :retry shorthand supplies the htmx wiring — no hand-written hx-* here.
+  # The :retry preset supplies the htmx wiring — no hand-written hx-* here.
   # It outerHTML-swaps the closest .weft-error box, a class this component keeps
   # (inherited from the gem default) even though it restyles as a content-card.
   def render_retry_button
