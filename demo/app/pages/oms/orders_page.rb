@@ -15,7 +15,7 @@ module Oms
         h1 "Orders"
         a "New Order", href: "/orders/new", class: "btn btn-sm btn-primary"
       end
-      orders_panel(status: params.status, page: params.page)
+      orders_panel
     end
   end
 end

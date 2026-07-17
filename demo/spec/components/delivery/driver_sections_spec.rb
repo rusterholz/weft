@@ -7,19 +7,19 @@ RSpec.describe "Driver detail sections", type: :component do # rubocop:disable R
 
   describe Delivery::DriverHeaderSection do
     it "shows driver name and available badge" do
-      html = render_weft_html(driver: driver) { driver_header_section(driver_id: driver.id) }
+      html = render_weft_html({ driver: driver }, wire: { "driver_id" => driver.id }) { driver_header_section }
       expect(html).to include("Maria Garcia")
       expect(html).to include("badge-available")
     end
 
     it "shows busy badge when driver has a shipment" do
       driver.update!(current_shipment_id: "fake-id")
-      html = render_weft_html(driver: driver) { driver_header_section(driver_id: driver.id) }
+      html = render_weft_html({ driver: driver }, wire: { "driver_id" => driver.id }) { driver_header_section }
       expect(html).to include("badge-busy")
     end
 
     it "includes refresh-on-event attributes" do
-      html = render_weft_html(driver: driver) { driver_header_section(driver_id: driver.id) }
+      html = render_weft_html({ driver: driver }, wire: { "driver_id" => driver.id }) { driver_header_section }
       expect(html).to include('hx-trigger="delivery-completed from:body"')
       expect(html).to include("hx-get=\"/_components/delivery/driver_header_section?driver_id=#{driver.id}\"")
       expect(html).to include('hx-swap="outerHTML"')
@@ -28,7 +28,7 @@ RSpec.describe "Driver detail sections", type: :component do # rubocop:disable R
 
   describe Delivery::DriverAssignmentSection do
     it "shows available message when no shipment" do
-      html = render_weft_html(driver: driver) { driver_assignment_section(driver_id: driver.id) }
+      html = render_weft_html({ driver: driver }, wire: { "driver_id" => driver.id }) { driver_assignment_section }
       expect(html).to include("No active assignment")
     end
 
@@ -40,14 +40,14 @@ RSpec.describe "Driver detail sections", type: :component do # rubocop:disable R
         driver_id: driver.id, items: []
       )
       driver.update!(current_shipment_id: shipment.id)
-      html = render_weft_html(driver: driver) { driver_assignment_section(driver_id: driver.id) }
+      html = render_weft_html({ driver: driver }, wire: { "driver_id" => driver.id }) { driver_assignment_section }
       expect(html).to include(shipment.id[..7])
       expect(html).to include("Complete Delivery")
       expect(html).to include('hx-post="/_components/delivery/driver_assignment_section/complete_delivery"')
     end
 
     it "includes refresh-on-event listener attributes" do
-      html = render_weft_html(driver: driver) { driver_assignment_section(driver_id: driver.id) }
+      html = render_weft_html({ driver: driver }, wire: { "driver_id" => driver.id }) { driver_assignment_section }
       expect(html).to include('hx-trigger="delivery-completed from:body"')
       expect(html).to include("hx-get=\"/_components/delivery/driver_assignment_section?driver_id=#{driver.id}\"")
       expect(html).to include('hx-swap="outerHTML"')
@@ -56,12 +56,12 @@ RSpec.describe "Driver detail sections", type: :component do # rubocop:disable R
 
   describe Delivery::DriverHistorySection do
     it "shows empty state when no completed deliveries" do
-      html = render_weft_html(driver: driver) { driver_history_section(driver_id: driver.id) }
+      html = render_weft_html({ driver: driver }, wire: { "driver_id" => driver.id }) { driver_history_section }
       expect(html).to include("No completed deliveries")
     end
 
     it "includes refresh-on-event attributes" do
-      html = render_weft_html(driver: driver) { driver_history_section(driver_id: driver.id) }
+      html = render_weft_html({ driver: driver }, wire: { "driver_id" => driver.id }) { driver_history_section }
       expect(html).to include('hx-trigger="delivery-completed from:body"')
       expect(html).to include("hx-get=\"/_components/delivery/driver_history_section?driver_id=#{driver.id}\"")
       expect(html).to include('hx-swap="outerHTML"')

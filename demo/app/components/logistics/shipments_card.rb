@@ -12,7 +12,7 @@ module Logistics
     includes Oms::OrderHeader
 
     def build(attributes = {})
-      shipments = Logistics::Shipment.for_order(attributes[:order_id]).includes(:warehouse)
+      shipments = Logistics::Shipment.for_order(params.order_id).includes(:warehouse)
       attributes[:title] = "Shipments (#{shipments.size})"
       super
       shipment_table shipments: shipments

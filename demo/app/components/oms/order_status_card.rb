@@ -12,7 +12,11 @@ module Oms
     refreshes every: 10
 
     def build(attributes = {})
-      status = attributes[:status]
+      # Caller hand-off with wire fallback: embedded cards get status as a
+      # kwarg (deleted before super, Pager-style), wire refreshes get it as
+      # a param. A refresh of an embedded card loses its status until the
+      # dedicated caller-hand-off declaration arrives.
+      status = attributes.delete(:status) || params.status
       attributes[:label] = status.to_s.capitalize
       attributes[:value] = Oms::Order.where(status: status).count
       attributes[:accent] = status

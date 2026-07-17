@@ -11,7 +11,7 @@ module Delivery
       attributes[:current_path] = "/drivers"
       super
       div(class: "page-header") { h1 "Drivers" }
-      drivers_panel(page: params.page)
+      drivers_panel
     end
   end
 end

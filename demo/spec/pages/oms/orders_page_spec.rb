@@ -13,9 +13,9 @@ RSpec.describe Oms::OrdersPage, type: :component do
     expect(described_class).to be_routable
   end
 
-  def rendered(attrs = {})
+  def rendered(wire = {})
     klass = described_class
-    render_weft_html { insert_tag(klass, **attrs) }
+    render_weft_html(wire: wire) { insert_tag(klass) }
   end
 
   it "renders the Orders heading and a New Order link" do

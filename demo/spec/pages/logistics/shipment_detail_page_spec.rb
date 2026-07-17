@@ -20,7 +20,7 @@ RSpec.describe Logistics::ShipmentDetailPage, type: :component do
   def rendered
     klass = described_class
     id = shipment.id
-    render_weft_html { insert_tag(klass, shipment_id: id) }
+    render_weft_html(wire: { "shipment_id" => id }) { insert_tag(klass) }
   end
 
   it "renders shipment details and the linked order" do

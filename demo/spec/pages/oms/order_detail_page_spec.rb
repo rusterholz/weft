@@ -19,8 +19,7 @@ RSpec.describe Oms::OrderDetailPage, type: :component do
 
   def rendered
     klass = described_class
-    id = order.id
-    render_weft_html { insert_tag(klass, order_id: id) }
+    render_weft_html(wire: { "order_id" => order.id }) { insert_tag(klass) }
   end
 
   it "renders the order header and customer details" do

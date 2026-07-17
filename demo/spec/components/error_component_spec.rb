@@ -8,7 +8,7 @@ require "spec_helper"
 # so it never hand-writes htmx.
 RSpec.describe ErrorComponent, type: :component do
   def render_error(**attrs)
-    render_weft_html { insert_tag(ErrorComponent, **attrs) }
+    render_weft_html(wire: attrs) { insert_tag(ErrorComponent) }
   end
 
   it "renders the retry button via the :retry preset" do

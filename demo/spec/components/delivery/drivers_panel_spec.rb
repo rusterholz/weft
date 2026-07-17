@@ -29,7 +29,7 @@ RSpec.describe Delivery::DriversPanel, type: :component do
 
   it "respects the page param" do
     28.times { |i| Delivery::Driver.create!(name: "Driver#{i}") }
-    html = render_weft_html { drivers_panel(page: 2) }
+    html = render_weft_html(wire: { "page" => 2 }) { drivers_panel }
     expect(html).to include("Page 2 of")
   end
 end

@@ -11,7 +11,7 @@ module Logistics
       attributes[:current_path] = "/shipments"
       super
       div(class: "page-header") { h1 "Shipments" }
-      shipments_panel(page: params.page)
+      shipments_panel
     end
   end
 end

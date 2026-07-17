@@ -17,7 +17,7 @@ RSpec.describe Oms::OrdersPanel, type: :component do
   end
 
   it "marks the active filter" do
-    html = render_weft_html { orders_panel(status: "shipped") }
+    html = render_weft_html(wire: { "status" => "shipped" }) { orders_panel }
     expect(html).to include("Shipped Orders")
     # The "Shipped" button should be btn-primary (active)
     expect(html).to match(/btn-primary[^>]*>Shipped/)
@@ -31,7 +31,7 @@ RSpec.describe Oms::OrdersPanel, type: :component do
   end
 
   it "filters orders by status" do
-    html = render_weft_html { orders_panel(status: "submitted") }
+    html = render_weft_html(wire: { "status" => "submitted" }) { orders_panel }
     expect(html).to include("Alice")
     expect(html).not_to include("Bob")
     expect(html).to include("Submitted Orders (1)")
@@ -45,7 +45,7 @@ RSpec.describe Oms::OrdersPanel, type: :component do
 
   it "renders pagination for large result sets" do
     28.times { |i| Oms::Order.create!(customer_name: "Order#{i}", lat: 0.0, lon: 0.0, status: "submitted") }
-    html = render_weft_html { orders_panel(status: "submitted") }
+    html = render_weft_html(wire: { "status" => "submitted" }) { orders_panel }
     expect(html).to include("Page 1 of 2")
     expect(html).to include("Next")
   end

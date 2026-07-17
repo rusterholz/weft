@@ -7,7 +7,7 @@ RSpec.describe Logistics::ShipmentSummary, type: :component do
 
   it "renders an error message when the order is missing" do
     shipment = Logistics::Shipment.create!(order_id: "missing", warehouse: warehouse, status: "planned")
-    html = render_weft_html { shipment_summary(shipment_id: shipment.id) }
+    html = render_weft_html(wire: { "shipment_id" => shipment.id }) { shipment_summary }
     expect(html).to include("Order not found.")
   end
 
@@ -17,7 +17,7 @@ RSpec.describe Logistics::ShipmentSummary, type: :component do
       order_id: order.id, warehouse: warehouse, status: "in_transit",
       items: [{ "type" => "widget", "qty" => 2 }]
     )
-    html = render_weft_html { shipment_summary(shipment_id: shipment.id) }
+    html = render_weft_html(wire: { "shipment_id" => shipment.id }) { shipment_summary }
     expect(html).to include(order.id[..7])
     expect(html).to include("Alice")
     expect(html).to include("Portland, OR")

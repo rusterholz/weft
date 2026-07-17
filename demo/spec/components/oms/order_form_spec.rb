@@ -5,7 +5,7 @@ require "spec_helper"
 RSpec.describe Oms::OrderForm, type: :component do
   def rendered(attrs = {})
     klass = described_class
-    render_weft_html { insert_tag(klass, **attrs) }
+    render_weft_html(wire: attrs) { insert_tag(klass) }
   end
 
   it "renders a form with the magical action: :create expansion" do

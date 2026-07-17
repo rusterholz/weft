@@ -25,13 +25,15 @@ module ArbreHelper
   end
 
   # Renders a Weft::Context block and returns the first top-level element.
-  # Use for Weft::Components that need action:/trigger: expansion.
-  def render_weft(assigns = {}, &)
-    Weft::Context.new(assigns, nil, &).children.first
+  # Use for Weft::Components that need action:/trigger: expansion. Pass
+  # `wire:` to simulate request params — components resolve their declared
+  # params from it, exactly as they would from a query string.
+  def render_weft(assigns = {}, wire: {}, &)
+    Weft::Context.new(assigns, nil, wire_params: wire, &).children.first
   end
 
   # Renders a Weft::Context block and returns the full HTML string.
-  def render_weft_html(assigns = {}, &)
-    Weft::Context.new(assigns, nil, &).to_s
+  def render_weft_html(assigns = {}, wire: {}, &)
+    Weft::Context.new(assigns, nil, wire_params: wire, &).to_s
   end
 end
