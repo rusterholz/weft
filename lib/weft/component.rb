@@ -11,7 +11,7 @@ module Weft
   class Component < Arbre::Component
     extend Weft::Registry::Eligibility
 
-    include Weft::DSL::Attributes
+    include Weft::DSL::Params
     include Weft::DSL::Recoveries
     include Weft::DSL::Triggers
     include Weft::DSL::Inclusions
@@ -45,12 +45,12 @@ module Weft
       # Inferred routability from declared state, ignoring any explicit
       # override (see Weft::Registry::Eligibility#routable?). A component is
       # independently addressable when it declares interactive behavior —
-      # attributes, actions, refresh triggers, or push config. Pure
+      # params, actions, refresh triggers, or push config. Pure
       # presentational components (none of those) register but are never served.
       # Subclasses fall back to this when they have no override of their own, so
       # an abstract parent does not disable concrete children.
       def inferred_routable?
-        attributes.any? || actions.any? || refresh_triggers.any? || !push_config.nil?
+        params.any? || actions.any? || refresh_triggers.any? || !push_config.nil?
       end
 
       def inherited(subclass)
@@ -59,24 +59,25 @@ module Weft
       end
 
       # Render this component as an HTML string, outside any Arbre DSL context.
-      # Used by the Router for partial responses, and available to users for
-      # testing, REPL exploration, or any standalone rendering need.
+      # The kwargs are pseudo-wire: exactly what a request's query string
+      # would carry. Used by the Router for partial responses, and available
+      # to users for testing, REPL exploration, or any standalone rendering need.
       #
       #   StatCard.render(status: "shipped")  # => "<div id=\"...\">...</div>"
-      def render(**attributes)
+      def render(**wire_params)
         klass = self
-        Weft::Context.new({}, nil) do
-          insert_tag(klass, **attributes)
+        Weft::Context.new({}, nil, wire_params: wire_params) do
+          insert_tag(klass)
         end.to_s
       end
 
       # Compute the would-be DOM ID for an instance of this class given a
-      # plain attrs hash, without instantiating. The Router uses this to
-      # populate the `:component_id` auto-injected attribute when a recovery
+      # plain params hash, without instantiating. The Router uses this to
+      # populate the `:component_id` auto-injected param when a recovery
       # target opts in. Single source of truth; the instance method delegates.
-      def weft_id_for(attrs = {})
+      def weft_id_for(params = {})
         base = name.underscore.tr("/", "-").tr("_", "-")
-        primary_value = attrs.respond_to?(:values) ? attrs.values.first : nil
+        primary_value = params.respond_to?(:values) ? params.values.first : nil
         primary_value ? "#{base}-#{primary_value}" : base
       end
 
@@ -110,35 +111,43 @@ module Weft
     recovers from: Weft::NotFound, with: :not_found_component
     recovers from: StandardError, with: :error_component
 
+    # Params resolve at construction, not build: the context (which carries
+    # the wire source) is the constructor's one argument, and resolving here
+    # makes `params` available even before `super` in user build bodies —
+    # the "compute chrome from params, then super" pattern needs that.
+    def initialize(*)
+      super
+      @params = resolved_wire_params
+    end
+
     def build(attributes = {})
-      schema = self.class.attributes
-      @attrs = Weft::Attributes.extract_from(attributes, using: schema)
-      super(attributes.except(*schema.keys))
+      warn_declared_chrome_collisions(attributes)
+      super
       self.id = weft_id
       apply_refresh_attrs
       apply_push_attrs
     end
 
-    # URL to this component's Weft route with current attrs as query params.
-    # Pass overrides to change specific attr values in the URL.
+    # URL to this component's Weft route with current params as query string.
+    # Pass overrides to change specific param values in the URL.
     #
     #   weft_url                          # => "/_components/orders_panel?status=shipped&page=1"
     #   weft_url(page: 2)                 # => "/_components/orders_panel?status=shipped&page=2"
     #   weft_url(status: nil, page: 1)    # => "/_components/orders_panel?page=1"
     def weft_url(**overrides)
       path = self.class.resolved_component_path
-      params = @attrs.to_h.merge(overrides).compact
-      params.empty? ? path : "#{path}?#{URI.encode_www_form(params)}"
+      query = @params.to_h.merge(overrides).compact
+      query.empty? ? path : "#{path}?#{URI.encode_www_form(query)}"
     end
 
-    # Convention-based DOM ID: dasherized class name + primary attribute value.
+    # Convention-based DOM ID: dasherized class name + primary param value.
     def weft_id
-      self.class.weft_id_for(@attrs ? @attrs.to_h : {})
+      self.class.weft_id_for(@params ? @params.to_h : {})
     end
 
     private
 
-    # URL to this component's Weft route with current attrs (no overrides).
+    # URL to this component's Weft route with current params (no overrides).
     # Used internally by apply_refresh_attrs.
     def refresh_url
       weft_url
@@ -166,11 +175,11 @@ module Weft
       set_attribute "hx-swap", "innerHTML"
     end
 
-    # URL to this component's SSE stream endpoint with current attrs.
+    # URL to this component's SSE stream endpoint with current params.
     def stream_url
       path = "#{self.class.resolved_component_path}/#{Weft.configuration.stream_suffix}"
-      params = @attrs.to_h.compact
-      params.empty? ? path : "#{path}?#{URI.encode_www_form(params)}"
+      query = @params.to_h.compact
+      query.empty? ? path : "#{path}?#{URI.encode_www_form(query)}"
     end
   end
 end

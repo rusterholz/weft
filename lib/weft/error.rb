@@ -48,7 +48,7 @@ module Weft
   InvalidConfiguration = Class.new(Error)
 
   # Raised for semantic mistakes in class-body DSL declarations — e.g. a page
-  # declares attributes but no `page_path`, or `adds_children_to` receives a
+  # declares params but no `page_path`, or `adds_children_to` receives a
   # Symbol that does not start with `@`.
   InvalidDefinition = Class.new(Error)
 

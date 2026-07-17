@@ -5,7 +5,7 @@ require "spec_helper"
 RSpec.describe Oms::OrderForm, type: :component do
   def rendered(attrs = {})
     klass = described_class
-    render_weft_html { insert_tag(klass, **attrs) }
+    render_weft_html(wire: attrs) { insert_tag(klass) }
   end
 
   it "renders a form with the magical action: :create expansion" do
@@ -15,7 +15,7 @@ RSpec.describe Oms::OrderForm, type: :component do
     expect(html).to include('method="post"')
   end
 
-  it "renders inputs for each customer-detail attribute" do
+  it "renders inputs for each customer-detail param" do
     html = rendered
     expect(html).to include('name="customer_name"')
     expect(html).to include('name="address_line_1"')

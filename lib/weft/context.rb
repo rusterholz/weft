@@ -17,6 +17,17 @@ module Weft
   class Context < Arbre::Context
     include Interception
 
+    # The render's wire params (query/body/path values), carried on the
+    # context so every component in the tree resolves its own declared
+    # params at any depth. Assigned before super because Arbre's initialize
+    # instance_evals the construction block — the tree builds during super.
+    attr_reader :wire_params
+
+    def initialize(assigns = {}, helpers = nil, wire_params: nil, &)
+      @wire_params = wire_params || {}
+      super(assigns, helpers, &)
+    end
+
     # @api private
     # Expands Weft kwargs into htmx attributes. Invoked by the Interception
     # mixin's #insert_tag on the root Weft::Context (via +arbre_context+).
@@ -25,7 +36,7 @@ module Weft
       custom_trigger = attrs.delete(:trigger)
       push_url = attrs.delete(:push_url)
       attrs = expand_action(attrs, for_class: for_class) || expand_navigate(attrs) || expand_loads(attrs) ||
-              expand_shorthand(attrs) || attrs
+              expand_preset(attrs) || attrs
       attrs["hx-trigger"] = resolve_trigger(custom_trigger) if custom_trigger
       attrs["hx-push-url"] = push_url.to_s if push_url
       attrs
@@ -37,7 +48,7 @@ module Weft
     # +arbre_context+).
     def weft_kwarg?(hash)
       hash[:action].is_a?(Symbol) || hash.key?(:trigger) || hash[:navigate].is_a?(Hash) ||
-        hash[:loads].is_a?(Class) || hash.key?(:push_url) || find_shorthand_kwarg(hash)
+        hash[:loads].is_a?(Class) || hash.key?(:push_url) || find_preset_kwarg(hash)
     end
 
     private
@@ -85,22 +96,22 @@ module Weft
       remaining.merge(loads_attrs(target_class, resolve_with(attrs), attrs[:swap], attrs[:target]))
     end
 
-    def expand_shorthand(attrs)
-      shorthand_key, target_class = find_shorthand_kwarg(attrs)
-      return unless shorthand_key
+    def expand_preset(attrs)
+      preset_key, target_class = find_preset_kwarg(attrs)
+      return unless preset_key
 
-      build_shorthand_attrs(attrs, shorthand_key, target_class, Weft.shorthand(shorthand_key))
+      build_preset_attrs(attrs, preset_key, target_class, Weft.preset(preset_key))
     end
 
-    # A shorthand value is either a target Class (derive the URL from it) or a
+    # A preset value is either a target Class (derive the URL from it) or a
     # ready-made URL String (retry-style — the caller already has the URL).
-    def find_shorthand_kwarg(attrs)
-      attrs.find { |k, v| (v.is_a?(Class) || v.is_a?(String)) && Weft.shorthand(k) }
+    def find_preset_kwarg(attrs)
+      attrs.find { |k, v| (v.is_a?(Class) || v.is_a?(String)) && Weft.preset(k) }
     end
 
-    def build_shorthand_attrs(attrs, shorthand_key, target_or_url, preset)
+    def build_preset_attrs(attrs, preset_key, target_or_url, preset)
       target = attrs[:target] || preset[:target]
-      raise ArgumentError, "#{shorthand_key}: requires target: (e.g., target: :self)" unless target
+      raise ArgumentError, "#{preset_key}: requires target: (e.g., target: :self)" unless target
 
       swap = attrs[:swap] || preset[:swap]
       htmx = if target_or_url.is_a?(String)
@@ -109,11 +120,11 @@ module Weft
                loads_attrs(target_or_url, resolve_with(attrs), swap, target)
              end
       htmx["hx-trigger"] = resolve_trigger(preset[:trigger]) if preset[:trigger]
-      attrs.except(shorthand_key, :swap, :target, :with).merge(htmx)
+      attrs.except(preset_key, :swap, :target, :with).merge(htmx)
     end
 
     def resolve_with(attrs)
-      attrs[:with] || find_nearest_component&.attrs&.to_h || {}
+      attrs[:with] || find_nearest_component&.params&.to_h || {}
     end
 
     def validate_loads_kwargs!(attrs)

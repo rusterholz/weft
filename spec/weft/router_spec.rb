@@ -13,14 +13,14 @@ RSpec.describe Weft::Router do
   let!(:stat_card_class) do
     klass = Class.new(Weft::Component) do
       def self.name = "StatCard"
-      attribute :status, default: "all"
-      attribute :value, default: 0
+      param :status, default: "all"
+      param :value, default: 0
 
       def build(attributes = {})
         super
         div(class: "stat-card") do
-          span(class: "status") { text_node attrs[:status] }
-          span(class: "value") { text_node attrs[:value].to_s }
+          span(class: "status") { text_node params[:status] }
+          span(class: "value") { text_node params[:value].to_s }
         end
       end
     end
@@ -50,7 +50,7 @@ RSpec.describe Weft::Router do
       expect(last_response.body).to include("<div")
     end
 
-    it "applies attribute defaults for missing params" do
+    it "applies param defaults for missing params" do
       get "/_components/stat_card"
 
       expect(last_response.body).to include("all")
@@ -74,11 +74,11 @@ RSpec.describe Weft::Router do
     let!(:namespaced_class) do # rubocop:disable RSpec/LetSetup
       Class.new(Weft::Component) do
         def self.name = "Oms::OrderHeader"
-        attribute :order_id
+        param :order_id
 
         def build(attributes = {})
           super
-          div { text_node "order-#{attrs[:order_id]}" }
+          div { text_node "order-#{params[:order_id]}" }
         end
       end
     end
@@ -95,10 +95,10 @@ RSpec.describe Weft::Router do
     let!(:order_header_class) do # rubocop:disable RSpec/LetSetup
       Class.new(Weft::Component) do
         def self.name = "OrderHeader"
-        attribute :order_id
-        attribute :status, default: "pending"
+        param :order_id
+        param :status, default: "pending"
 
-        performs(:advance) do |_attrs|
+        performs(:advance) do |_params|
           { status: "advanced" }
         end
 
@@ -109,7 +109,7 @@ RSpec.describe Weft::Router do
         def build(attributes = {})
           super
           div(class: "order-header") do
-            span(class: "status") { text_node attrs.status }
+            span(class: "status") { text_node params.status }
           end
         end
       end
@@ -123,13 +123,13 @@ RSpec.describe Weft::Router do
       expect(last_response.body).to include("order-header")
     end
 
-    it "merges the callable's return hash into attrs for re-render" do
+    it "merges the callable's return hash into params for re-render" do
       post "/_components/order_header/advance", order_id: "42"
 
       expect(last_response.body).to include("advanced")
     end
 
-    it "uses original attrs when callable returns nil" do
+    it "uses original params when callable returns nil" do
       post "/_components/order_header/noop", order_id: "42"
 
       expect(last_response.body).to include("pending")
@@ -159,11 +159,11 @@ RSpec.describe Weft::Router do
     let!(:read_only_class) do
       Class.new(Weft::Component) do
         def self.name = "ReadOnlyCard"
-        attribute :order_id
+        param :order_id
 
         def build(attributes = {})
           super
-          div { text_node "read-only-#{attrs.order_id}" }
+          div { text_node "read-only-#{params.order_id}" }
         end
       end
     end
@@ -171,19 +171,19 @@ RSpec.describe Weft::Router do
     let!(:editable_class) do
       Class.new(Weft::Component) do
         def self.name = "EditableCard"
-        attribute :order_id
-        attribute :mode, default: "edit"
+        param :order_id
+        param :mode, default: "edit"
 
         def build(attributes = {})
           super
-          div { text_node "editable-#{attrs.order_id}-#{attrs.mode}" }
+          div { text_node "editable-#{params.order_id}-#{params.mode}" }
         end
       end
     end
 
     before do
       target = editable_class
-      read_only_class.transfers(:edit, to: target) { |_attrs| { mode: "full" } }
+      read_only_class.transfers(:edit, to: target) { |_params| { mode: "full" } }
     end
 
     it "renders the target component instead of self" do
@@ -193,13 +193,13 @@ RSpec.describe Weft::Router do
       expect(last_response.body).to include("editable-42")
     end
 
-    it "merges the block's return hash into attrs for the target" do
+    it "merges the block's return hash into params for the target" do
       post "/_components/read_only_card/edit", order_id: "42"
 
       expect(last_response.body).to include("editable-42-full")
     end
 
-    it "passes through attrs when no block is given" do
+    it "passes through params when no block is given" do
       target = editable_class
       # Define a second transfer without a block
       read_only_class.transfers(:quick_edit, to: target)
@@ -210,16 +210,16 @@ RSpec.describe Weft::Router do
     end
   end
 
-  describe "cross-component-class attribute isolation" do
+  describe "cross-component-class param isolation" do
     let!(:contact_card_class) do
       Class.new(Weft::Component) do
         def self.name = "ContactCard"
-        attribute :contact_id
-        attribute :headline, default: "Contact"
+        param :contact_id
+        param :headline, default: "Contact"
 
         def build(attributes = {})
           super
-          div(class: "contact-card") { text_node "#{attrs.headline}-#{attrs.contact_id}" }
+          div(class: "contact-card") { text_node "#{params.headline}-#{params.contact_id}" }
         end
       end
     end
@@ -227,14 +227,14 @@ RSpec.describe Weft::Router do
     let!(:contact_editor_class) do
       Class.new(Weft::Component) do
         def self.name = "ContactEditor"
-        attribute :contact_id
-        attribute :first_name, default: "Joseph"
-        attribute :last_name, default: "Blow"
-        attribute :email, default: "joe@blow.com"
+        param :contact_id
+        param :first_name, default: "Joseph"
+        param :last_name, default: "Blow"
+        param :email, default: "joe@blow.com"
 
         def build(attributes = {})
           super
-          div(class: "contact-editor") { text_node "editing-#{attrs.contact_id}" }
+          div(class: "contact-editor") { text_node "editing-#{params.contact_id}" }
         end
       end
     end
@@ -244,7 +244,7 @@ RSpec.describe Weft::Router do
       contact_editor_class.transfers(:save, to: target)
     end
 
-    it "does not splat the declaring component's undeclared attrs onto the rendered target" do
+    it "does not splat the declaring component's undeclared params onto the rendered target" do
       post "/_components/contact_editor/save", contact_id: "1"
 
       expect(last_response.status).to eq(200)
@@ -255,7 +255,7 @@ RSpec.describe Weft::Router do
       expect(last_response.body).not_to include("email=")
     end
 
-    it "carries the target's shared attrs and applies the target's defaults for absent keys" do
+    it "carries the target's shared params and applies the target's defaults for absent keys" do
       post "/_components/contact_editor/save", contact_id: "1"
 
       # contact_id shared → present; headline absent from the bag → target default.
@@ -265,13 +265,13 @@ RSpec.describe Weft::Router do
     it "does not leak performs callable keys the component does not declare" do
       Class.new(Weft::Component) do
         def self.name = "PerformsLeakCard"
-        attribute :id
+        param :id
 
-        performs(:go) { |_attrs| { id: "kept", surprise: "leak" } }
+        performs(:go) { |_params| { id: "kept", surprise: "leak" } }
 
         def build(attributes = {})
           super
-          div { text_node "id=#{attrs.id}" }
+          div { text_node "id=#{params.id}" }
         end
       end
 
@@ -287,7 +287,7 @@ RSpec.describe Weft::Router do
     let!(:triggering_class) do # rubocop:disable RSpec/LetSetup
       Class.new(Weft::Component) do
         def self.name = "TriggerTest"
-        attribute :id
+        param :id
         triggers "item-updated"
         performs(:save) { nil }
       end
@@ -303,7 +303,7 @@ RSpec.describe Weft::Router do
     it "supports multiple triggers" do
       Class.new(Weft::Component) do
         def self.name = "MultiTrigger"
-        attribute :id
+        param :id
         triggers "event-a"
         triggers "event-b"
         performs(:go) { nil }
@@ -327,7 +327,7 @@ RSpec.describe Weft::Router do
     let!(:failing_class) do # rubocop:disable RSpec/LetSetup
       Class.new(Weft::Component) do
         def self.name = "FailingCard"
-        attribute :id
+        param :id
 
         def build(attributes = {})
           super
@@ -345,7 +345,7 @@ RSpec.describe Weft::Router do
       expect(last_response.body).to include("something broke")
     end
 
-    it "preserves the failing component's DOM id via the :component_id auto-injected attribute" do
+    it "preserves the failing component's DOM id via the :component_id auto-injected param" do
       get "/_components/failing_card", id: "1"
       expect(last_response.body).to include('id="failing-card-1"')
     end
@@ -372,7 +372,7 @@ RSpec.describe Weft::Router do
       end
       Class.new(Weft::Component) do
         def self.name = "DoublyFailing"
-        attribute :id
+        param :id
         def build(_ = {})
           super
           raise "primary boom"
@@ -393,7 +393,7 @@ RSpec.describe Weft::Router do
     it "renders ErrorComponent with status 500 when an action fails" do
       Class.new(Weft::Component) do
         def self.name = "ActionFail"
-        attribute :id
+        param :id
         performs(:explode) { |_| raise "boom" }
       end
 
@@ -405,19 +405,19 @@ RSpec.describe Weft::Router do
       expect(last_response.body).to include("boom")
     end
 
-    it "re-renders self with augmented attrs from a recovers block" do # rubocop:disable RSpec/ExampleLength
+    it "re-renders self with augmented params from a recovers block" do # rubocop:disable RSpec/ExampleLength
       Class.new(Weft::Component) do
         def self.name = "RecoverableCard"
-        attribute :id
-        attribute :error_message
+        param :id
+        param :error_message
 
-        recovers(from: StandardError) { |_attrs, error| { error_message: error.message } }
+        recovers(from: StandardError) { |_params, error| { error_message: error.message } }
 
         def build(attributes = {})
           super
-          raise "oops" unless attrs.error_message
+          raise "oops" unless params.error_message
 
-          div(class: "custom-error") { text_node "Recovered: #{attrs.error_message}" }
+          div(class: "custom-error") { text_node "Recovered: #{params.error_message}" }
         end
       end
 
@@ -432,18 +432,18 @@ RSpec.describe Weft::Router do
     it "inherits recovers entries from parent class" do # rubocop:disable RSpec/ExampleLength
       parent = Class.new(Weft::Component) do
         def self.name = "BaseRecoverable"
-        recovers(from: StandardError) { |_attrs, error| { error_message: error.message } }
+        recovers(from: StandardError) { |_params, error| { error_message: error.message } }
       end
       Class.new(parent) do
         def self.name = "ChildRecoverable"
-        attribute :id
-        attribute :error_message
+        param :id
+        param :error_message
 
         def build(attributes = {})
           super
-          raise "child error" unless attrs.error_message
+          raise "child error" unless params.error_message
 
-          span "parent-recovery: #{attrs.error_message}"
+          span "parent-recovery: #{params.error_message}"
         end
       end
 
@@ -458,12 +458,12 @@ RSpec.describe Weft::Router do
     before do
       Class.new(Weft::Component) do
         def self.name = "PushCard"
-        attribute :order_id
+        param :order_id
         pushes every: 5
 
         def build(attributes = {})
           super
-          span(class: "content") { text_node "order-#{attrs.order_id}" }
+          span(class: "content") { text_node "order-#{params.order_id}" }
         end
       end
     end
@@ -554,10 +554,10 @@ RSpec.describe Weft::Router do
     end
   end
 
-  describe "build_component_with_attrs" do
-    it "builds a component instance with resolved attributes" do
+  describe "build_component_with_wire" do
+    it "builds a component that resolves its params from the wire source" do
       router = described_class.new!(downstream_app)
-      component = router.send(:build_component_with_attrs, stat_card_class, { status: "shipped", value: 10 })
+      component = router.send(:build_component_with_wire, stat_card_class, { status: "shipped", value: 10 })
 
       expect(component).to be_a(Weft::Component)
       expect(component.weft_id).to eq("stat-card-shipped")
@@ -567,7 +567,7 @@ RSpec.describe Weft::Router do
 
     it "returns children-only HTML via content (for SSE innerHTML swap)" do
       router = described_class.new!(downstream_app)
-      component = router.send(:build_component_with_attrs, stat_card_class, { status: "shipped", value: 10 })
+      component = router.send(:build_component_with_wire, stat_card_class, { status: "shipped", value: 10 })
 
       # content returns children only — no wrapper div
       expect(component.content).not_to include('id="stat-card-shipped"')
@@ -583,11 +583,11 @@ RSpec.describe Weft::Router do
     let!(:included_class) do
       Class.new(Weft::Component) do
         def self.name = "IncludedHeader"
-        attribute :order_id
+        param :order_id
 
         def build(attributes = {})
           super
-          span "header-for-#{attrs.order_id}"
+          span "header-for-#{params.order_id}"
         end
       end
     end
@@ -596,7 +596,7 @@ RSpec.describe Weft::Router do
       target = included_class
       Class.new(Weft::Component) do
         def self.name = "IncludingCard"
-        attribute :order_id
+        param :order_id
         performs(:refresh_all) { nil }
 
         define_method(:__included_target) { target }
@@ -617,7 +617,7 @@ RSpec.describe Weft::Router do
       filtered_class = included_class
       source = Class.new(Weft::Component) do
         def self.name = "FilteredInc"
-        attribute :order_id
+        param :order_id
         performs(:advance) { nil }
         performs(:noop) { nil }
       end
@@ -634,10 +634,10 @@ RSpec.describe Weft::Router do
       mapped_class = included_class
       source = Class.new(Weft::Component) do
         def self.name = "MappedInc"
-        attribute :id
+        param :id
         performs(:go) { nil }
       end
-      source.includes(mapped_class) { |attrs| { order_id: attrs[:id] } }
+      source.includes(mapped_class) { |params| { order_id: params[:id] } }
 
       post "/_components/mapped_inc/go", id: "99"
 
@@ -649,12 +649,12 @@ RSpec.describe Weft::Router do
       sink = included_class
       source = Class.new(Weft::Component) do
         def self.name = "BagSource"
-        attribute :order_id
+        param :order_id
         # :note is not declared — it only exists on the accumulated bag because
         # the callable returned it. The inclusion block must still see it.
-        performs(:go) { |_attrs| { note: "from-callable" } }
+        performs(:go) { |_params| { note: "from-callable" } }
       end
-      source.includes(sink) { |attrs| { order_id: attrs[:note] } }
+      source.includes(sink) { |params| { order_id: params[:note] } }
 
       post "/_components/bag_source/go", order_id: "1"
 
@@ -667,7 +667,7 @@ RSpec.describe Weft::Router do
     it "sets HX-Reswap on error for delete swap actions" do
       Class.new(Weft::Component) do
         def self.name = "DismissError"
-        attribute :id
+        param :id
         dismisses(:remove) { |_| raise "side effect failed" }
       end
 
@@ -681,7 +681,7 @@ RSpec.describe Weft::Router do
     it "does not set HX-Reswap for non-delete actions" do
       Class.new(Weft::Component) do
         def self.name = "NormalError"
-        attribute :id
+        param :id
         performs(:explode) { |_| raise "boom" }
       end
 
@@ -696,7 +696,7 @@ RSpec.describe Weft::Router do
     before do
       Class.new(Weft::Component) do
         def self.name = "RedirectComp"
-        attribute :id
+        param :id
 
         performs(:submit) { Weft::Redirect.to("/success/42") }
         performs(:noop) { nil }
@@ -704,7 +704,7 @@ RSpec.describe Weft::Router do
 
         def build(attributes = {})
           super
-          span "id=#{attrs.id}"
+          span "id=#{params.id}"
         end
       end
     end
@@ -731,7 +731,7 @@ RSpec.describe Weft::Router do
       expect(last_response.body).to include("id=7")
     end
 
-    it "still merges attrs when callable returns a Hash" do
+    it "still merges params when callable returns a Hash" do
       post "/_components/redirect_comp/merge", id: "1"
 
       expect(last_response.status).to eq(200)
@@ -751,7 +751,7 @@ RSpec.describe Weft::Router do
       target = error_page
       Class.new(Weft::Component) do
         def self.name = "RecoverRedirectHtmx"
-        attribute :id
+        param :id
 
         recovers(from: StandardError, with: target)
 
@@ -771,7 +771,7 @@ RSpec.describe Weft::Router do
       target = error_page
       Class.new(Weft::Component) do
         def self.name = "RecoverRedirectTrad"
-        attribute :id
+        param :id
 
         recovers(from: StandardError, with: target)
 
@@ -792,16 +792,16 @@ RSpec.describe Weft::Router do
     it "reports HTTPError's status on the wire when matched" do
       Class.new(Weft::Component) do
         def self.name = "HTTPErrorCard"
-        attribute :id
-        attribute :error_message
+        param :id
+        param :error_message
 
-        recovers(from: Weft::HTTPError) { |_attrs, error| { error_message: error.message } }
+        recovers(from: Weft::HTTPError) { |_params, error| { error_message: error.message } }
 
         def build(attributes = {})
           super
-          raise Weft::Unauthorized, "auth required" unless attrs.error_message
+          raise Weft::Unauthorized, "auth required" unless params.error_message
 
-          div { text_node "recovered: #{attrs.error_message}" }
+          div { text_node "recovered: #{params.error_message}" }
         end
       end
 
@@ -814,16 +814,16 @@ RSpec.describe Weft::Router do
     it "reports 500 for non-HTTPError exceptions even when matched" do
       Class.new(Weft::Component) do
         def self.name = "PlainErrorCard"
-        attribute :id
-        attribute :error_message
+        param :id
+        param :error_message
 
-        recovers(from: StandardError) { |_attrs, error| { error_message: error.message } }
+        recovers(from: StandardError) { |_params, error| { error_message: error.message } }
 
         def build(attributes = {})
           super
-          raise "plain crash" unless attrs.error_message
+          raise "plain crash" unless params.error_message
 
-          div { text_node "recovered: #{attrs.error_message}" }
+          div { text_node "recovered: #{params.error_message}" }
         end
       end
 
@@ -835,7 +835,7 @@ RSpec.describe Weft::Router do
     it "reports HTTPError's status when no recovers matches (generic path)" do
       Class.new(Weft::Component) do
         def self.name = "UnhandledHTTPError"
-        attribute :id
+        param :id
 
         def build(attributes = {})
           super
@@ -853,16 +853,16 @@ RSpec.describe Weft::Router do
     it "injects :exception when the target declares it" do
       Class.new(Weft::Component) do
         def self.name = "InjectsException"
-        attribute :id
-        attribute :exception
+        param :id
+        param :exception
 
         recovers(from: StandardError)
 
         def build(attributes = {})
           super
-          raise "boom" unless attrs.exception
+          raise "boom" unless params.exception
 
-          div(class: "got-exception") { text_node "class=#{attrs.exception.class}" }
+          div(class: "got-exception") { text_node "class=#{params.exception.class}" }
         end
       end
 
@@ -876,16 +876,16 @@ RSpec.describe Weft::Router do
     it "injects :request_path when the target declares it" do
       Class.new(Weft::Component) do
         def self.name = "InjectsPath"
-        attribute :id
-        attribute :request_path
+        param :id
+        param :request_path
 
         recovers(from: StandardError)
 
         def build(attributes = {})
           super
-          raise "boom" unless attrs.request_path
+          raise "boom" unless params.request_path
 
-          div(class: "got-path") { text_node "at=#{attrs.request_path}" }
+          div(class: "got-path") { text_node "at=#{params.request_path}" }
         end
       end
 
@@ -897,16 +897,16 @@ RSpec.describe Weft::Router do
     it "injects :component_id when the target declares it — preserving the failing element's id" do
       Class.new(Weft::Component) do
         def self.name = "InjectsCompId"
-        attribute :id
-        attribute :component_id
+        param :id
+        param :component_id
 
         recovers(from: StandardError)
 
         def build(attributes = {})
           super
-          raise "boom" unless attrs.component_id
+          raise "boom" unless params.component_id
 
-          div(class: "got-comp-id") { text_node "id=#{attrs.component_id}" }
+          div(class: "got-comp-id") { text_node "id=#{params.component_id}" }
         end
       end
 
@@ -916,19 +916,19 @@ RSpec.describe Weft::Router do
       expect(last_response.body).to include("id=injects-comp-id-1")
     end
 
-    it "injects :retry_url when the target declares it — pointing at the component's GET URL with attrs" do
+    it "injects :retry_url when the target declares it — pointing at the component's GET URL with params" do
       Class.new(Weft::Component) do
         def self.name = "InjectsRetry"
-        attribute :id
-        attribute :retry_url
+        param :id
+        param :retry_url
 
         recovers(from: StandardError)
 
         def build(attributes = {})
           super
-          raise "boom" unless attrs.retry_url
+          raise "boom" unless params.retry_url
 
-          div(class: "got-retry") { text_node "url=#{attrs.retry_url}" }
+          div(class: "got-retry") { text_node "url=#{params.retry_url}" }
         end
       end
 
@@ -940,16 +940,16 @@ RSpec.describe Weft::Router do
     it "injects :status_code when the target declares it" do
       Class.new(Weft::Component) do
         def self.name = "InjectsStatus"
-        attribute :id
-        attribute :status_code
+        param :id
+        param :status_code
 
         recovers(from: Weft::HTTPError)
 
         def build(attributes = {})
           super
-          raise Weft::Unprocessable, "bad input" unless attrs.status_code
+          raise Weft::Unprocessable, "bad input" unless params.status_code
 
-          div(class: "got-status") { text_node "status=#{attrs.status_code}" }
+          div(class: "got-status") { text_node "status=#{params.status_code}" }
         end
       end
 
@@ -962,15 +962,15 @@ RSpec.describe Weft::Router do
     it "does not inject auto-injected attributes the target did not declare" do # rubocop:disable RSpec/ExampleLength
       Class.new(Weft::Component) do
         def self.name = "PartialCarveouts"
-        attribute :id
-        attribute :exception
+        param :id
+        param :exception
         # :request_path and :status_code intentionally NOT declared
 
         recovers(from: StandardError)
 
         def build(attributes = {})
           super
-          raise "boom" unless attrs.exception
+          raise "boom" unless params.exception
 
           div(class: "rendered-ok") { text_node "ok" }
         end
@@ -980,7 +980,7 @@ RSpec.describe Weft::Router do
 
       expect(last_response.status).to eq(500)
       expect(last_response.body).to include("rendered-ok")
-      # Carve-outs not declared on target must NOT appear as wrapper attrs.
+      # Carve-outs not declared on target must NOT appear as wrapper params.
       expect(last_response.body).not_to include("request_path=")
       expect(last_response.body).not_to include("status_code=")
     end
@@ -989,13 +989,13 @@ RSpec.describe Weft::Router do
       target_page = Class.new(Weft::Page) do
         def self.name = "RedirectErrorPage2"
         self.page_path = "/redirect-error"
-        attribute :exception
-        attribute :request_path
+        param :exception
+        param :request_path
       end
       target = target_page
       Class.new(Weft::Component) do
         def self.name = "RedirectsToPage"
-        attribute :id
+        param :id
 
         recovers(from: StandardError, with: target)
 
@@ -1017,22 +1017,22 @@ RSpec.describe Weft::Router do
   end
 
   describe "recovers block result merging" do
-    it "merges block-returned attrs into the render" do # rubocop:disable RSpec/ExampleLength
+    it "merges block-returned params into the render" do # rubocop:disable RSpec/ExampleLength
       Class.new(Weft::Component) do
         def self.name = "BlockMerge"
-        attribute :id
-        attribute :reason
-        attribute :hint
+        param :id
+        param :reason
+        param :hint
 
-        recovers(from: StandardError) do |_attrs, error|
+        recovers(from: StandardError) do |_params, error|
           { reason: error.message, hint: "try again" }
         end
 
         def build(attributes = {})
           super
-          raise "first failure" unless attrs.reason
+          raise "first failure" unless params.reason
 
-          div { text_node "#{attrs.reason} / #{attrs.hint}" }
+          div { text_node "#{params.reason} / #{params.hint}" }
         end
       end
 
@@ -1042,23 +1042,23 @@ RSpec.describe Weft::Router do
     end
   end
 
-  describe "recovery target attribute isolation" do
-    it "does not leak the failing component's undeclared attrs onto a cross-class recovery component" do # rubocop:disable RSpec/ExampleLength
+  describe "recovery target param isolation" do
+    it "does not leak the failing component's undeclared params onto a cross-class recovery component" do # rubocop:disable RSpec/ExampleLength
       recovery_target = Class.new(Weft::Component) do
         def self.name = "RecoveryTargetCard"
-        attribute :id
-        attribute :exception
+        param :id
+        param :exception
 
         def build(attributes = {})
           super
-          div(class: "recovery-target") { text_node "recovered-#{attrs.id}-#{attrs.exception&.class}" }
+          div(class: "recovery-target") { text_node "recovered-#{params.id}-#{params.exception&.class}" }
         end
       end
       target = recovery_target
       Class.new(Weft::Component) do
         def self.name = "FailingWithSecret"
-        attribute :id
-        attribute :secret
+        param :id
+        param :secret
 
         recovers(from: StandardError, with: target)
 
@@ -1079,7 +1079,7 @@ RSpec.describe Weft::Router do
       expect(last_response.body).not_to include("sensitive")
     end
 
-    it "does not leak the originating page's undeclared attrs onto a cross-class recovery page" do # rubocop:disable RSpec/ExampleLength
+    it "does not leak the originating page's undeclared params onto a cross-class recovery page" do # rubocop:disable RSpec/ExampleLength
       recovery_page = Class.new(Weft::Page) do
         def self.name = "PageRecoveryTarget"
         self.page_path = "/page-recovery-target"
@@ -1093,7 +1093,7 @@ RSpec.describe Weft::Router do
       Class.new(Weft::Page) do
         def self.name = "FailingOriginPage"
         self.page_path = "/failing-origin/:order_id"
-        attribute :order_id
+        param :order_id
 
         recovers(from: StandardError, with: target)
 
@@ -1149,11 +1149,11 @@ RSpec.describe Weft::Router do
       Class.new(Weft::Page) do
         def self.name = "TestRoutedPage"
         self.page_path = "/test-pages/:item_id"
-        attribute :item_id
+        param :item_id
 
         def build(attributes = {})
           super(attributes.merge(title: "Test Page"))
-          div { text_node "page-item-#{attrs.item_id}" }
+          div { text_node "page-item-#{params.item_id}" }
         end
       end
     end
@@ -1194,12 +1194,12 @@ RSpec.describe Weft::Router do
       Class.new(Weft::Page) do
         def self.name = "QueryParamPage"
         self.page_path = "/query-page"
-        attribute :filter
-        attribute :page_num, default: 1
+        param :filter
+        param :page_num, default: 1
 
         def build(attributes = {})
           super
-          div { text_node "filter=#{attrs.filter} page=#{attrs.page_num}" }
+          div { text_node "filter=#{params.filter} page=#{params.page_num}" }
         end
       end
 
@@ -1213,11 +1213,11 @@ RSpec.describe Weft::Router do
       Class.new(Weft::Page) do
         def self.name = "OverridePage"
         self.page_path = "/override/:slug"
-        attribute :slug
+        param :slug
 
         def build(attributes = {})
           super
-          div { text_node "slug=#{attrs.slug}" }
+          div { text_node "slug=#{params.slug}" }
         end
       end
 
@@ -1297,7 +1297,7 @@ RSpec.describe Weft::Router do
         def self.name = "BlowupPage"
         self.page_path = "/blowup"
 
-        def build(_attrs = {})
+        def build(_params = {})
           super
           raise "page broke"
         end
@@ -1323,7 +1323,7 @@ RSpec.describe Weft::Router do
 
         Class.new(Weft::Component) do
           def self.name = "RedirectFail"
-          attribute :id
+          param :id
 
           def build(attributes = {})
             super
@@ -1352,14 +1352,14 @@ RSpec.describe Weft::Router do
 
         Class.new(Weft::Component) do
           def self.name = "ExplicitRecover"
-          attribute :id
-          attribute :error_message
-          recovers(from: StandardError) { |_attrs, err| { error_message: err.message } }
+          param :id
+          param :error_message
+          recovers(from: StandardError) { |_params, err| { error_message: err.message } }
           def build(attributes = {})
             super
-            raise "user-handled" unless attrs.error_message
+            raise "user-handled" unless params.error_message
 
-            div(class: "explicit") { text_node attrs.error_message }
+            div(class: "explicit") { text_node params.error_message }
           end
         end
 
@@ -1375,7 +1375,7 @@ RSpec.describe Weft::Router do
 
         Class.new(Weft::Component) do
           def self.name = "TradFail"
-          attribute :id
+          param :id
 
           def build(attributes = {})
             super
@@ -1396,7 +1396,7 @@ RSpec.describe Weft::Router do
         def self.name = "BlowupPageHtmx"
         self.page_path = "/blowup-htmx"
 
-        def build(_attrs = {})
+        def build(_params = {})
           super
           raise "page broke"
         end

@@ -9,28 +9,28 @@ module Oms
   class OrderForm < Weft::Component
     builder_method :order_form
 
-    attribute :customer_name
-    attribute :address_line_1 # rubocop:disable Naming/VariableNumber
-    attribute :city
-    attribute :state
-    attribute :zip
-    # Complex attribute types (Hash, Array) get first-class support in
+    param :customer_name
+    param :address_line_1 # rubocop:disable Naming/VariableNumber
+    param :city
+    param :state
+    param :zip
+    # Complex param types (Hash, Array) get first-class support in
     # v1.x. For v0.x the Resolver passes hashes through unchanged so
     # nested form fields like items[widget]=2 land here as a hash.
-    attribute :items
-    attribute :error_message
+    param :items
+    param :error_message
 
-    performs :create do |attrs|
-      items = (attrs.items || {}).select { |_, qty| qty.to_i.positive? }
+    performs :create do |params|
+      items = (params.items || {}).select { |_, qty| qty.to_i.positive? }
       raise Weft::Unprocessable, "Please select at least one item." if items.empty?
 
       order = ActiveRecord::Base.transaction do
         o = Oms::Order.create!(
-          customer_name: attrs.customer_name,
-          address_line_1: attrs.address_line_1, # rubocop:disable Naming/VariableNumber
-          city: attrs.city,
-          state: attrs.state,
-          zip: attrs.zip,
+          customer_name: params.customer_name,
+          address_line_1: params.address_line_1, # rubocop:disable Naming/VariableNumber
+          city: params.city,
+          state: params.state,
+          zip: params.zip,
           lat: rand(-9.0..9.0).round(1),
           lon: rand(-9.0..9.0).round(1)
         )
@@ -42,7 +42,7 @@ module Oms
       Weft.redirect(Oms::OrderDetailPage, order_id: order.id)
     end
 
-    recovers(from: [ActiveRecord::RecordInvalid, Weft::Unprocessable]) do |_attrs, error|
+    recovers(from: [ActiveRecord::RecordInvalid, Weft::Unprocessable]) do |_params, error|
       { error_message: error.message }
     end
 
@@ -50,7 +50,7 @@ module Oms
       super
       catalog = Simulation::OrderGenerator::ITEM_CATALOG
 
-      div(class: "alert alert-danger") { text_node attrs.error_message } if attrs.error_message
+      div(class: "alert alert-danger") { text_node params.error_message } if params.error_message
 
       form(action: :create) do
         div(class: "row") do

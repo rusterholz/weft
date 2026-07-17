@@ -4,12 +4,12 @@ require "spec_helper"
 
 RSpec.describe DropshipUI::Pager, type: :component do
   # A fake target component class — Pager passes its class + DOM id to the
-  # :paginate shorthand expansion, which renders htmx attrs that load the
+  # :paginate preset expansion, which renders htmx attrs that load the
   # target back into the target selector.
   let(:fake_target_class) do
     Class.new(Weft::Component) do
       def self.name = "FakeTarget"
-      attribute :page, default: 1
+      param :page, default: 1
     end
   end
 
@@ -61,7 +61,7 @@ RSpec.describe DropshipUI::Pager, type: :component do
     expect(html).to match(/<span[^>]*disabled[^>]*>Next →/)
   end
 
-  it "wires buttons through the :paginate shorthand (click trigger + replace swap)" do
+  it "wires buttons through the :paginate preset (click trigger + replace swap)" do
     html = render(page_num: 2, per_page: 25, total: 120)
     expect(html).to include('hx-target="#fake-target"')
     expect(html).to include('hx-swap="outerHTML"')

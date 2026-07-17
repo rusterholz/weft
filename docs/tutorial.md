@@ -187,7 +187,7 @@ Create `app/pages/event_page.rb`:
 class EventPage < Weft::Page
   self.page_path = "/events/:event_id"
 
-  attribute :event_id
+  param :event_id
 
   def build(attributes = {})
     event = EventStore.find(attributes[:event_id])
@@ -204,9 +204,9 @@ end
 
 Restart (new file), then click through to an event. Two new ideas here:
 
-**Attributes are a page's wire state.** `attribute :event_id` declares that this page is parameterized, and the `page_path` pattern says where the value comes from: `/events/summer-bbq` gives the page `event_id = "summer-bbq"`. A page with attributes needs an explicit `page_path` — there's no way to derive a parameterized pattern from a class name, and Weft will tell you exactly that if you forget.
+**Params are a page's wire state.** `param :event_id` declares that this page is parameterized, and the `page_path` pattern says where the value comes from: `/events/summer-bbq` gives the page `event_id = "summer-bbq"`. A page with params needs an explicit `page_path` — there's no way to derive a parameterized pattern from a class name, and Weft will tell you exactly that if you forget.
 
-One timing wrinkle: before the `super` call, read incoming values from the raw `attributes` hash (as above). After `super`, the resolved values are available the nicer way — `attrs.event_id`. You'll see `attrs` used in the components below, where `super` comes first.
+One timing wrinkle: before the `super` call, read incoming values from the raw `attributes` hash (as above). After `super`, the resolved values are available the nicer way — `params.event_id`. You'll see `params` used in the components below, where `super` comes first.
 
 **Raising is error handling.** For an unknown event, we `raise Weft::NotFound` and we're done — Weft turns it into a proper 404 response with its default not-found page. Try [http://localhost:9292/events/nope](http://localhost:9292/events/nope). There's a whole family of semantic errors (`Weft::Unprocessable` will appear shortly), and everything about the resulting rendering is customizable — see [Error handling](error-handling.md).
 
@@ -218,11 +218,11 @@ Pages are destinations; **components** are the composable, interactive pieces in
 class AttendeeList < Weft::Component
   builder_method :attendee_list
 
-  attribute :event_id
+  param :event_id
 
   def build(attributes = {})
     super
-    event = EventStore.find(attrs.event_id)
+    event = EventStore.find(params.event_id)
     h2 "Who's coming"
     if event.rsvps.empty?
       para "No RSVPs yet. Be the first!"
@@ -253,7 +253,7 @@ View the page source and look at the wrapper Weft rendered:
 <div id="attendee-list-summer-bbq">
 ```
 
-That DOM id was derived, not written: the class name, plus the value of the component's **first declared attribute**. The convention matters — it's how updates land on the right element when several instances share a page — so declare the identifying attribute first. (A list of attendee *rows*, say, would want `attribute :name` first, or every row would collide on the same event-derived id.)
+That DOM id was derived, not written: the class name, plus the value of the component's **first declared param**. The convention matters — it's how updates land on the right element when several instances share a page — so declare the identifying param first. (A list of attendee *rows*, say, would want `param :name` first, or every row would collide on the same event-derived id.)
 
 One more thing, and it's the heart of Weft. Your component isn't just markup inside the page — it's independently addressable:
 
@@ -271,32 +271,32 @@ Now the interactive part. Create `app/components/rsvp_form.rb`:
 class RSVPForm < Weft::Component
   builder_method :rsvp_form
 
-  attribute :event_id
-  attribute :name
-  attribute :answer
-  attribute :error_message
+  param :event_id
+  param :name
+  param :answer
+  param :error_message
 
   includes AttendeeList
 
-  performs :submit do |attrs|
-    event = EventStore.find(attrs.event_id)
-    name = attrs.name.to_s.strip
+  performs :submit do |params|
+    event = EventStore.find(params.event_id)
+    name = params.name.to_s.strip
     raise Weft::Unprocessable, "Please tell us your name." if name.empty?
 
-    event.rsvps[name] = attrs.answer
+    event.rsvps[name] = params.answer
     nil
   end
 
-  recovers from: Weft::Unprocessable do |_attrs, error|
+  recovers from: Weft::Unprocessable do |_params, error|
     { error_message: error.message }
   end
 
   def build(attributes = {})
     super
     h2 "RSVP"
-    para(attrs.error_message, style: "color:#b91c1c") if attrs.error_message
+    para(params.error_message, style: "color:#b91c1c") if params.error_message
     form(action: :submit) do
-      input(type: "hidden", name: "event_id", value: attrs.event_id)
+      input(type: "hidden", name: "event_id", value: params.event_id)
       label("Your name: ", for: "name")
       input(type: "text", name: "name", id: "name")
       label(" Coming? ", for: "answer")
@@ -320,7 +320,7 @@ Restart, open Trivia Night, RSVP as yourself — **the attendee list updates wit
 
 That's a lot from one class. Unpacking it:
 
-**`performs :submit` declares a user action.** The block is the behavior: it receives the component's resolved attributes, does its work, and whatever it returns directs what renders next — `nil` means "re-render me fresh" (our success path). Weft generates the route for the action; you never wrote one.
+**`performs :submit` declares a user action.** The block is the behavior: it receives the component's resolved params, does its work, and whatever it returns directs what renders next — `nil` means "re-render me fresh" (our success path). Weft generates the route for the action; you never wrote one.
 
 **`form(action: :submit)` wires the form to the action.** Look at the rendered HTML:
 
@@ -331,15 +331,15 @@ That's a lot from one class. Unpacking it:
 
 The `hx-*` attributes make the form submit in place. The plain `action` and `method` attributes are there too, so the form still works with JavaScript disabled — it degrades to a normal POST.
 
-**Form fields map to declared attributes, one to one.** The action block reads `attrs.name` and `attrs.answer` because the form has fields named `name` and `answer` *and* the component declares attributes of the same names. Both halves are needed: declared-but-not-a-field values don't travel (that's why `event_id` rides along as a hidden input — it's part of the component's identity, not something the user types), and field-but-not-declared values are ignored.
+**Form fields map to declared params, one to one.** The action block reads `params.name` and `params.answer` because the form has fields named `name` and `answer` *and* the component declares params of the same names. Both halves are needed: declared-but-not-a-field values don't travel (that's why `event_id` rides along as a hidden input — it's part of the component's identity, not something the user types), and field-but-not-declared values are ignored.
 
-**Validation is a raise plus a recovery.** The action raises `Weft::Unprocessable`; the `recovers` declaration catches it, and its block returns extra attributes to merge into the re-render — here, `error_message`, which `build` displays when present. Note that `error_message` is itself a declared attribute: recovery data flows through the same schema as everything else. The response even carries a semantically-correct 422 status. See [Error handling](error-handling.md) for how far this system goes.
+**Validation is a raise plus a recovery.** The action raises `Weft::Unprocessable`; the `recovers` declaration catches it, and its block returns extra params to merge into the re-render — here, `error_message`, which `build` displays when present. Note that `error_message` is itself a declared param: recovery data flows through the same schema as everything else. The response even carries a semantically-correct 422 status. See [Error handling](error-handling.md) for how far this system goes.
 
 **`includes AttendeeList` updates the list in the same response.** Submitting the form changes data that *another* component displays. This declaration says: whenever RSVPForm responds to an action, render AttendeeList too, marked so it swaps into its own place in the page (by that derived DOM id — this is why the convention exists). One interaction, two regions updated, zero JavaScript.
 
 ## 8. Going live
 
-The attendee list updates when *you* RSVP — but not when someone else does. One line fixes that. In `AttendeeList`, under the attribute:
+The attendee list updates when *you* RSVP — but not when someone else does. One line fixes that. In `AttendeeList`, under the param:
 
 ```ruby
   refreshes every: 10
@@ -359,13 +359,13 @@ Declared once on the class, the behavior is present in the initial page render *
 
 You've built pages that route themselves, components that compose and self-address, a validated user action with out-of-band updates, and a live-polling list — the core of how Weft apps are put together.
 
-**An exercise, if you're enjoying yourself:** add a "withdraw" button next to each attendee. You'll want a per-attendee component (careful which attribute you declare first — each row needs its own DOM id), and the `dismisses` verb, which removes a component from the page when its action succeeds. The [DSL reference](dsl.md#dismisses--remove-from-the-dom) has what you need.
+**An exercise, if you're enjoying yourself:** add a "withdraw" button next to each attendee. You'll want a per-attendee component (careful which param you declare first — each row needs its own DOM id), and the `dismisses` verb, which removes a component from the page when its action succeeds. The [DSL reference](dsl.md#dismisses--remove-from-the-dom) has what you need.
 
 **A finishing touch:** the events list living at `/events` leaves `/` as a 404. Give `EventsPage` an explicit home: `self.page_path = "/"`.
 
 **The reference docs**, when you want the full picture:
 
-- [The Weft DSL](dsl.md) — every verb (`transfers`, `pushes`, `dismisses`, `triggers`…), the element kwargs, and the interaction shorthands (tooltips, modals, lazy loading) this tutorial didn't touch.
+- [The Weft DSL](dsl.md) — every verb (`transfers`, `pushes`, `dismisses`, `triggers`…), the element kwargs, and the interaction presets (tooltips, modals, lazy loading) this tutorial didn't touch.
 - [Arbre: the HTML layer](arbre.md) — the HTML builder underneath every `build` method: its argument conventions, text handling, container patterns, and gotchas beyond `para`.
 - [Routing](routing.md) — how paths derive, what's routable, collision detection.
 - [Error handling](error-handling.md) — the error family, recovery chains, branding your error pages.

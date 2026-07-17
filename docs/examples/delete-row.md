@@ -16,10 +16,10 @@ CONTACT_BOOK = {
 class ContactRow < Weft::Component
   builder_method :contact_row
 
-  attribute :contact_id
+  param :contact_id
 
-  dismisses :destroy do |attrs|
-    CONTACT_BOOK.delete(attrs.contact_id)
+  dismisses :destroy do |params|
+    CONTACT_BOOK.delete(params.contact_id)
     nil
   end
 
@@ -29,7 +29,7 @@ class ContactRow < Weft::Component
 
   def build(attributes = {})
     super
-    contact = CONTACT_BOOK[attrs.contact_id]
+    contact = CONTACT_BOOK[params.contact_id]
     return unless contact
 
     td contact[:name]
@@ -60,13 +60,13 @@ end
 
 ## How it works
 
-**The row is the component.** Overriding `tag_name` makes the wrapper a `<tr>`, so each contact renders as a real table row with its own DOM id. The identifying attribute is declared first because that's where the id comes from — `contact_id` of `"1"` yields `id="contact-row-1"`, which is exactly what the delete needs to target.
+**The row is the component.** Overriding `tag_name` makes the wrapper a `<tr>`, so each contact renders as a real table row with its own DOM id. The identifying param is declared first because that's where the id comes from — `contact_id` of `"1"` yields `id="contact-row-1"`, which is exactly what the delete needs to target.
 
-**`dismisses` is the delete-shaped verb.** It's sugar for a `performs` with `method: :delete, swap: :delete` (see [`dismisses`](../dsl.md#dismisses--remove-from-the-dom)): the button wired with `action: :destroy` issues a `DELETE` to the action's route, the callable removes the record, and on success htmx deletes the target element — the row — from the DOM. The row's identity travels automatically: an action button carries the component's attrs as `hx-vals`. Note there's no non-JavaScript fallback here — plain HTML has no DELETE — which is the nature of the pattern rather than a Weft limitation.
+**`dismisses` is the delete-shaped verb.** It's sugar for a `performs` with `method: :delete, swap: :delete` (see [`dismisses`](../dsl.md#dismisses--remove-from-the-dom)): the button wired with `action: :destroy` issues a `DELETE` to the action's route, the callable removes the record, and on success htmx deletes the target element — the row — from the DOM. The row's identity travels automatically: an action button carries the component's params as `hx-vals`. Note there's no non-JavaScript fallback here — plain HTML has no DELETE — which is the nature of the pattern rather than a Weft limitation.
 
 **The confirmation is one raw attribute.** Kwargs Weft doesn't recognize pass straight through to the element, so `"hx-confirm" => "Are you sure?"` lands on the button as-is and htmx shows the browser's native confirm dialog before sending anything. No request fires on Cancel. For the fuller confirm-and-prompt story, see [Browser Dialogs](browser-dialogs.md).
 
-**The dismissal response is rendered, then thrown away.** htmx ignores the response body on a delete swap, but Weft still renders the component once after the callable runs — so `build` must survive the record being gone, hence the `return unless contact` guard (an empty `<tr>` nobody will see). The trailing `nil` in the callable matters for the same reason: `Hash#delete` returns the deleted record, and a hash returned from a callable merges into the attrs for that final render. If the callable *raises*, Weft overrides the destructive swap (via `HX-Reswap`) so the error rendering appears where the row was, instead of the row silently vanishing.
+**The dismissal response is rendered, then thrown away.** htmx ignores the response body on a delete swap, but Weft still renders the component once after the callable runs — so `build` must survive the record being gone, hence the `return unless contact` guard (an empty `<tr>` nobody will see). The trailing `nil` in the callable matters for the same reason: `Hash#delete` returns the deleted record, and a hash returned from a callable merges into the params for that final render. If the callable *raises*, Weft overrides the destructive swap (via `HX-Reswap`) so the error rendering appears where the row was, instead of the row silently vanishing.
 
 ## On the wire
 

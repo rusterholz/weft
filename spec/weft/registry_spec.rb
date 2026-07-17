@@ -6,14 +6,14 @@ RSpec.describe Weft::Registry do
   let(:component_class) do
     Class.new(Weft::Component) do
       def self.name = "StatCard"
-      attribute :status
+      param :status
     end
   end
 
   let(:namespaced_class) do
     Class.new(Weft::Component) do
       def self.name = "Oms::OrderHeader"
-      attribute :order_id
+      param :order_id
     end
   end
 
@@ -65,7 +65,7 @@ RSpec.describe Weft::Registry do
 
       late_class = Class.new(Weft::Component) do
         def self.name = "LateAddition"
-        attribute :x
+        param :x
       end
       registry.register(late_class)
 
@@ -84,12 +84,12 @@ RSpec.describe Weft::Registry do
     it "raises when two routable components resolve to the same path" do
       a = Class.new(Weft::Component) do
         def self.name = "Foo"
-        attribute :x
+        param :x
       end
       b = Class.new(Weft::Component) do
         # strips to "Foo" -> same /_components/foo as `a`
         def self.name = "FooComponent"
-        attribute :y
+        param :y
       end
       registry.register(a)
       registry.register(b)
@@ -113,7 +113,7 @@ RSpec.describe Weft::Registry do
     it "raises when a component and a page claim the same path" do
       comp = Class.new(Weft::Component) do
         def self.name = "Dashboard"
-        attribute :x
+        param :x
         self.component_path = "/dashboard"
       end
       page = Class.new(Weft::Page) { def self.name = "DashboardPage" } # -> /dashboard
@@ -136,7 +136,7 @@ RSpec.describe Weft::Registry do
       end
       clasher = Class.new(Weft::Component) do
         def self.name = "Clasher"
-        attribute :x
+        param :x
         self.component_path = "/_components/live/_stream"
       end
       registry.register(streamer)
@@ -160,12 +160,12 @@ RSpec.describe Weft::Registry do
 
   describe "stale (redefined) class handling" do
     it "drops a superseded class so only the live definition routes (no false collision)" do
-      stub_const("ReloadPanel", Class.new(Weft::Component) { attribute :x })
+      stub_const("ReloadPanel", Class.new(Weft::Component) { param :x })
       registry.register(ReloadPanel)
       original = ReloadPanel
       # Simulate a code-reloader redefining the constant: a new class object
       # takes over the name; the old object lingers in the registry.
-      stub_const("ReloadPanel", Class.new(Weft::Component) { attribute :x })
+      stub_const("ReloadPanel", Class.new(Weft::Component) { param :x })
       registry.register(ReloadPanel)
 
       expect { registry.lookup("/_components/reload_panel") }.not_to raise_error
@@ -190,7 +190,7 @@ RSpec.describe Weft::Registry do
     it "raises for a routable component whose custom path is not a valid route" do
       bad = Class.new(Weft::Component) do
         def self.name = "Bad"
-        attribute :x
+        param :x
         self.component_path = "relative-no-slash"
       end
       registry.register(bad)
@@ -217,7 +217,7 @@ RSpec.describe Weft::Registry do
       Class.new(Weft::Page) do
         def self.name = "OrderPage"
         self.page_path = "/orders/:order_id"
-        attribute :order_id
+        param :order_id
       end
     end
 

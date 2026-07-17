@@ -139,11 +139,11 @@ A component describes its structure in `build`. The Weft-idiomatic shape takes a
 class EventSummary < Weft::Component
   builder_method :event_summary
 
-  attribute :event_id
+  param :event_id
 
   def build(attributes = {})
     super
-    event = EventStore.find(attrs.event_id)
+    event = EventStore.find(params.event_id)
     h3 event.name
     para "#{event.date} — #{event.location}"
   end
@@ -152,9 +152,9 @@ end
 
 **Arguments arrive positionally — always.** When a call site writes `event_summary(event_id: "bbq", class: "compact")`, Arbre collects the arguments and passes them positionally to `build`; the keywords become one trailing hash. Declaring Ruby keyword parameters (`def build(event_id:)`) raises `ArgumentError: wrong number of arguments`. Take the hash.
 
-**`super` is where the hash becomes reality.** In a Weft component, `super` extracts your declared attributes into `attrs`, applies whatever remains as HTML attributes on the wrapper element (that's where `class: "compact"` went), and sets the wrapper's DOM id ([derived from your first attribute](dsl.md#attributes)). Skip `super` and none of that happens — the classic symptom is a component that ignores the `class:` you pass it.
+**`super` is where the hash becomes reality.** In a Weft component, `super` extracts your declared params into `params`, applies whatever remains as HTML attributes on the wrapper element (that's where `class: "compact"` went), and sets the wrapper's DOM id ([derived from your first param](dsl.md#params)). Skip `super` and none of that happens — the classic symptom is a component that ignores the `class:` you pass it.
 
-**Rich objects ride the same hash — pull them out first.** Wire attributes (declared with `attribute`) are for values that travel in URLs. When a call site already holds a rich object, passing it in the hash is fine — just `delete` it before `super` so it doesn't get sprayed onto the wrapper as an HTML attribute:
+**Rich objects ride the same hash — pull them out first.** Wire params (declared with `param`) are for values that travel in URLs. When a call site already holds a rich object, passing it in the hash is fine — just `delete` it before `super` so it doesn't get sprayed onto the wrapper as an HTML attribute:
 
 ```ruby
 class AttendeeRow < Weft::Component
@@ -196,11 +196,11 @@ class EventCard < Weft::Component
   builder_method :event_card
   adds_children_to :@body
 
-  attribute :event_id
+  param :event_id
 
   def build(attributes = {})
     super
-    h3 EventStore.find(attrs.event_id).name   # structure — lands on the wrapper
+    h3 EventStore.find(params.event_id).name   # structure — lands on the wrapper
     @body = div(class: "event-card-body")     # caller content lands in here
   end
 end
@@ -250,7 +250,7 @@ Forms are ordinary Arbre: `form`, `label`, `input`, `select`, `option`, `textare
 
 Two field-level idioms worth knowing:
 
-- **Field names pair with declared attributes.** In a Weft form, an `input name: "answer"` reaches the action callable as `attrs.answer` when the component declares `attribute :answer` — and component attributes that *aren't* form fields need a hidden input to travel. The [tutorial](tutorial.md#7-taking-rsvps) walks through both halves.
+- **Field names pair with declared params.** In a Weft form, an `input name: "answer"` reaches the action callable as `params.answer` when the component declares `param :answer` — and component params that *aren't* form fields need a hidden input to travel. The [tutorial](tutorial.md#7-taking-rsvps) walks through both halves.
 - **Array parameters use the `name[]` convention:** `input type: "checkbox", name: "toppings[]", value: "olives"` — submitted values arrive as an array.
 
 ## Testing components

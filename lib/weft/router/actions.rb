@@ -9,9 +9,9 @@ module Weft
     # `render_error`; the small `render_action_error` wrapper sets the
     # destructive-swap header before delegating.
     #
-    # Depends on Router internals: `resolver`, `filtered_params`,
-    # `handle_redirect`, `apply_trigger_header`, `render_oob_includes`,
-    # `render_error`, `headers`.
+    # Depends on Router internals: `filtered_params`, `handle_redirect`,
+    # `apply_trigger_header`, `render_oob_includes`, `render_error`,
+    # `headers`.
     module Actions
       private
 
@@ -41,36 +41,34 @@ module Weft
       end
 
       def handle_action(action, component_class)
-        resolved_attrs = resolver.resolve(component_class, filtered_params)
-        attrs = Weft::Attributes.new(resolved_attrs)
-
-        returned = action.callable&.call(attrs)
+        resolved_params = Weft::Resolver.resolve(component_class, filtered_params)
+        returned = action.callable&.call(Weft::Params.new(resolved_params))
         return handle_redirect(returned) if returned.is_a?(Weft::Redirect)
 
-        render_action_response(action, component_class, resolved_attrs, returned)
+        render_action_response(action, component_class, resolved_params, returned)
       rescue StandardError => e
-        render_action_error(action, component_class, resolved_attrs || {}, e)
+        render_action_error(action, component_class, resolved_params || {}, e)
       end
 
       # Successive resolution across the component-class boundary. The bag
-      # accumulates the declaring component's resolved attrs plus any hash the
-      # callable returned; the rendered class then runs its OWN resolution pass
-      # over the bag, so only its declared attributes reach the builder splat
-      # (closing the cross-class leak). The bag itself keeps every key so
-      # downstream OOB includes still see callable-returned attrs.
-      def render_action_response(action, component_class, resolved_attrs, returned)
-        bag = returned.is_a?(Hash) ? resolved_attrs.merge(returned) : resolved_attrs
+      # accumulates the declaring component's resolved params plus any hash
+      # the callable returned; the rendered class projects its OWN schema
+      # from the bag at build (render kwargs are pseudo-wire), so only its
+      # declared params enter its bag. The full bag still flows to OOB
+      # includes so callable-returned params reach them.
+      def render_action_response(action, component_class, resolved_params, returned)
+        bag = returned.is_a?(Hash) ? resolved_params.merge(returned) : resolved_params
         apply_trigger_header(component_class)
-        html = action.renders.render(**resolver.resolve(action.renders, bag))
-        html + render_oob_includes(component_class, Weft::Attributes.new(bag), action_name: action.name)
+        html = action.renders.render(**bag)
+        html + render_oob_includes(component_class, Weft::Params.new(bag), action_name: action.name)
       end
 
       # Error handling for actions. Adds HX-Reswap header when the action's
       # swap strategy is destructive (e.g., :delete) so the error fragment
       # renders visibly instead of the element being silently removed.
-      def render_action_error(action, component_class, resolved_attrs, error)
+      def render_action_error(action, component_class, resolved_params, error)
         headers["HX-Reswap"] = "outerHTML" if action.swap == :delete
-        render_error(component_class, resolved_attrs, error)
+        render_error(component_class, resolved_params, error)
       end
     end
   end

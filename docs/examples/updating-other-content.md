@@ -28,13 +28,13 @@ end
 class NewContactForm < Weft::Component
   builder_method :new_contact_form
 
-  attribute :name
-  attribute :email
+  param :name
+  param :email
 
   includes ContactsTable
 
-  performs :add do |attrs|
-    ADDRESS_BOOK << { name: attrs.name, email: attrs.email }
+  performs :add do |params|
+    ADDRESS_BOOK << { name: params.name, email: params.email }
     { name: nil, email: nil }
   end
 
@@ -72,11 +72,11 @@ end
 
 **`includes` declares the relationship once, in the class body.** [`includes ContactsTable`](../dsl.md#includes--companions-in-the-same-response) means: whenever this form responds to an action, render the table too, marked out-of-band. htmx receives one response containing two fragments — the re-rendered form swaps into the form's place as usual, and the table fragment, carrying `hx-swap-oob="true"`, is routed to its own DOM slot by id (`#contacts-table`). One request, one response, two regions updated. This is htmx's out-of-band solution with the response construction, the OOB attribute, and the id bookkeeping all handled for you.
 
-**The included component needs no route.** In this variant `ContactsTable` declares no attributes and no verbs, so it isn't independently addressable — `GET /_components/contacts_table` answers 404 — and that's fine: it renders inside the page and travels inside the form's responses. Companions only need to *render* (see [routing](../routing.md#routable-vs-render-target)).
+**The included component needs no route.** In this variant `ContactsTable` declares no params and no verbs, so it isn't independently addressable — `GET /_components/contacts_table` answers 404 — and that's fine: it renders inside the page and travels inside the form's responses. Companions only need to *render* (see [routing](../routing.md#routable-vs-render-target)).
 
-**The callable resets the form.** An action callable's return value directs the re-render ([the callable contract](../dsl.md#the-callable-contract)): returning a hash merges it into the attrs. Returning `{ name: nil, email: nil }` clears the just-submitted values, so the form comes back empty after each add — htmx's reset-the-form problem solved server-side, with no `hx-on` handler. (It also keeps the component's derived DOM id, which is built from the first attribute's value, stable across renders.)
+**The callable resets the form.** An action callable's return value directs the re-render ([the callable contract](../dsl.md#the-callable-contract)): returning a hash merges it into the params. Returning `{ name: nil, email: nil }` clears the just-submitted values, so the form comes back empty after each add — htmx's reset-the-form problem solved server-side, with no `hx-on` handler. (It also keeps the component's derived DOM id, which is built from the first param's value, stable across renders.)
 
-**Form fields pair with declared attributes.** The form declares `name` and `email` so the submitted fields reach the callable as `attrs.name` and `attrs.email` — the same pairing as every Weft form (covered in depth in [the tutorial](../tutorial.md#7-taking-rsvps)). And since `form(action: :add)` also emits plain `action`/`method` attributes, the add still works without JavaScript; only the tableside update needs htmx.
+**Form fields pair with declared params.** The form declares `name` and `email` so the submitted fields reach the callable as `params.name` and `params.email` — the same pairing as every Weft form (covered in depth in [the tutorial](../tutorial.md#7-taking-rsvps)). And since `form(action: :add)` also emits plain `action`/`method` attributes, the add still works without JavaScript; only the tableside update needs htmx.
 
 ## The decoupled variant
 
@@ -164,6 +164,6 @@ hears the event and issues `GET /_components/contacts_table`, which returns the 
 
 ## Related
 
-- [Click to Edit](click-to-edit.md) — the form-fields-pair-with-attributes pattern this example builds on.
+- [Click to Edit](click-to-edit.md) — the form-fields-pair-with-params pattern this example builds on.
 - [`includes`](../dsl.md#includes--companions-in-the-same-response), [`triggers`](../dsl.md#triggers--announce-to-the-rest-of-the-page), and [`refreshes`](../dsl.md#refreshes--the-client-re-fetches) in the DSL reference.
-- `includes` accepts `on: :action_name` to scope a companion to one action, and a block to map the primary component's attrs onto the companion's — see [the DSL reference](../dsl.md#includes--companions-in-the-same-response).
+- `includes` accepts `on: :action_name` to scope a companion to one action, and a block to map the primary component's params onto the companion's — see [the DSL reference](../dsl.md#includes--companions-in-the-same-response).

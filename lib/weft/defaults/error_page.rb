@@ -8,18 +8,18 @@ module Weft
     class ErrorPage < Weft::Page
       self.page_path = "/_weft/error"
 
-      attribute :exception
-      attribute :request_path
-      attribute :status_code
+      param :exception
+      param :request_path
+      param :status_code
 
       def build(attributes = {})
         attributes[:title] ||= "Error"
         super
         insert_tag(
           Weft::Defaults::ErrorComponent,
-          exception: @attrs.exception,
-          request_path: @attrs.request_path,
-          status_code: @attrs.status_code
+          exception: @params.exception,
+          request_path: @params.request_path,
+          status_code: @params.status_code
         )
       end
     end

@@ -16,11 +16,11 @@ RSpec.describe Weft::Redirect do
   end
 
   describe ".to with Page subclass" do
-    it "resolves the URL from the page path pattern and attrs" do
+    it "resolves the URL from the page path pattern and params" do
       page_class = Class.new(Weft::Page) do
         def self.name = "RedirectTargetPage"
         self.page_path = "/orders/:order_id"
-        attribute :order_id
+        param :order_id
       end
 
       redirect = described_class.to(page_class, order_id: "abc-123")

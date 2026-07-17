@@ -8,8 +8,8 @@ require "active_support/core_ext/string/inflections"
 require "arbre"
 
 require "weft/error"
-require "weft/attributes"
-require "weft/dsl/attributes"
+require "weft/params"
+require "weft/dsl/params"
 require "weft/dsl/recoveries"
 require "weft/dsl/triggers"
 require "weft/dsl/inclusions"
@@ -57,20 +57,20 @@ module Weft
     end
 
     # Convenience wrapper for Weft::Redirect.to.
-    def redirect(target, **attrs)
-      Redirect.to(target, **attrs)
+    def redirect(target, **params)
+      Redirect.to(target, **params)
     end
 
-    # Register a named interaction shorthand. Delegates to Weft::Shorthands.
+    # Register a named interaction preset. Delegates to Weft::Presets.
     #
-    #   Weft.register_shorthand :tooltip, trigger: :hover, swap: :fill
-    def register_shorthand(name, **defaults)
-      Shorthands.register(name, **defaults)
+    #   Weft.register_preset :tooltip, trigger: :hover, swap: :fill
+    def register_preset(name, **defaults)
+      Presets.register(name, **defaults)
     end
 
-    # Look up a registered shorthand by name. Delegates to Weft::Shorthands.
-    def shorthand(name)
-      Shorthands.lookup(name)
+    # Look up a registered preset by name. Delegates to Weft::Presets.
+    def preset(name)
+      Presets.lookup(name)
     end
 
     private
@@ -120,5 +120,5 @@ module Weft
   end
 end
 
-require "weft/shorthands"
+require "weft/presets"
 require "weft/defaults"

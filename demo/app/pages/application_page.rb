@@ -13,7 +13,7 @@ class ApplicationPage < DropshipUI::Page
   # Navbar chrome lives at the app layer (the navbar itself is rendered by
   # ApplicationPage). Tokens like --ds-mono / --ds-border come from the
   # design-system stylesheet registered on DropshipUI::Page.
-  register_css <<~CSS
+  register_inline_css <<~CSS
     .navbar { border-bottom: 1px solid var(--ds-border); }
     .navbar-brand { font-family: var(--ds-mono); font-weight: 700; letter-spacing: -0.5px; }
     .navbar-brand .brand-dot {

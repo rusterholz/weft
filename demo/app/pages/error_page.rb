@@ -6,20 +6,20 @@
 class ErrorPage < ApplicationPage
   self.page_path = "/error"
 
-  # Page-level auto-injected attribute schema. The Router's schema-gated
+  # Page-level auto-injected param schema. The Router's schema-gated
   # injection uses these to know what to populate before rendering.
-  attribute :exception
-  attribute :request_path
-  attribute :status_code
+  param :exception
+  param :request_path
+  param :status_code
 
   def build(attributes = {})
     attributes[:title] ||= "Error"
     super
     insert_tag(
       ErrorComponent,
-      exception: @attrs.exception,
-      request_path: @attrs.request_path,
-      status_code: @attrs.status_code
+      exception: @params.exception,
+      request_path: @params.request_path,
+      status_code: @params.status_code
     )
   end
 end

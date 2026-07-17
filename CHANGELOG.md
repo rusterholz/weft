@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.2.0 (unreleased)
+
+### Breaking changes:
+
+- **`attribute` → `param`, `attrs` → `params`.** The DSL for a component's or page's inputs is renamed. Declare inputs with `param :name` (was `attribute :name`), and read the resolved values through `params` instead of `attrs` (`params.status`, `params[:page]`, `params.to_h`). The block argument to verb declarations — `performs`, `transfers`, `dismisses`, `recovers`, `includes` — is now `params`. Arbre's own HTML tag attributes are unaffected: `build(attributes = {})`, `set_attribute`, and element hashes like `class:` and `data:` keep their names. To migrate, rename `attribute` → `param` and `attrs` → `params` across your components, pages, and verb blocks.
+
+- **Params travel their own channel — in-page param passing is removed.** Components and pages now resolve their declared `param`s directly from the request's wire params (query, path, and body values), at any nesting depth: a component embedded in a page sees the same wire params the page does, so call sites like `orders_panel(status: params.status, page: params.page)` reduce to `orders_panel`. Passing a builder kwarg that names a declared param no longer fills `params` — it renders as a plain HTML attribute, with a one-time warning per class and key (param names can legitimately double as HTML attribute names, so this is not an error). Rich objects handed by the caller keep the existing pattern: pull them out of `attributes` before `super`. Also part of this change:
+  - `params` is resolved when a component is instantiated, so build bodies can read it *before* calling `super` — deriving a page title from a record looked up by param, for example.
+  - `Component.render` / `Page.render` kwargs are now exactly what a request's query string would carry; undeclared keys are ignored instead of becoming HTML attributes on the wrapper element.
+  - `Weft::Context.new` accepts `wire_params:` to simulate request params when rendering outside the Router — the pattern for component specs.
+  - In a plain `Arbre::Context`, components resolve their declared defaults (there is no wire source to read).
+  - `Weft::Resolver#resolve` is now a class method (`Weft::Resolver.resolve`); `Weft::Params.extract_from` is removed.
+
+- **`shorthand` → `preset`; `register_css` → `register_inline_css`.** The named interaction presets — `tooltip:`, `modal:`, `lazy:`, `load_more:`, `infinite_scroll:`, `live_search:`, `tabs:`, `inline_expand:`, and `retry:` — are now registered and looked up as *presets*: `Weft::Shorthands` → `Weft::Presets`, `Weft.register_shorthand` → `Weft.register_preset`, and `Weft.shorthand` → `Weft.preset`. The element kwargs are unchanged — `tooltip:`, `modal:`, `lazy:` and friends still work exactly as before. Separately, `Weft::Page.register_css` → `register_inline_css`, restoring naming parity with `register_stylesheet`. To migrate, rename any custom `register_shorthand` calls to `register_preset`, and `register_css` to `register_inline_css`.
+
 ## v0.1.0 (2026-07-12)
 
 First usable release. Weft is component-oriented hypermedia for Ruby: components declare their structure, their data, and their interactive behaviors, and the framework derives the routing, request handling, and client-side wiring automatically.

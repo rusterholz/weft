@@ -1,20 +1,20 @@
 # The Weft DSL
 
-A Weft component describes its interactive behavior in two layers. **Class-body declarations** — the verbs — state what the component does: it refreshes on a timer, it performs an action, it recovers from an error. **Element kwargs**, used inside `build`, wire individual elements to those behaviors: this button performs the `:cancel` action, this div loads a tooltip on hover. Both layers compile down to auto-generated routes and htmx attributes; you write neither by hand. (The HTML itself — the `build` method and everything inside it — is [Arbre](arbre.md), documented separately.)
+A Weft component describes its interactive behavior in two layers. **Class-body declarations** — the verbs — state what the component does: it refreshes on a timer, it performs an action, it recovers from an error. **Element kwargs**, used inside `build`, wire individual elements to those behaviors: this button performs the `:cancel` action, this div loads a tooltip on hover. Both layers compile down to auto-generated routes and htmx params; you write neither by hand. (The HTML itself — the `build` method and everything inside it — is [Arbre](arbre.md), documented separately.)
 
 ```ruby
 class DeliveryStatus < Weft::Component
-  attribute :delivery_id          # wire state
+  param :delivery_id          # wire state
 
   refreshes every: 5.seconds      # verb: live updates
 
-  performs :cancel do |attrs|     # verb: user-initiated action
-    CancelDelivery.call(Delivery.find(attrs.delivery_id))
+  performs :cancel do |params|     # verb: user-initiated action
+    CancelDelivery.call(Delivery.find(params.delivery_id))
   end
 
   def build(attributes = {})
     super
-    delivery = Delivery.find(attrs.delivery_id)
+    delivery = Delivery.find(params.delivery_id)
     span "Arriving #{delivery.eta.humanize}"
     button "Cancel", action: :cancel    # element kwarg: wires to the verb
   end
@@ -23,7 +23,7 @@ end
 
 **In this document:**
 
-- [Attributes](#attributes)
+- [Params](#params)
 - [Verbs](#verbs)
   - [`refreshes` — the client re-fetches](#refreshes--the-client-re-fetches)
   - [`pushes` — the server sends updates](#pushes--the-server-sends-updates)
@@ -35,31 +35,31 @@ end
   - [`recovers` — declare error behavior](#recovers--declare-error-behavior)
   - [Other class-body declarations](#other-class-body-declarations)
 - [Element kwargs](#element-kwargs): [`action:`](#action), [`navigate:`](#navigate), [`loads:`](#loads), [`trigger:`](#trigger), [`push_url:`](#push_url) — plus the [swap](#swap-values), [trigger](#trigger-values), and [target](#targets) value tables
-- [Shorthands](#shorthands)
+- [Presets](#presets)
 
-## Attributes
-
-```ruby
-attribute :status, default: "active"
-attribute :page, default: 1
-```
-
-Attributes are a component's *wire state* — the values that identify what this particular instance shows, small enough to travel in a URL. When the component renders inside a page, attributes come from the rendering call (`orders_panel(status: "shipped")`); when it renders over the wire — a refresh, an action, an SSE push — they come from request parameters. Either way, `build` and action callables see the same resolved values.
-
-Wire values arrive as strings, so Weft coerces them based on each attribute's default: an `Integer` default coerces with `to_i`, a `Float` with `to_f`, and a `true`/`false` default maps `"true"` and `"1"` to `true` (anything else to `false`). Attributes with other defaults (strings, `nil`) pass through untouched. A `type:` kwarg is accepted on `attribute` but reserved for future use — today, the default *is* the type declaration.
-
-Inside the component, `attrs` returns the resolved values with method-style access:
+## Params
 
 ```ruby
-attrs.status      # => "shipped"
-attrs.page        # => 2 (an Integer — coerced)
-attrs[:status]    # explicit hash-style access
-attrs.to_h        # the underlying hash
+param :status, default: "active"
+param :page, default: 1
 ```
 
-Declared attribute names always win over hash methods — if you declare `attribute :count`, `attrs.count` is your value, not `Hash#count`. For anything not declared, the hash API is available directly on `attrs`.
+Params are a component's *wire state* — the values that identify what this particular instance shows, small enough to travel in a URL. When the component renders inside a page, params come from the rendering call (`orders_panel(status: "shipped")`); when it renders over the wire — a refresh, an action, an SSE push — they come from request parameters. Either way, `build` and action callables see the same resolved values.
 
-Declaring attributes has a routing consequence: a component with attributes (or any verb below) is considered independently addressable and gets its own route. See [Routing](routing.md).
+Wire values arrive as strings, so Weft coerces them based on each param's default: an `Integer` default coerces with `to_i`, a `Float` with `to_f`, and a `true`/`false` default maps `"true"` and `"1"` to `true` (anything else to `false`). Params with other defaults (strings, `nil`) pass through untouched. A `type:` kwarg is accepted on `param` but reserved for future use — today, the default *is* the type declaration.
+
+Inside the component, `params` returns the resolved values with method-style access:
+
+```ruby
+params.status      # => "shipped"
+params.page        # => 2 (an Integer — coerced)
+params[:status]    # explicit hash-style access
+params.to_h        # the underlying hash
+```
+
+Declared param names always win over hash methods — if you declare `param :count`, `params.count` is your value, not `Hash#count`. For anything not declared, the hash API is available directly on `params`.
+
+Declaring params has a routing consequence: a component with params (or any verb below) is considered independently addressable and gets its own route. See [Routing](routing.md).
 
 ## Verbs
 
@@ -84,7 +84,7 @@ Intervals count in seconds — an integer, a float, or an ActiveSupport duration
 pushes every: 5.seconds
 ```
 
-Where `refreshes` polls, `pushes` streams: the Router auto-generates an SSE endpoint for the component (at `<component path>/_stream` — see [Routing](routing.md)), and the component renders with the htmx SSE attributes to connect to it. On the declared interval — seconds, fractional or whole, with the same 1ms floor as `refreshes` — the server re-renders the component and pushes the result down the open connection.
+Where `refreshes` polls, `pushes` streams: the Router auto-generates an SSE endpoint for the component (at `<component path>/_stream` — see [Routing](routing.md)), and the component renders with the htmx SSE params to connect to it. On the declared interval — seconds, fractional or whole, with the same 1ms floor as `refreshes` — the server re-renders the component and pushes the result down the open connection.
 
 A new subscriber receives an immediate snapshot frame, then the regular cadence. Pushed frames swap into the component's *interior* (`innerHTML`) — the wrapper element holds the SSE connection, so it must persist across updates.
 
@@ -93,8 +93,8 @@ Pages include the htmx SSE extension script automatically when any component dec
 ### `performs` — user-initiated actions
 
 ```ruby
-performs :advance do |attrs|
-  order = Oms::Order.find(attrs.order_id)
+performs :advance do |params|
+  order = Oms::Order.find(params.order_id)
   Oms::AdvanceOrder.call(order)
 end
 ```
@@ -104,7 +104,7 @@ Declares an action: the Router generates a route for it, and elements wire to it
 The full signature:
 
 ```ruby
-performs :name, method: :post, swap: :outer_html, target: nil do |attrs| ... end
+performs :name, method: :post, swap: :outer_html, target: nil do |params| ... end
 ```
 
 - **`method:`** — the HTTP method (default `:post`). A *named* action routes at `<component path>/<name>`; a *nameless* one (`performs method: :delete do ... end`) routes at the component's own path, distinguished by method. A nameless GET action is special: it intercepts the component's own render route, running the callable before every over-the-wire render.
@@ -113,39 +113,39 @@ performs :name, method: :post, swap: :outer_html, target: nil do |attrs| ... end
 
 ### The callable contract
 
-Action callables receive one argument — the component's resolved `attrs` — and their return value directs what happens next:
+Action callables receive one argument — the component's resolved `params` — and their return value directs what happens next:
 
-- **`nil`** (or any ignored value): re-render with the original attrs. The common case — the callable did its side effect; the fresh render reflects it.
-- **a `Hash`**: merged into the attrs (returned keys win), and the merged set drives the re-render. Use this to change state on the way through: `performs :filter do |attrs| { page: 1 } end`.
+- **`nil`** (or any ignored value): re-render with the original params. The common case — the callable did its side effect; the fresh render reflects it.
+- **a `Hash`**: merged into the params (returned keys win), and the merged set drives the re-render. Use this to change state on the way through: `performs :filter do |params| { page: 1 } end`.
 - **a `Weft::Redirect`**: navigate away instead of re-rendering. Build one with `Weft.redirect`:
 
 ```ruby
-performs :create do |attrs|
-  order = Oms::CreateOrder.call(attrs.to_h)
+performs :create do |params|
+  order = Oms::CreateOrder.call(params.to_h)
   Weft.redirect(OrderDetailPage, order_id: order.id)
 end
 ```
 
-`Weft.redirect` takes a `Weft::Page` subclass plus attrs (interpolated into the page's path pattern), or a plain URL string. The Router handles transport: htmx requests get an `HX-Redirect` header, traditional form submissions get a 302.
+`Weft.redirect` takes a `Weft::Page` subclass plus params (interpolated into the page's path pattern), or a plain URL string. The Router handles transport: htmx requests get an `HX-Redirect` header, traditional form submissions get a 302.
 
 If the callable raises, the error walks the component's recovery chain — see [Error handling](error-handling.md).
 
 ### `transfers` — actions that render something else
 
 ```ruby
-transfers :edit, to: EditableOrderHeader do |attrs|
+transfers :edit, to: EditableOrderHeader do |params|
   { mode: "full" }
 end
 ```
 
-Identical to `performs` in signature and contract, except the response renders the `to:` component instead of the declaring one — for actions whose natural result is a different piece of UI (a read-only header becoming an edit form). The merged attrs feed the target component. The target only needs to *render*; it does not need its own route (see [routability vs. render targets](routing.md#routable-vs-render-target)).
+Identical to `performs` in signature and contract, except the response renders the `to:` component instead of the declaring one — for actions whose natural result is a different piece of UI (a read-only header becoming an edit form). The merged params feed the target component. The target only needs to *render*; it does not need its own route (see [routability vs. render targets](routing.md#routable-vs-render-target)).
 
 ### `dismisses` — remove from the DOM
 
 ```ruby
 dismisses :close                        # no side effects
-dismisses :archive do |attrs|           # with side effects
-  Item.find(attrs.item_id).archive!
+dismisses :archive do |params|           # with side effects
+  Item.find(params.item_id).archive!
 end
 ```
 
@@ -164,25 +164,25 @@ Every action response from this component carries the named event in its `HX-Tri
 ```ruby
 includes Oms::OrderHeader                     # alongside every response
 includes Oms::OrderHeader, on: :advance       # only for the :advance action
-includes Oms::OrderHeader do |attrs|          # with explicit attr mapping
-  { order_id: attrs.order_id, compact: true }
+includes Oms::OrderHeader do |params|          # with explicit param mapping
+  { order_id: params.order_id, compact: true }
 end
 ```
 
 Sometimes one interaction changes two things: completing a shipment updates the shipment card *and* the order header above it. `includes` declares that relationship — whenever this component responds to an action or pushes an SSE frame, the included component renders too, marked out-of-band (`hx-swap-oob`) so htmx routes it to its own DOM slot by id.
 
-Without a block, the included component resolves its attributes from the same request parameters. With a block, the block receives the primary component's resolved attrs and returns the wire attrs for the included one. With `on:`, the inclusion applies only to that named action (and not to SSE pushes; unfiltered inclusions apply to both).
+Without a block, the included component resolves its params from the same request parameters. With a block, the block receives the primary component's resolved params and returns the wire params for the included one. With `on:`, the inclusion applies only to that named action (and not to SSE pushes; unfiltered inclusions apply to both).
 
 ### `recovers` — declare error behavior
 
 ```ruby
-recovers from: Weft::Unprocessable do |attrs, error|
+recovers from: Weft::Unprocessable do |params, error|
   { error_message: error.message }
 end
 recovers from: Weft::Unauthorized, with: LoginPage
 ```
 
-Declares how this component or page responds when a render or action raises. `from:` matches by exception class, HTTP status code, status range, or an array of those; `with:` names what renders instead. The gem ships default recoveries, so this is opt-in refinement. The complete model — matching, chain order, auto-injected attributes — is in [Error handling](error-handling.md).
+Declares how this component or page responds when a render or action raises. `from:` matches by exception class, HTTP status code, status range, or an array of those; `with:` names what renders instead. The gem ships default recoveries, so this is opt-in refinement. The complete model — matching, chain order, auto-injected params — is in [Error handling](error-handling.md).
 
 ### Other class-body declarations
 
@@ -206,7 +206,7 @@ The leading `@` in the symbol is required, as a reminder that *you* must assign 
 
 ## Element kwargs
 
-Inside `build` (and inside blocks nested under it), any element accepts Weft kwargs alongside its normal HTML attributes. Weft intercepts them at render time and expands them into htmx wiring.
+Inside `build` (and inside blocks nested under it), any element accepts Weft kwargs alongside its normal HTML params. Weft intercepts them at render time and expands them into htmx wiring.
 
 ### `action:`
 
@@ -214,9 +214,9 @@ Inside `build` (and inside blocks nested under it), any element accepts Weft kwa
 button "Advance", action: :advance, class: "btn btn-primary"
 ```
 
-Wires the element to a declared `performs`/`transfers` action on the nearest enclosing component that declares it. Expands to the full htmx set: the request (`hx-post` etc. to the action's route), the target (the component's own element, unless the action declared `target:`), the swap, and the component's current attrs as the payload (`hx-vals`).
+Wires the element to a declared `performs`/`transfers` action on the nearest enclosing component that declares it. Expands to the full htmx set: the request (`hx-post` etc. to the action's route), the target (the component's own element, unless the action declared `target:`), the swap, and the component's current params as the payload (`hx-vals`).
 
-On a `form` element, `action:` additionally emits plain HTML `action` and `method` attributes, so the form still submits without JavaScript — and the field values themselves become the payload:
+On a `form` element, `action:` additionally emits plain HTML `action` and `method` params, so the form still submits without JavaScript — and the field values themselves become the payload:
 
 ```ruby
 form(action: :create) do
@@ -228,10 +228,10 @@ end
 ### `navigate:`
 
 ```ruby
-button "Next", navigate: { page: attrs.page + 1 }
+button "Next", navigate: { page: params.page + 1 }
 ```
 
-Re-fetches the enclosing component with some of its attrs changed — a GET to the component's own route with the overridden values, replacing the component. This is the idiom for filters, sorting, and pagination: same component, different wire state. Pass `nil` to drop an attr from the URL. Pairs naturally with `push_url:` when the new state should be reflected in the address bar.
+Re-fetches the enclosing component with some of its params changed — a GET to the component's own route with the overridden values, replacing the component. This is the idiom for filters, sorting, and pagination: same component, different wire state. Pass `nil` to drop a param from the URL. Pairs naturally with `push_url:` when the new state should be reflected in the address bar.
 
 ### `loads:`
 
@@ -241,7 +241,7 @@ button "Show manifest", loads: Logistics::ShipmentManifest,
                         swap: :fill, target: "#detail-pane"
 ```
 
-Loads a *different* component into a chosen DOM location on click (or whatever `trigger:` you add). `swap:` and `target:` are required — `loads:` is the fully-explicit primitive underneath the [shorthands](#shorthands), which exist to fill those in for common patterns. `with:` supplies the target component's wire attrs; omitted, it defaults to the enclosing component's current attrs.
+Loads a *different* component into a chosen DOM location on click (or whatever `trigger:` you add). `swap:` and `target:` are required — `loads:` is the fully-explicit primitive underneath the [presets](#presets), which exist to fill those in for common patterns. `with:` supplies the target component's wire params; omitted, it defaults to the enclosing component's current params.
 
 ### `trigger:`
 
@@ -250,7 +250,7 @@ div(loads: Preview, with: { id: id }, swap: :fill, target: :self,
     trigger: :visible)
 ```
 
-Sets when the element's request fires. Accepts the semantic symbols in the [trigger table](#trigger-values) or any raw [htmx trigger string](https://htmx.org/attributes/hx-trigger/) for full control (`"mouseenter once from:closest .card"`). Works standalone or alongside `action:` / `navigate:` / `loads:` / a shorthand.
+Sets when the element's request fires. Accepts the semantic symbols in the [trigger table](#trigger-values) or any raw [htmx trigger string](https://htmx.org/params/hx-trigger/) for full control (`"mouseenter once from:closest .card"`). Works standalone or alongside `action:` / `navigate:` / `loads:` / a preset.
 
 ### `push_url:`
 
@@ -288,9 +288,9 @@ Weft accepts semantic swap names (preferred), the htmx-native names as symbols, 
 
 Wherever a `target:` is accepted: `:self` targets the element itself, a string is a CSS selector passed through to htmx (including forms like `"closest tr"`), and an Arbre element reference targets that element by its id. In verb declarations (`performs`/`transfers`), only the selector-string form applies — `:self` and element references describe elements, which don't exist yet at class-declaration time.
 
-## Shorthands
+## Presets
 
-Shorthands are named presets over the `loads:` machinery — one kwarg that says what the interaction *is*, with the trigger and swap details baked in:
+Presets bundle the `loads:` machinery into named interaction patterns — one kwarg that says what the interaction *is*, with the trigger and swap details baked in:
 
 ```ruby
 button "▸", inline_expand: Oms::OrderInlineDetail,
@@ -298,9 +298,9 @@ button "▸", inline_expand: Oms::OrderInlineDetail,
             target: "closest tr"
 ```
 
-The kwarg's value is the component class to load (`with:` supplies its attrs, same as `loads:`). The gem ships these presets:
+The kwarg's value is the component class to load (`with:` supplies its params, same as `loads:`). The gem ships these presets:
 
-| Shorthand | Trigger | Swap | Target | Example |
+| Preset | Trigger | Swap | Target | Example |
 | --- | --- | --- | --- | --- |
 | `tooltip:` | `:hover` | `:fill` | supply `target:` | [Tooltip](examples/tooltip.md) |
 | `inline_expand:` | `:click` | `:after` | supply `target:` | [Inline Expansion](examples/inline-expansion.md) |
@@ -314,16 +314,16 @@ The kwarg's value is the component class to load (`with:` supplies its attrs, sa
 
 Where the table says "supply `target:`", the preset has no universally-right answer for where the content lands, so the call site provides it (omitting it raises immediately, with a message saying so). Explicit `swap:` and `target:` kwargs always override the preset.
 
-`retry:` is the odd one out: its value is a **URL string** rather than a component class — the failing component's own GET URL, as injected into error components via the `:retry_url` recovery attribute (see [Error handling](error-handling.md)). Its baked-in target replaces the enclosing `.weft-error` box with the freshly-rendered component:
+`retry:` is the odd one out: its value is a **URL string** rather than a component class — the failing component's own GET URL, as injected into error components via the `:retry_url` recovery param (see [Error handling](error-handling.md)). Its baked-in target replaces the enclosing `.weft-error` box with the freshly-rendered component:
 
 ```ruby
-button "Retry", retry: attrs.retry_url
+button "Retry", retry: params.retry_url
 ```
 
 ### Registering your own
 
 ```ruby
-Weft.register_shorthand :paginate, trigger: :click, swap: :replace
+Weft.register_preset :paginate, trigger: :click, swap: :replace
 ```
 
-A registration names the preset and provides any of `trigger:`, `swap:`, and `target:`. From then on, `paginate:` works as an element kwarg everywhere — same machinery, your vocabulary. Naming interactions after their intent keeps call sites readable: `button "Next", paginate: OrdersPanel, with: { page: 2 }` says more than the four htmx attributes it expands to.
+A registration names the preset and provides any of `trigger:`, `swap:`, and `target:`. From then on, `paginate:` works as an element kwarg everywhere — same machinery, your vocabulary. Naming interactions after their intent keeps call sites readable: `button "Next", paginate: OrdersPanel, with: { page: 2 }` says more than the four htmx params it expands to.

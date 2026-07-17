@@ -12,8 +12,7 @@ RSpec.describe Delivery::DriverDetailPage, type: :component do
 
   def rendered
     klass = described_class
-    id = driver.id
-    render_weft_html { insert_tag(klass, driver_id: id) }
+    render_weft_html(wire: { "driver_id" => driver.id }) { insert_tag(klass) }
   end
 
   it "renders the driver's three sections" do

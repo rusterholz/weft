@@ -1,20 +1,20 @@
 # frozen_string_literal: true
 
 RSpec.describe Weft::Resolver do
-  subject(:resolver) { described_class.new }
+  subject(:resolver) { described_class }
 
   let(:component_class) do
     Class.new(Weft::Component) do
       def self.name = "TestComponent"
-      attribute :status, default: "pending"
-      attribute :count, default: 0
-      attribute :rate, default: 1.5
-      attribute :active, default: true
-      attribute :label
+      param :status, default: "pending"
+      param :count, default: 0
+      param :rate, default: 1.5
+      param :active, default: true
+      param :label
     end
   end
 
-  describe "#resolve" do
+  describe ".resolve" do
     it "maps string params to attributes using declared defaults for coercion" do
       result = resolver.resolve(component_class, "status" => "shipped", "count" => "42")
 
@@ -40,7 +40,7 @@ RSpec.describe Weft::Resolver do
     it "coerces booleans from string params when default is false" do
       klass = Class.new(Weft::Component) do
         def self.name = "BoolTest"
-        attribute :disabled, default: false
+        param :disabled, default: false
       end
 
       result = resolver.resolve(klass, "disabled" => "true")
@@ -60,7 +60,7 @@ RSpec.describe Weft::Resolver do
     it "passes Hash values through without coercion" do
       klass = Class.new(Weft::Component) do
         def self.name = "HashTest"
-        attribute :items
+        param :items
       end
 
       result = resolver.resolve(klass, "items" => { "widget" => "3", "gadget" => "1" })
@@ -70,7 +70,7 @@ RSpec.describe Weft::Resolver do
     it "passes Array values through without coercion" do
       klass = Class.new(Weft::Component) do
         def self.name = "ArrayTest"
-        attribute :tags
+        param :tags
       end
 
       result = resolver.resolve(klass, "tags" => %w[a b c])

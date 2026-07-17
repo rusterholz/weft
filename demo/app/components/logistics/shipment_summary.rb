@@ -7,11 +7,11 @@ module Logistics
   class ShipmentSummary < Weft::Component
     builder_method :shipment_summary
 
-    attribute :shipment_id
+    param :shipment_id
 
     def build(attributes = {})
       super
-      shipment = Logistics::Shipment.find(attrs.shipment_id)
+      shipment = Logistics::Shipment.find(params.shipment_id)
       order = Oms::Order.find_by(id: shipment.order_id)
 
       if order.nil?

@@ -4,7 +4,7 @@ module Delivery
   class DriverHeaderSection < Weft::Component
     builder_method :driver_header_section
 
-    attribute :driver_id
+    param :driver_id
 
     refreshes on: "delivery-completed"
 
@@ -12,7 +12,7 @@ module Delivery
       super
       add_class "page-header d-flex justify-content-between align-items-center"
 
-      driver = Delivery::Driver.find(attrs.driver_id)
+      driver = Delivery::Driver.find(params.driver_id)
 
       h1 do
         text_node "#{driver.name} "

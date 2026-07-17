@@ -4,10 +4,10 @@ module Logistics
   class ShipmentDetailPage < ::ApplicationPage
     self.page_path = "/shipments/:shipment_id"
 
-    attribute :shipment_id
+    param :shipment_id
 
     def build(attributes = {})
-      shipment = Logistics::Shipment.includes(:warehouse).find(attributes[:shipment_id])
+      shipment = Logistics::Shipment.includes(:warehouse).find(params.shipment_id)
       attributes[:title] ||= "Shipment #{shipment.id[..7]}"
       attributes[:current_path] = "/shipments"
       super

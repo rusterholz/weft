@@ -8,7 +8,7 @@ RSpec.describe Logistics::ShipmentManifest, type: :component do
 
   it "renders an empty-state message when there are no items" do
     shipment = Logistics::Shipment.create!(order_id: order.id, warehouse: warehouse, status: "planned", items: [])
-    html = render_weft_html { shipment_manifest(shipment_id: shipment.id) }
+    html = render_weft_html(wire: { "shipment_id" => shipment.id }) { shipment_manifest }
     expect(html).to include("No items in this shipment.")
   end
 
@@ -17,7 +17,7 @@ RSpec.describe Logistics::ShipmentManifest, type: :component do
       order_id: order.id, warehouse: warehouse, status: "planned",
       items: [{ "type" => "widget", "qty" => 3 }, { "type" => "gadget", "qty" => 1 }]
     )
-    html = render_weft_html { shipment_manifest(shipment_id: shipment.id) }
+    html = render_weft_html(wire: { "shipment_id" => shipment.id }) { shipment_manifest }
     expect(html).to include("widget")
     expect(html).to include("gadget")
     expect(html).to match(/×\s*3/)

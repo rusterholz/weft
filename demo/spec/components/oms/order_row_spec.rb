@@ -35,8 +35,8 @@ RSpec.describe Oms::OrderRow, type: :component do
     expect(html).to include("<td class=\"mono\">1</td>")
   end
 
-  it "includes an inline expand button wired via the inline_expand: shorthand" do
-    html = render_weft_html(order: order) { order_row order: order }
+  it "includes an inline expand button wired via the inline_expand: preset" do
+    html = render_weft_html({ order: order }) { order_row order: order }
     expect(html).to include("hx-get=\"/_components/oms/order_inline_detail?order_id=#{order.id}\"")
     expect(html).to include('hx-swap="afterend"')
     expect(html).to include('hx-trigger="click"')

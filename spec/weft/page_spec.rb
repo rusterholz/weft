@@ -257,11 +257,11 @@ RSpec.describe Weft::Page do
   end
 
   describe "page_path" do
-    it "resolves a parameterized path by interpolating attrs" do
+    it "resolves a parameterized path by interpolating params" do
       page_class = Class.new(described_class) do
         def self.name = "OrderDetailPage"
         self.page_path = "/orders/:order_id"
-        attribute :order_id
+        param :order_id
       end
 
       expect(page_class.resolve_page_path(order_id: "42")).to eq("/orders/42")
@@ -303,7 +303,7 @@ RSpec.describe Weft::Page do
     it "raises when parameterized page omits page_path" do
       page_class = Class.new(described_class) do
         def self.name = "MissingPathPage"
-        attribute :order_id
+        param :order_id
       end
 
       expect { page_class.resolve_page_path }.to raise_error(Weft::InvalidDefinition, /page_path/)
@@ -316,27 +316,27 @@ RSpec.describe Weft::Page do
       end
       child = Class.new(parent) do
         def self.name = "ChildPage"
-        attribute :id
+        param :id
       end
 
       expect(child.resolve_page_path(id: "7")).to eq("/parent/7")
     end
   end
 
-  describe "attribute DSL on Page" do
+  describe "param DSL on Page" do
     it "declares and resolves attributes in build" do
       page_class = Class.new(described_class) do
         def self.name = "AttrPage"
         self.page_path = "/test/:item_id"
-        attribute :item_id
+        param :item_id
 
         def build(attributes = {})
           super
-          div { text_node "item=#{attrs.item_id}" }
+          div { text_node "item=#{params.item_id}" }
         end
       end
 
-      html = Weft::Context.new({}, nil) { insert_tag(page_class, item_id: "99") }.to_s
+      html = Weft::Context.new({}, nil, wire_params: { "item_id" => "99" }) { insert_tag(page_class) }.to_s
 
       expect(html).to include("item=99")
     end
@@ -361,11 +361,11 @@ RSpec.describe Weft::Page do
     end
   end
 
-  describe "register_css" do
+  describe "register_inline_css" do
     it "emits the registered inline CSS inside a <style> tag in the head" do
       page_class = Class.new(described_class) do
         def self.name = "InlineStyledPage"
-        register_css ".foo { color: red; }"
+        register_inline_css ".foo { color: red; }"
       end
 
       html = Arbre::Context.new { insert_tag(page_class) }.to_s
@@ -375,8 +375,8 @@ RSpec.describe Weft::Page do
     it "emits each entry as its own <style> tag (source attribution stays visible)" do
       page_class = Class.new(described_class) do
         def self.name = "MultiStyledPage"
-        register_css ".one { color: red; }"
-        register_css ".two { color: blue; }"
+        register_inline_css ".one { color: red; }"
+        register_inline_css ".two { color: blue; }"
       end
 
       html = Arbre::Context.new { insert_tag(page_class) }.to_s
@@ -387,11 +387,11 @@ RSpec.describe Weft::Page do
     it "inherits parent CSS and appends child CSS (composable, not replacing)" do
       parent = Class.new(described_class) do
         def self.name = "BaseStyledPage"
-        register_css ".base { color: red; }"
+        register_inline_css ".base { color: red; }"
       end
       child = Class.new(parent) do
         def self.name = "ChildStyledPage"
-        register_css ".child { color: blue; }"
+        register_inline_css ".child { color: blue; }"
       end
 
       html = Arbre::Context.new { insert_tag(child) }.to_s
@@ -402,7 +402,7 @@ RSpec.describe Weft::Page do
     it "does not strip or escape the CSS (it goes in literally)" do
       page_class = Class.new(described_class) do
         def self.name = "RawCssPage"
-        register_css "/* comment */ a > b::after { content: '>'; }"
+        register_inline_css "/* comment */ a > b::after { content: '>'; }"
       end
 
       html = Arbre::Context.new { insert_tag(page_class) }.to_s
@@ -522,45 +522,45 @@ RSpec.describe Weft::Page do
   end
 
   describe ".redirect_url" do
-    it "interpolates :param segments from attrs" do
+    it "interpolates :param segments from params" do
       page = Class.new(described_class) do
         def self.name = "OrderDetailPage"
         self.page_path = "/orders/:order_id"
-        attribute :order_id
+        param :order_id
       end
 
       expect(page.redirect_url(order_id: 42)).to eq("/orders/42")
     end
 
-    it "appends declared non-param attrs as query string" do
+    it "appends declared non-param params as query string" do
       page = Class.new(described_class) do
         def self.name = "OrderDetailPage"
         self.page_path = "/orders/:order_id"
-        attribute :order_id
-        attribute :highlight_section
+        param :order_id
+        param :highlight_section
       end
 
       expect(page.redirect_url(order_id: 42, highlight_section: "items")).
         to eq("/orders/42?highlight_section=items")
     end
 
-    it "discards attrs not in the page's declared schema" do
+    it "discards params not in the page's declared schema" do
       page = Class.new(described_class) do
         def self.name = "OrderDetailPage"
         self.page_path = "/orders/:order_id"
-        attribute :order_id
+        param :order_id
       end
 
       url = page.redirect_url(order_id: 42, junk: "leak", another: "x")
       expect(url).to eq("/orders/42")
     end
 
-    it "omits nil-valued attrs from the query string" do
+    it "omits nil-valued params from the query string" do
       page = Class.new(described_class) do
         def self.name = "OrderDetailPage"
         self.page_path = "/orders/:order_id"
-        attribute :order_id
-        attribute :highlight_section
+        param :order_id
+        param :highlight_section
       end
 
       expect(page.redirect_url(order_id: 42, highlight_section: nil)).
@@ -571,8 +571,8 @@ RSpec.describe Weft::Page do
       page = Class.new(described_class) do
         def self.name = "OrderDetailPage"
         self.page_path = "/orders/:order_id"
-        attribute :order_id
-        attribute :note
+        param :order_id
+        param :note
       end
 
       expect(page.redirect_url(order_id: 42, note: "hello world")).

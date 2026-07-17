@@ -4,14 +4,14 @@ require "spec_helper"
 
 # The app-level error component (wired via Weft.configuration.error_component)
 # models the user-extension pattern: it restyles the error box as a DropshipUI
-# content-card but renders the retry control through the gem's :retry shorthand,
+# content-card but renders the retry control through the gem's :retry preset,
 # so it never hand-writes htmx.
 RSpec.describe ErrorComponent, type: :component do
   def render_error(**attrs)
-    render_weft_html { insert_tag(ErrorComponent, **attrs) }
+    render_weft_html(wire: attrs) { insert_tag(ErrorComponent) }
   end
 
-  it "renders the retry button via the :retry shorthand" do
+  it "renders the retry button via the :retry preset" do
     html = render_error(retry_url: "/_components/oms/order_row?order_id=5", status_code: 500)
 
     expect(html).to include("Retry")

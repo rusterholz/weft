@@ -6,7 +6,7 @@ module Oms
   class OrderInlineDetail < Weft::Component
     builder_method :order_inline_detail
 
-    attribute :order_id
+    param :order_id
 
     dismisses :close
 
@@ -18,7 +18,7 @@ module Oms
       super
       add_class "order-detail"
 
-      order = Oms::Order.includes(:line_items).find(attrs.order_id)
+      order = Oms::Order.includes(:line_items).find(params.order_id)
       shipments = Logistics::Shipment.for_order(order.id).includes(:warehouse)
 
       td(colspan: "7", style: "background:#f8fafc; padding:1rem 1.5rem") do

@@ -3,8 +3,8 @@
 module DropshipUI
   # Pagination widget for any panel that lists pageable records.
   # Renders offset text ("26–50 of 120") plus Prev / Page N of M / Next
-  # buttons. The buttons use the demo's `:paginate` shorthand (registered
-  # in config/shorthands.rb), which expands to htmx attrs that load the
+  # buttons. The buttons use the demo's `:paginate` preset (registered
+  # in config/presets.rb), which expands to htmx attrs that load the
   # caller's target_class into the target_id selector.
   #
   # Usage from a paneled component:
@@ -12,7 +12,7 @@ module DropshipUI
   #     page_num: page_num, per_page: PER_PAGE, total: total,
   #     target_class: self.class, target_id: weft_id,
   #     target_page_class: OrdersPage,           # for push_url derivation
-  #     extra_params: { status: attrs.status }   # preserved across pages
+  #     extra_params: { status: params.status }   # preserved across pages
   #   )
   class Pager < Weft::Component
     builder_method :pager

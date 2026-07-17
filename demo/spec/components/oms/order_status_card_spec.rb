@@ -19,10 +19,10 @@ RSpec.describe Oms::OrderStatusCard, type: :component do
     expect(component.to_s).to include("border-shipped")
   end
 
-  it "includes auto-generated refresh attributes" do
-    html = render_weft_html { order_status_card status: "submitted" }
+  it "includes auto-generated refresh attributes preserving the wire status" do
+    html = render_weft_html(wire: { "status" => "submitted" }) { order_status_card }
     expect(html).to include('hx-trigger="every 10s"')
-    expect(html).to include('hx-get="/_components/oms/order_status_card?')
+    expect(html).to include('hx-get="/_components/oms/order_status_card?status=submitted"')
     expect(html).to include('hx-swap="outerHTML"')
   end
 end

@@ -4,18 +4,18 @@ module Oms
   class OrderDetailPage < ::ApplicationPage
     self.page_path = "/orders/:order_id"
 
-    attribute :order_id
+    param :order_id
 
     def build(attributes = {})
-      order = Oms::Order.includes(:line_items).find(attributes[:order_id])
+      order = Oms::Order.includes(:line_items).find(params.order_id)
       attributes[:title] ||= "Order #{order.id[..7]}"
       attributes[:current_path] = "/orders"
       super
 
-      order_header(order_id: order.id)
+      order_header
       render_details_card(order)
       render_line_items_card(order)
-      shipments_card(order_id: order.id) if Logistics::Shipment.for_order(order.id).any?
+      shipments_card if Logistics::Shipment.for_order(order.id).any?
     end
 
     private

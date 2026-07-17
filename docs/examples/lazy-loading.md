@@ -14,14 +14,14 @@ QUARTERLY_REVENUE = {
 class RevenueTable < Weft::Component
   builder_method :revenue_table
 
-  attribute :year, default: 2025
+  param :year, default: 2025
 
   def build(attributes = {})
     super
     table do
       thead { tr { th "Quarter"; th "Revenue" } }
       tbody do
-        QUARTERLY_REVENUE.fetch(attrs.year).each do |quarter, amount|
+        QUARTERLY_REVENUE.fetch(params.year).each do |quarter, amount|
           tr { td quarter; td amount }
         end
       end
@@ -32,15 +32,15 @@ end
 class AnnualReport < Weft::Component
   builder_method :annual_report
 
-  attribute :year, default: 2025
+  param :year, default: 2025
 
   def build(attributes = {})
     super
-    h2 "#{attrs.year} annual report"
+    h2 "#{params.year} annual report"
     para "Commentary, highlights, and everything else the reader scrolls through " \
          "before the numbers. The revenue table below is expensive to produce, " \
          "so it loads only when it comes into view."
-    div lazy: RevenueTable, with: { year: attrs.year } do
+    div lazy: RevenueTable, with: { year: params.year } do
       para "Loading revenue…"
     end
   end
@@ -51,13 +51,13 @@ end
 
 ## How it works
 
-**The placeholder is an ordinary element with one extra kwarg.** [`lazy:`](../dsl.md#shorthands) is a preset over the [`loads:`](../dsl.md#loads) machinery: trigger `:visible`, swap `:fill`, target `:self`. When the div scrolls into view, fetch `RevenueTable` and swap it into the div's interior. Because trigger, swap, *and* target all have an obvious right answer here, the call site needs nothing beyond the component class and its attrs.
+**The placeholder is an ordinary element with one extra kwarg.** [`lazy:`](../dsl.md#presets) is a preset over the [`loads:`](../dsl.md#loads) machinery: trigger `:visible`, swap `:fill`, target `:self`. When the div scrolls into view, fetch `RevenueTable` and swap it into the div's interior. Because trigger, swap, *and* target all have an obvious right answer here, the call site needs nothing beyond the component class and its params.
 
 **The div's children are the loading state.** Because the swap is `:fill` (`innerHTML`), the placeholder element itself survives; only its contents — the "Loading revenue…" paragraph — are replaced by the fetched component. Whatever you put in the block is what users see until the content arrives.
 
 **`:visible` means once.** The semantic trigger expands to htmx's `revealed`, which fires a single time when the element first enters the viewport. The wrapper keeps its wiring after the swap, but no re-fetch loop follows.
 
-**`with:` passes the wire state along.** The placeholder hands its own `year` down to the loaded component (`with: { year: attrs.year }`), and the value travels in the URL — visible below. If you omit `with:`, the enclosing component's attrs are passed by default.
+**`with:` passes the wire state along.** The placeholder hands its own `year` down to the loaded component (`with: { year: params.year }`), and the value travels in the URL — visible below. If you omit `with:`, the enclosing component's params are passed by default.
 
 ## On the wire
 
@@ -93,4 +93,4 @@ Scrolling it into view issues `GET /_components/revenue_table?year=2025`, and th
 
 - [Infinite Scroll](infinite-scroll.md) — the same `:visible` trigger, used repeatedly to grow a table page by page.
 - [Click to Load](click-to-load.md) — deferred loading where the user asks for more, instead of scrolling to it.
-- The [shorthands table](../dsl.md#shorthands) and the [trigger values](../dsl.md#trigger-values) in the DSL reference.
+- The [presets table](../dsl.md#presets) and the [trigger values](../dsl.md#trigger-values) in the DSL reference.

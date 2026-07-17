@@ -9,7 +9,7 @@ RSpec.describe Logistics::ShipmentsCard, type: :component do
 
   it "renders with SSE push attributes" do
     o = order
-    html = render_weft_html { shipments_card order_id: o.id }
+    html = render_weft_html(wire: { "order_id" => o.id }) { shipments_card }
 
     expect(html).to include('hx-ext="sse"')
     expect(html).to include("sse-connect=\"/_components/logistics/shipments_card/_stream?order_id=#{o.id}\"")
@@ -22,14 +22,14 @@ RSpec.describe Logistics::ShipmentsCard, type: :component do
     warehouse = Logistics::Warehouse.create!(name: "W1", lat: 0.0, lon: 0.0)
     Logistics::Shipment.create!(order_id: o.id, warehouse: warehouse, status: "planned")
 
-    html = render_weft_html { shipments_card order_id: o.id }
+    html = render_weft_html(wire: { "order_id" => o.id }) { shipments_card }
 
     expect(html).to include("Shipments (1)")
   end
 
   it "shows empty table when no shipments exist" do
     o = order
-    html = render_weft_html { shipments_card order_id: o.id }
+    html = render_weft_html(wire: { "order_id" => o.id }) { shipments_card }
 
     expect(html).to include("Shipments (0)")
   end

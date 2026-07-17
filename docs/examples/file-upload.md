@@ -12,10 +12,10 @@ UPLOADED_REPORTS = []
 class ReportUploader < Weft::Component
   builder_method :report_uploader
 
-  attribute :document
+  param :document
 
-  performs :upload do |attrs|
-    file = attrs.document
+  performs :upload do |params|
+    file = params.document
     if file.is_a?(Hash) && file[:tempfile]
       UPLOADED_REPORTS << { name: file[:filename], size: file[:tempfile].size }
     end
@@ -44,9 +44,9 @@ end
 
 **One HTML attribute makes it multipart.** `enctype: "multipart/form-data"` isn't Weft vocabulary — it passes through to the `<form>` untouched, and it does double duty there: htmx honors a form's native enctype when it builds the request, and the no-JS fallback submit needs the same attribute anyway. Leave it off and the request still fires, but as an ordinary urlencoded POST whose file field has collapsed to the string `"[object File]"` — nothing a server can use. (htmx also has an `hx-encoding` attribute; it's only needed to force multipart from something other than a form.)
 
-**The file arrives through a declared attribute.** The `document` attribute receives whatever the server's multipart parsing produces — under Sinatra, a hash carrying `:filename`, `:type`, and a `:tempfile` ready to read. The callable checks for that shape before storing, which quietly covers the other case too: submitting with no file chosen sends `document=` (an empty string), the `is_a?(Hash)` guard skips it, and the re-render is a no-op.
+**The file arrives through a declared param.** The `document` param receives whatever the server's multipart parsing produces — under Sinatra, a hash carrying `:filename`, `:type`, and a `:tempfile` ready to read. The callable checks for that shape before storing, which quietly covers the other case too: submitting with no file chosen sends `document=` (an empty string), the `is_a?(Hash)` guard skips it, and the re-render is a no-op.
 
-**Returning `{ document: nil }` is load-bearing.** A callable's returned hash merges into the attrs for the re-render ([the callable contract](../dsl.md#the-callable-contract)) — and this one uses that to *clear* the file param rather than add anything. Weft derives a component's DOM id from its first declared attribute, and a tempfile-toting multipart hash in that slot would smear itself across the wrapper's id and every piece of htmx wiring derived from it. Cleared, the component comes back as plain `#report-uploader`: same id, same wiring, fresh empty file input.
+**Returning `{ document: nil }` is load-bearing.** A callable's returned hash merges into the params for the re-render ([the callable contract](../dsl.md#the-callable-contract)) — and this one uses that to *clear* the file param rather than add anything. Weft derives a component's DOM id from its first declared param, and a tempfile-toting multipart hash in that slot would smear itself across the wrapper's id and every piece of htmx wiring derived from it. Cleared, the component comes back as plain `#report-uploader`: same id, same wiring, fresh empty file input.
 
 ## On the wire
 

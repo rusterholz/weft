@@ -4,8 +4,8 @@ module Oms
   class OrdersPage < ::ApplicationPage
     self.page_path = "/orders"
 
-    attribute :status
-    attribute :page
+    param :status
+    param :page
 
     def build(attributes = {})
       attributes[:title] ||= "Orders"
@@ -15,7 +15,7 @@ module Oms
         h1 "Orders"
         a "New Order", href: "/orders/new", class: "btn btn-sm btn-primary"
       end
-      orders_panel(status: attrs.status, page: attrs.page)
+      orders_panel
     end
   end
 end
