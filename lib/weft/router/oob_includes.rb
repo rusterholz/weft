@@ -6,8 +6,8 @@ module Weft
     # via `includes` alongside an action response or SSE push, with the
     # `hx-swap-oob` attribute set so htmx swaps each into its own DOM slot.
     #
-    # Depends on Router internals: `resolver`, `filtered_params`,
-    # `build_component_with_params_as_attrs`.
+    # Depends on Router internals: `filtered_params`,
+    # `build_component_with_wire`.
     module OOBIncludes
       private
 
@@ -24,8 +24,7 @@ module Weft
 
       def render_oob_component(inclusion, primary_params)
         wire_params = inclusion[:block] ? inclusion[:block].call(primary_params) : filtered_params
-        resolved_params = resolver.resolve(inclusion[:component_class], wire_params)
-        component = build_component_with_params_as_attrs(inclusion[:component_class], resolved_params)
+        component = build_component_with_wire(inclusion[:component_class], wire_params)
         component.set_attribute("hx-swap-oob", "true")
         component.to_s
       end

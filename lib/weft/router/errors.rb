@@ -11,8 +11,8 @@ module Weft
     # Also owns the schema-gated auto-injection of recovery params
     # (:exception, :request_path, :status_code, :component_id, :retry_url).
     #
-    # Depends on Router internals: `resolver`, `headers`, `status`,
-    # `request`, `redirect`, `htmx_request?`.
+    # Depends on Router internals: `headers`, `status`, `request`,
+    # `redirect`, `htmx_request?`.
     module Errors # rubocop:disable Metrics/ModuleLength
       # Each entry: { redirect_safe: true } means the auto-injected param is
       # included even when building a redirect URL. The component-context
@@ -62,19 +62,16 @@ module Weft
       # document. Status comes from the exception.
       def dispatch_page_recovery(page_class, merged_params, error)
         injected = inject_auto_params(page_class, merged_params, error, on_redirect: false)
-        resolved_params = resolver.resolve(page_class, injected)
         status recovery_status(error)
-        # params → Arbre attrs channel via render/insert_tag (M4 splat target).
-        htmx_request? ? page_body_html(page_class, resolved_params) : page_class.render(**resolved_params)
+        htmx_request? ? page_body_html(page_class, injected) : page_class.render(**injected)
       end
 
       # Extract the rendered HTML inside a Page's <body>. For htmx fragment
       # responses to full-document failures — the surrounding doc shell is
       # already on the client; only the body content should swap.
-      def page_body_html(page_class, resolved_params)
+      def page_body_html(page_class, wire_params)
         klass = page_class
-        # params → Arbre attrs channel (M4 splat target).
-        ctx = Weft::Context.new({}, nil) { insert_tag(klass, **resolved_params) }
+        ctx = Weft::Context.new({}, nil, wire_params: wire_params) { insert_tag(klass) }
         page_instance = ctx.children.first
         body_el = page_instance.children.find { |c| c.respond_to?(:tag_name) && c.tag_name == "body" }
         body_el ? body_el.children.join : page_instance.to_s
@@ -188,11 +185,11 @@ module Weft
         injected = inject_auto_params(target, merged_params, error,
                                       on_redirect: false, component_ctx: component_ctx)
         status recovery_status(error)
-        # Resolve schema-exact for the target so the failing component's params
-        # (which may share no schema with the target) can't leak as HTML
-        # attributes. Declared auto-injected params survive: their defaults are
-        # nil, and Resolver#coerce passes non-nil values through unchanged.
-        target.render(**resolver.resolve(target, injected))
+        # The target projects its own schema from the pseudo-wire kwargs, so
+        # the failing component's params (which may share no schema with the
+        # target) can't leak. Declared auto-injected params survive: their
+        # defaults are nil, and coercion passes non-nil values unchanged.
+        target.render(**injected)
       end
 
       # Schema-gated auto-injection of recovery params. A recovers target

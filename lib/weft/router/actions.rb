@@ -9,9 +9,9 @@ module Weft
     # `render_error`; the small `render_action_error` wrapper sets the
     # destructive-swap header before delegating.
     #
-    # Depends on Router internals: `resolver`, `filtered_params`,
-    # `handle_redirect`, `apply_trigger_header`, `render_oob_includes`,
-    # `render_error`, `headers`.
+    # Depends on Router internals: `filtered_params`, `handle_redirect`,
+    # `apply_trigger_header`, `render_oob_includes`, `render_error`,
+    # `headers`.
     module Actions
       private
 
@@ -41,7 +41,7 @@ module Weft
       end
 
       def handle_action(action, component_class)
-        resolved_params = resolver.resolve(component_class, filtered_params)
+        resolved_params = Weft::Resolver.resolve(component_class, filtered_params)
         returned = action.callable&.call(Weft::Params.new(resolved_params))
         return handle_redirect(returned) if returned.is_a?(Weft::Redirect)
 
@@ -51,15 +51,15 @@ module Weft
       end
 
       # Successive resolution across the component-class boundary. The bag
-      # accumulates the declaring component's resolved params plus any hash the
-      # callable returned; the rendered class then runs its OWN resolution pass
-      # over the bag, so only its declared params reach the builder splat
-      # (closing the cross-class leak). The bag itself keeps every key so
-      # downstream OOB includes still see callable-returned params.
+      # accumulates the declaring component's resolved params plus any hash
+      # the callable returned; the rendered class projects its OWN schema
+      # from the bag at build (render kwargs are pseudo-wire), so only its
+      # declared params enter its bag. The full bag still flows to OOB
+      # includes so callable-returned params reach them.
       def render_action_response(action, component_class, resolved_params, returned)
         bag = returned.is_a?(Hash) ? resolved_params.merge(returned) : resolved_params
         apply_trigger_header(component_class)
-        html = action.renders.render(**resolver.resolve(action.renders, bag))
+        html = action.renders.render(**bag)
         html + render_oob_includes(component_class, Weft::Params.new(bag), action_name: action.name)
       end
 

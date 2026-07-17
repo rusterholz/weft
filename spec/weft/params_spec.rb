@@ -3,33 +3,6 @@
 RSpec.describe Weft::Params do
   subject(:params) { described_class.new(status: "shipped", count: 42, label: nil) }
 
-  describe ".extract_from" do
-    let(:schema) { { status: { default: "pending" }, count: { default: 0 } } }
-
-    it "extracts declared keys from the raw hash" do
-      result = described_class.extract_from({ status: "shipped", count: 42 }, using: schema)
-      expect(result[:status]).to eq("shipped")
-      expect(result[:count]).to eq(42)
-    end
-
-    it "applies defaults for missing keys" do
-      result = described_class.extract_from({}, using: schema)
-      expect(result[:status]).to eq("pending")
-      expect(result[:count]).to eq(0)
-    end
-
-    it "does not mutate the raw hash" do
-      raw = { status: "shipped", class: "big" }
-      described_class.extract_from(raw, using: schema)
-      expect(raw).to eq(status: "shipped", class: "big")
-    end
-
-    it "returns a Weft::Params instance" do
-      result = described_class.extract_from({}, using: schema)
-      expect(result).to be_a(described_class)
-    end
-  end
-
   describe "#[]" do
     it "returns values by symbol key" do
       expect(params[:status]).to eq("shipped")

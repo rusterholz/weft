@@ -15,23 +15,9 @@ module Weft
   #   params.select { ... }           # delegates to the underlying hash
   #   params.to_h     # => the underlying hash (explicit escape hatch)
   class Params
-    # Build a Params instance by extracting declared keys from a raw
-    # params hash, applying defaults for missing keys. Does not mutate
-    # the raw hash.
-    #
-    #   schema = { status: { default: "pending" }, count: { default: 0 } }
-    #   raw    = { status: "shipped", class: "big" }
-    #   Weft::Params.extract_from(raw, using: schema)
-    #   # => Params{ status: "shipped", count: 0 }
-    def self.extract_from(raw, using:)
-      data = using.to_h do |name, meta|
-        [name, raw.fetch(name, meta[:default])]
-      end
-      new(data)
-    end
-
     # @api private
-    # Constructed internally (see {.extract_from} and the Router's resolver).
+    # Constructed internally (components self-resolve via Weft::Resolver;
+    # the Router wraps bags for action callables and recovery blocks).
     def initialize(data)
       @data = data
     end

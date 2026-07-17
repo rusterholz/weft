@@ -17,6 +17,17 @@ module Weft
   class Context < Arbre::Context
     include Interception
 
+    # The render's wire params (query/body/path values), carried on the
+    # context so every component in the tree resolves its own declared
+    # params at any depth. Assigned before super because Arbre's initialize
+    # instance_evals the construction block — the tree builds during super.
+    attr_reader :wire_params
+
+    def initialize(assigns = {}, helpers = nil, wire_params: nil, &)
+      @wire_params = wire_params || {}
+      super(assigns, helpers, &)
+    end
+
     # @api private
     # Expands Weft kwargs into htmx attributes. Invoked by the Interception
     # mixin's #insert_tag on the root Weft::Context (via +arbre_context+).

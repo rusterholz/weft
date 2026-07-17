@@ -336,7 +336,7 @@ RSpec.describe Weft::Page do
         end
       end
 
-      html = Weft::Context.new({}, nil) { insert_tag(page_class, item_id: "99") }.to_s
+      html = Weft::Context.new({}, nil, wire_params: { "item_id" => "99" }) { insert_tag(page_class) }.to_s
 
       expect(html).to include("item=99")
     end

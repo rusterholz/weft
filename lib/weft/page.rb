@@ -113,12 +113,13 @@ module Weft
       end
 
       # Render this page as a full HTML document outside any Arbre DSL context.
-      # Used by the Router for full-document responses, and available to users
-      # for testing or standalone rendering.
-      def render(**attributes)
+      # The kwargs are pseudo-wire: exactly what a request's query/path params
+      # would carry. Used by the Router for full-document responses, and
+      # available to users for testing or standalone rendering.
+      def render(**wire_params)
         klass = self
-        Weft::Context.new({}, nil) do
-          insert_tag(klass, **attributes)
+        Weft::Context.new({}, nil, wire_params: wire_params) do
+          insert_tag(klass)
         end.to_s
       end
 
@@ -220,11 +221,18 @@ module Weft
       end
     end
 
+    # Params resolve at construction (see Weft::Component#initialize) so
+    # user build bodies can read them before super — e.g. deriving the
+    # page title from a record looked up by param.
+    def initialize(*)
+      super
+      @params = resolved_wire_params if self.class.params.any?
+    end
+
     def build(attributes = {})
-      schema = self.class.params
-      @params = Weft::Params.extract_from(attributes, using: schema) if schema.any?
+      warn_declared_chrome_collisions(attributes)
       @page_title = attributes.delete(:title) || "Weft"
-      super(attributes.except(*schema.keys))
+      super
       build_head
       @body_el = insert_tag(Arbre::HTML::Body)
     end

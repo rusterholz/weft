@@ -59,14 +59,15 @@ module Weft
       end
 
       # Render this component as an HTML string, outside any Arbre DSL context.
-      # Used by the Router for partial responses, and available to users for
-      # testing, REPL exploration, or any standalone rendering need.
+      # The kwargs are pseudo-wire: exactly what a request's query string
+      # would carry. Used by the Router for partial responses, and available
+      # to users for testing, REPL exploration, or any standalone rendering need.
       #
       #   StatCard.render(status: "shipped")  # => "<div id=\"...\">...</div>"
-      def render(**attributes)
+      def render(**wire_params)
         klass = self
-        Weft::Context.new({}, nil) do
-          insert_tag(klass, **attributes)
+        Weft::Context.new({}, nil, wire_params: wire_params) do
+          insert_tag(klass)
         end.to_s
       end
 
@@ -110,10 +111,18 @@ module Weft
     recovers from: Weft::NotFound, with: :not_found_component
     recovers from: StandardError, with: :error_component
 
+    # Params resolve at construction, not build: the context (which carries
+    # the wire source) is the constructor's one argument, and resolving here
+    # makes `params` available even before `super` in user build bodies —
+    # the "compute chrome from params, then super" pattern needs that.
+    def initialize(*)
+      super
+      @params = resolved_wire_params
+    end
+
     def build(attributes = {})
-      schema = self.class.params
-      @params = Weft::Params.extract_from(attributes, using: schema)
-      super(attributes.except(*schema.keys))
+      warn_declared_chrome_collisions(attributes)
+      super
       self.id = weft_id
       apply_refresh_attrs
       apply_push_attrs

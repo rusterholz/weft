@@ -554,10 +554,10 @@ RSpec.describe Weft::Router do
     end
   end
 
-  describe "build_component_with_params_as_attrs" do
-    it "builds a component instance with resolved attributes" do
+  describe "build_component_with_wire" do
+    it "builds a component that resolves its params from the wire source" do
       router = described_class.new!(downstream_app)
-      component = router.send(:build_component_with_params_as_attrs, stat_card_class, { status: "shipped", value: 10 })
+      component = router.send(:build_component_with_wire, stat_card_class, { status: "shipped", value: 10 })
 
       expect(component).to be_a(Weft::Component)
       expect(component.weft_id).to eq("stat-card-shipped")
@@ -567,7 +567,7 @@ RSpec.describe Weft::Router do
 
     it "returns children-only HTML via content (for SSE innerHTML swap)" do
       router = described_class.new!(downstream_app)
-      component = router.send(:build_component_with_params_as_attrs, stat_card_class, { status: "shipped", value: 10 })
+      component = router.send(:build_component_with_wire, stat_card_class, { status: "shipped", value: 10 })
 
       # content returns children only — no wrapper div
       expect(component.content).not_to include('id="stat-card-shipped"')

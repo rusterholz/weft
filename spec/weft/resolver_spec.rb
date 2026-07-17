@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 RSpec.describe Weft::Resolver do
-  subject(:resolver) { described_class.new }
+  subject(:resolver) { described_class }
 
   let(:component_class) do
     Class.new(Weft::Component) do
@@ -14,7 +14,7 @@ RSpec.describe Weft::Resolver do
     end
   end
 
-  describe "#resolve" do
+  describe ".resolve" do
     it "maps string params to attributes using declared defaults for coercion" do
       result = resolver.resolve(component_class, "status" => "shipped", "count" => "42")
 
