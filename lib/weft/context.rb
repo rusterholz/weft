@@ -29,6 +29,25 @@ module Weft
     end
 
     # @api private
+    # One-shot register for `receives` hand-offs. Interception stages the
+    # extracted kwargs here immediately before Arbre constructs the target
+    # (insert_tag → build_tag → new); the new instance consumes them during
+    # params assembly. Class-checked so a stale staging can never leak into
+    # a different component's bag.
+    def stage_received(klass, values)
+      @staged_received = [klass, values]
+    end
+
+    # @api private
+    def take_received!(klass)
+      staged_class, values = @staged_received
+      return unless staged_class.equal?(klass)
+
+      @staged_received = nil
+      values
+    end
+
+    # @api private
     # Expands Weft kwargs into htmx attributes. Invoked by the Interception
     # mixin's #insert_tag on the root Weft::Context (via +arbre_context+).
     def expand_weft_attrs(attrs, for_class: nil)
@@ -124,7 +143,7 @@ module Weft
     end
 
     def resolve_with(attrs)
-      attrs[:with] || find_nearest_component&.params&.to_h || {}
+      attrs[:with] || find_nearest_component&.serializable_params || {}
     end
 
     def validate_loads_kwargs!(attrs)

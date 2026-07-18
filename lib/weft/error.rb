@@ -61,4 +61,9 @@ module Weft
   # ever assigning the named ivar and then a child is added — almost always
   # means the developer declared the macro but forgot the matching assignment.
   MissingContainerIvar = Class.new(InvalidDefinition)
+
+  # Raised at component construction when a `receives` key with no declared
+  # default ends resolution valueless — the call site didn't hand it over and
+  # no other source (wire dual, inherited bag) supplied it.
+  NotReceived = Class.new(InvalidUsage)
 end

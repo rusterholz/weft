@@ -139,12 +139,30 @@ module Weft
       prune_stale!
       seen = {}
       routable_components.each do |klass|
+        warn_dependent_receives!(klass)
         base = klass.resolved_component_path
         add_route!(seen, base, klass, :component)
         add_route!(seen, "#{base}/#{Weft.configuration.stream_suffix}", klass, :stream)
       end
       routable_pages.each { |klass| add_route!(seen, resolved_page_pattern(klass), klass, :page) }
       @routes_validated = true
+    end
+
+    # A routable component with a required hand-off it cannot reconstruct
+    # standalone will raise on every refresh (nothing hands the value over).
+    # Defaulted hand-offs are exempt: declaring a default explicitly opts
+    # into standalone renders falling back to it. Runs once per registry
+    # generation, alongside route validation.
+    def warn_dependent_receives!(klass)
+      required = klass.received_params.reject { |_, meta| meta.key?(:default) }.keys
+      undualed = required - klass.params.keys
+      return if undualed.empty?
+
+      Weft.logger.warn(
+        "#{klass.name} is routable but depends on hand-offs it cannot reconstruct standalone " \
+        "(#{undualed.map(&:inspect).join(', ')}) — a refresh will raise without them. " \
+        "Mark the class dependent! or declare a wire param dual for the key."
+      )
     end
 
     def add_route!(seen, path, klass, kind)

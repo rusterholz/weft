@@ -226,7 +226,7 @@ module Weft
     # page title from a record looked up by param.
     def initialize(*)
       super
-      @params = resolved_wire_params if self.class.params.any?
+      @params = assembled_params if self.class.params.any?
     end
 
     def build(attributes = {})

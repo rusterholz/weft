@@ -47,4 +47,62 @@ RSpec.describe Weft::DSL::Params do
       expect(parent.params.keys).to eq(%i[status])
     end
   end
+
+  describe ".receives" do
+    it "declares a required hand-off (no default key in the meta)" do
+      klass = Class.new(base_class) do
+        def self.name = "ReceivesTest"
+        receives :order
+      end
+
+      expect(klass.received_params).to eq(order: {})
+    end
+
+    it "records a declared default, making the key optional — even an explicit nil" do
+      klass = Class.new(base_class) do
+        def self.name = "OptionalReceivesTest"
+        receives :page_num, default: 1
+        receives :accent, default: nil
+      end
+
+      expect(klass.received_params).to eq(page_num: { default: 1 }, accent: { default: nil })
+    end
+
+    it "accumulates declarations in order, separate from wire params" do
+      klass = Class.new(base_class) do
+        def self.name = "SeparateStoresTest"
+        param :status
+        receives :order
+        receives :label, default: nil
+      end
+
+      expect(klass.received_params.keys).to eq(%i[order label])
+      expect(klass.params.keys).to eq(%i[status])
+    end
+
+    it "merges parent and child declarations without affecting the parent" do
+      parent = Class.new(base_class) do
+        def self.name = "ReceivesParent"
+        receives :label, default: nil
+      end
+      child = Class.new(parent) do
+        def self.name = "ReceivesChild"
+        receives :order
+      end
+
+      expect(child.received_params.keys).to eq(%i[label order])
+      expect(parent.received_params.keys).to eq(%i[label])
+    end
+
+    it "allows a same-key dual with param (both stores carry the key)" do
+      klass = Class.new(base_class) do
+        def self.name = "DualKeyTest"
+        param :status
+        receives :status
+      end
+
+      expect(klass.params.keys).to eq(%i[status])
+      expect(klass.received_params.keys).to eq(%i[status])
+    end
+  end
 end

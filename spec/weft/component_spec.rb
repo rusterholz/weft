@@ -57,6 +57,427 @@ RSpec.describe Weft::Component do
     end
   end
 
+  describe "receives DSL" do
+    it "does not make a component routable" do
+      component_class = Class.new(described_class) do
+        def self.name = "HandOffOnly"
+        receives :order
+      end
+
+      expect(component_class.routable?).to be(false)
+    end
+  end
+
+  describe "receives behavior" do
+    let(:order) { Struct.new(:id, :name).new(42, "Widget crate") }
+
+    let(:receiver_class) do
+      Class.new(described_class) do
+        def self.name = "OrderSlip"
+        receives :order
+
+        def build(attributes = {})
+          super
+          span params.order.name
+        end
+      end
+    end
+
+    it "lands a handed kwarg in params, never in HTML chrome" do
+      klass = receiver_class
+      handed = order
+      ctx = Weft::Context.new { insert_tag(klass, order: handed) }
+      component = ctx.children.first
+
+      expect(component.params.order).to be(handed)
+      expect(component.attributes).not_to have_key(:order)
+      expect(ctx.to_s).to include("Widget crate")
+    end
+
+    it "makes handed values readable before super in a build body" do
+      klass = Class.new(described_class) do
+        def self.name = "EagerReceiver"
+        receives :label
+
+        def build(attributes = {})
+          attributes[:class] = "for-#{params.label}"
+          super
+        end
+      end
+
+      ctx = Weft::Context.new { insert_tag(klass, label: "totals") }
+
+      expect(ctx.children.first.class_list).to include("for-totals")
+    end
+
+    it "does not leak one sibling's hand-off to the next" do
+      first = receiver_class
+      second = Class.new(described_class) do
+        def self.name = "BareSlip"
+        receives :order, default: nil
+      end
+      handed = order
+
+      ctx = Weft::Context.new do
+        insert_tag(first, order: handed)
+        insert_tag(second)
+      end
+
+      expect(ctx.children[1].params.order).to be_nil
+    end
+
+    it "raises NotReceived at the call site when a required hand-off is missing" do
+      klass = receiver_class
+
+      expect { Weft::Context.new { insert_tag(klass) } }.
+        to raise_error(Weft::NotReceived, /OrderSlip.*:order/)
+    end
+
+    it "softens absence to the declared default, even an explicit nil" do
+      klass = Class.new(described_class) do
+        def self.name = "SoftSlip"
+        receives :page_num, default: 1
+        receives :accent, default: nil
+      end
+      component = Weft::Context.new { insert_tag(klass) }.children.first
+
+      expect(component.params.page_num).to eq(1)
+      expect(component.params.accent).to be_nil
+    end
+
+    context "with a param dual on the same key" do
+      let(:dual_class) do
+        Class.new(described_class) do
+          def self.name = "StatusChip"
+          param :status
+          receives :status
+        end
+      end
+
+      it "prefers the handed value over the wire" do
+        klass = dual_class
+        component = Weft::Context.new({}, nil, wire_params: { "status" => "stale" }) do
+          insert_tag(klass, status: "fresh")
+        end.children.first
+
+        expect(component.params.status).to eq("fresh")
+      end
+
+      it "falls back to the wire when nothing is handed" do
+        klass = dual_class
+        component = Weft::Context.new({}, nil, wire_params: { "status" => "shipped" }) do
+          insert_tag(klass)
+        end.children.first
+
+        expect(component.params.status).to eq("shipped")
+      end
+
+      it "resolves to nil without raising when no source supplies the key" do
+        klass = dual_class
+        component = Weft::Context.new { insert_tag(klass) }.children.first
+
+        expect(component.params.status).to be_nil
+      end
+    end
+
+    it "cannot be satisfied through render's pseudo-wire kwargs" do
+      # render kwargs are a query string in disguise; a hand-off is a
+      # server-side value that can't ride the wire. Build under Weft::Context
+      # with call-site kwargs to test receiving components.
+      expect { receiver_class.render(order: order) }.
+        to raise_error(Weft::NotReceived)
+    end
+  end
+
+  describe "inheritance axis" do
+    let(:order) { Struct.new(:id, :name).new(7, "Pallet of anvils") }
+
+    def embed(parent_class, child_class, wire: {}, parent_kwargs: {})
+      parent_class.define_method(:build) do |attributes = {}|
+        super(attributes)
+        insert_tag(child_class)
+      end
+      ctx = Weft::Context.new({}, nil, wire_params: wire) do
+        insert_tag(parent_class, **parent_kwargs)
+      end
+      ctx.children.first.children.find { |el| el.is_a?(child_class) }
+    end
+
+    it "lets a child read an ancestor's bag value it never declared" do
+      parent_class = Class.new(described_class) do
+        def self.name = "AxisParent"
+        receives :order
+      end
+      child_class = Class.new(described_class) { def self.name = "AxisChild" }
+
+      child = embed(parent_class, child_class, parent_kwargs: { order: order })
+
+      expect(child.params.order).to be(order)
+    end
+
+    it "does not let a component see beside itself" do
+      first = Class.new(described_class) do
+        def self.name = "LoudSibling"
+        receives :order
+      end
+      second = Class.new(described_class) { def self.name = "QuietSibling" }
+
+      ctx = Weft::Context.new do
+        insert_tag(first, order: Struct.new(:id).new(1))
+        insert_tag(second)
+      end
+
+      expect(ctx.children[1].params.key?(:order)).to be(false)
+    end
+
+    it "lets an inherited value beat the child's own default (level 3 over 5)" do
+      parent_class = Class.new(described_class) do
+        def self.name = "CalmParent"
+        receives :status
+      end
+      child_class = Class.new(described_class) do
+        def self.name = "DefaultedChild"
+        param :status, default: "all"
+      end
+
+      child = embed(parent_class, child_class, parent_kwargs: { status: "calm" })
+
+      expect(child.params.status).to eq("calm")
+    end
+
+    it "lets the child's own wire value beat an inherited one (level 2 over 3)" do
+      parent_class = Class.new(described_class) do
+        def self.name = "HandedParent"
+        receives :status
+      end
+      child_class = Class.new(described_class) do
+        def self.name = "WiredChild"
+        param :status
+      end
+
+      child = embed(parent_class, child_class,
+                    wire: { "status" => "hot" }, parent_kwargs: { status: "calm" })
+
+      expect(child.params.status).to eq("hot")
+    end
+
+    it "never lets an ancestor's nil shadow the child's default" do
+      parent_class = Class.new(described_class) do
+        def self.name = "EmptyHandedParent"
+        param :label
+      end
+      child_class = Class.new(described_class) do
+        def self.name = "SelfSufficientChild"
+        param :label, default: "fallback"
+      end
+
+      child = embed(parent_class, child_class)
+
+      expect(child.params.label).to eq("fallback")
+    end
+
+    it "satisfies a required hand-off from the ancestor bag — bare embeds stay bare" do
+      parent_class = Class.new(described_class) do
+        def self.name = "ProvidingParent"
+        receives :order
+      end
+      child_class = Class.new(described_class) do
+        def self.name = "DependentChild"
+        receives :order
+      end
+
+      child = embed(parent_class, child_class, parent_kwargs: { order: order })
+
+      expect(child.params.order).to be(order)
+    end
+
+    it "branches the nearest Weft ancestor across intervening HTML elements" do
+      child_class = Class.new(described_class) { def self.name = "NestedChild" }
+      parent_class = Class.new(described_class) do
+        def self.name = "WrappingParent"
+        receives :order
+      end
+      parent_class.define_method(:build) do |attributes = {}|
+        super(attributes)
+        div(class: "wrapper") { insert_tag(child_class) }
+      end
+
+      handed = order
+      ctx = Weft::Context.new { insert_tag(parent_class, order: handed) }
+      child = collect_child(ctx, child_class)
+
+      expect(child.params.order).to be(handed)
+    end
+
+    it "branches from a page at the root of the tree" do
+      child_class = Class.new(described_class) { def self.name = "PageChild" }
+      page_class = Class.new(Weft::Page) do
+        def self.name = "AxisPage"
+        self.page_path = "/axis/:section"
+        param :section
+      end
+      page_class.define_method(:build) do |attributes = {}|
+        super(attributes)
+        insert_tag(child_class)
+      end
+
+      ctx = Weft::Context.new({}, nil, wire_params: { "section" => "west" }) do
+        insert_tag(page_class)
+      end
+      child = collect_child(ctx, child_class)
+
+      expect(child.params.section).to eq("west")
+    end
+
+    def collect_child(ctx, child_class)
+      found = nil
+      walk = lambda do |el|
+        found = el if el.is_a?(child_class)
+        el.children.each { |c| walk.call(c) } unless found
+      end
+      ctx.children.each { |c| walk.call(c) }
+      found
+    end
+  end
+
+  describe "receives in a plain Arbre::Context" do
+    let(:order) { Struct.new(:id, :name).new(11, "Drum of cable") }
+
+    it "extracts handed kwargs at build-top — params, never chrome" do
+      klass = Class.new(described_class) do
+        def self.name = "PlainSlip"
+        receives :order
+
+        def build(attributes = {})
+          super
+          span params.order.name
+        end
+      end
+      handed = order
+      ctx = Arbre::Context.new { insert_tag(klass, order: handed) }
+      component = ctx.children.first
+
+      expect(component.params.order).to be(handed)
+      expect(component.attributes).not_to have_key(:order)
+      expect(ctx.to_s).to include("Drum of cable")
+    end
+
+    it "still raises NotReceived for a required hand-off nobody supplied" do
+      klass = Class.new(described_class) do
+        def self.name = "PlainStrictSlip"
+        receives :order
+      end
+
+      expect { Arbre::Context.new { insert_tag(klass) } }.
+        to raise_error(Weft::NotReceived, /PlainStrictSlip.*:order/)
+    end
+
+    it "applies declared defaults when nothing is handed" do
+      klass = Class.new(described_class) do
+        def self.name = "PlainSoftSlip"
+        receives :page_num, default: 1
+      end
+      component = Arbre::Context.new { insert_tag(klass) }.children.first
+
+      expect(component.params.page_num).to eq(1)
+    end
+
+    it "resolves a handed value only at build-top: pre-super reads see the fallback tier" do
+      # The documented edge: staging happens at interception, which never
+      # runs in a plain context. Render receiving components under
+      # Weft::Context when a build body must read hand-offs before super.
+      reads = {}
+      klass = Class.new(described_class) do
+        def self.name = "PlainEagerSlip"
+        receives :label, default: "unset"
+      end
+      klass.define_method(:build) do |attributes = {}|
+        reads[:before] = params.label
+        super(attributes)
+        reads[:after] = params.label
+      end
+
+      Arbre::Context.new { insert_tag(klass, label: "totals") }
+
+      expect(reads).to eq(before: "unset", after: "totals")
+    end
+  end
+
+  describe "serialization projection" do
+    let(:order) { Struct.new(:id, :name).new(9, "Crate") }
+
+    it "serializes own wire params only into weft_url — hand-offs stay server-side" do
+      klass = Class.new(described_class) do
+        def self.name = "ManifestCard"
+        param :status
+        receives :order
+      end
+      handed = order
+      component = Weft::Context.new({}, nil, wire_params: { "status" => "hot" }) do
+        insert_tag(klass, order: handed)
+      end.children.first
+
+      expect(component.weft_url).to eq("/_components/manifest_card?status=hot")
+    end
+
+    it "keeps inherited values out of weft_url" do
+      parent_class = Class.new(described_class) do
+        def self.name = "UrlParent"
+        param :region, default: "west"
+      end
+      child_class = Class.new(described_class) do
+        def self.name = "UrlChild"
+        param :status, default: "open"
+      end
+      parent_class.define_method(:build) do |attributes = {}|
+        super(attributes)
+        insert_tag(child_class)
+      end
+
+      ctx = Weft::Context.new { insert_tag(parent_class) }
+      child = ctx.children.first.children.find { |el| el.is_a?(child_class) }
+
+      # region is readable (inheritance axis) but not part of the refresh contract
+      expect(child.weft_url).to eq("/_components/url_child?status=open")
+    end
+
+    it "serializes a handed value through its wire dual — the refresh keeps it" do
+      klass = Class.new(described_class) do
+        def self.name = "DualCard"
+        param :status
+        receives :status
+      end
+      component = Weft::Context.new { insert_tag(klass, status: "fresh") }.children.first
+
+      expect(component.weft_url).to eq("/_components/dual_card?status=fresh")
+    end
+
+    it "derives weft_id from own wire params only, never a hand-off" do
+      klass = Class.new(described_class) do
+        def self.name = "SlipCard"
+        receives :order
+      end
+      handed = order
+      component = Weft::Context.new { insert_tag(klass, order: handed) }.children.first
+
+      expect(component.weft_id).to eq("slip-card")
+    end
+
+    it "keeps hand-offs out of the SSE stream URL" do
+      klass = Class.new(described_class) do
+        def self.name = "TickerCard"
+        param :symbol
+        receives :feed
+        pushes every: 5
+      end
+      component = Weft::Context.new({}, nil, wire_params: { "symbol" => "WEFT" }) do
+        insert_tag(klass, feed: Object.new)
+      end.children.first
+
+      expect(component.get_attribute("sse-connect")).to eq("/_components/ticker_card/_stream?symbol=WEFT")
+    end
+  end
+
   describe "weft_id" do
     it "derives ID from class name and primary param value" do
       component_class = Class.new(described_class) do
@@ -335,6 +756,17 @@ RSpec.describe Weft::Component do
         end
 
         expect(component_class).to be_routable
+      end
+
+      it "dependent! makes a routable class non-routable, like abstract!" do
+        component_class = Class.new(described_class) do
+          def self.name = "LeafComponent"
+          param :highlight
+          receives :order
+          dependent!
+        end
+
+        expect(component_class).not_to be_routable
       end
 
       it "routable! does not percolate to subclasses" do
