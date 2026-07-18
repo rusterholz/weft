@@ -9,7 +9,6 @@ module Oms
     def build(attributes = {})
       order = Oms::Order.includes(:line_items).find(params.order_id)
       attributes[:title] ||= "Order #{order.id[..7]}"
-      attributes[:current_path] = "/orders"
       super
 
       order_header
@@ -19,6 +18,8 @@ module Oms
     end
 
     private
+
+    def current_path = "/orders"
 
     def render_details_card(order)
       card(title: "Details", class: "mb-3") do

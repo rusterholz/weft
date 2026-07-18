@@ -17,9 +17,10 @@ module DropshipUI
     builder_method :tooltip
     adds_children_to :@trigger_container
 
+    receives :content
+    receives :with, default: {}
+
     def build(attributes = {})
-      content_class = attributes.delete(:content)
-      content_with = attributes.delete(:with) || {}
       super
       add_class "weft-tooltip-wrap"
 
@@ -29,8 +30,8 @@ module DropshipUI
       trigger = span(class: "weft-tooltip-trigger")
 
       div(class: "weft-tooltip",
-          tooltip: content_class,
-          with: content_with,
+          tooltip: params.content,
+          with: params.with,
           target: :self,
           trigger: "mouseenter once from:closest .weft-tooltip-wrap") do
         span(class: "text-muted") { text_node "Loading…" }

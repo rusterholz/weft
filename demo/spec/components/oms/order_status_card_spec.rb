@@ -25,4 +25,9 @@ RSpec.describe Oms::OrderStatusCard, type: :component do
     expect(html).to include('hx-get="/_components/oms/order_status_card?status=submitted"')
     expect(html).to include('hx-swap="outerHTML"')
   end
+
+  it "serializes a handed status into the refresh URL — embedded cards survive refresh" do
+    html = render_weft_html { order_status_card status: "processing" }
+    expect(html).to include('hx-get="/_components/oms/order_status_card?status=processing"')
+  end
 end

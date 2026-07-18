@@ -8,10 +8,13 @@ module Delivery
 
     def build(attributes = {})
       attributes[:title] ||= "Drivers"
-      attributes[:current_path] = "/drivers"
       super
       div(class: "page-header") { h1 "Drivers" }
       drivers_panel
     end
+
+    private
+
+    def current_path = "/drivers"
   end
 end

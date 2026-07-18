@@ -8,10 +8,13 @@ module Logistics
 
     def build(attributes = {})
       attributes[:title] ||= "Shipments"
-      attributes[:current_path] = "/shipments"
       super
       div(class: "page-header") { h1 "Shipments" }
       shipments_panel
     end
+
+    private
+
+    def current_path = "/shipments"
   end
 end

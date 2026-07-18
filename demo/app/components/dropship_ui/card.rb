@@ -7,16 +7,18 @@ module DropshipUI
   # subclass becomes "a kind of card" structurally — one HTML wrapper, not
   # two.
   #
-  # Subclasses pass chrome params through `super` and add body children
-  # directly; the @body container redirects them via add_child.
+  # Direct callers hand title/link_text/link_href over; subclasses override
+  # the readers to derive their own. Body children land in @body via the
+  # add_child redirect.
   class Card < Weft::Component
     builder_method :card
     adds_children_to :@body
 
+    receives :title, default: nil
+    receives :link_text, default: nil
+    receives :link_href, default: nil
+
     def build(attributes = {})
-      card_title = attributes.delete(:title)
-      link_text = attributes.delete(:link_text)
-      link_href = attributes.delete(:link_href)
       super
       add_class "content-card"
 
@@ -27,5 +29,12 @@ module DropshipUI
 
       @body = div(class: "content-card-body")
     end
+
+    private
+
+    # Prefixed to avoid shadowing the `title` tag builder.
+    def card_title = params.title
+    def link_text = params.link_text
+    def link_href = params.link_href
   end
 end

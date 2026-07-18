@@ -8,11 +8,10 @@ module Delivery
 
     refreshes every: 10
 
-    def build(attributes = {})
-      attributes[:label] = "Drivers"
-      attributes[:value] = "#{Delivery::Driver.available.count}/#{Delivery::Driver.count}"
-      attributes[:accent] = "available"
-      super
-    end
+    private
+
+    def stat_label = "Drivers"
+    def stat_value = "#{Delivery::Driver.available.count}/#{Delivery::Driver.count}"
+    def stat_accent = "available"
   end
 end

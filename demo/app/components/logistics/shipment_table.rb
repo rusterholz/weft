@@ -4,8 +4,9 @@ module Logistics
   class ShipmentTable < Weft::Component
     builder_method :shipment_table
 
+    receives :shipments, default: []
+
     def build(attributes = {})
-      @shipments = attributes.delete(:shipments) || []
       super
       add_class "table table-data mb-0"
 
@@ -13,7 +14,7 @@ module Logistics
         tr { %w[Shipment Warehouse Items Driver Status].each { |c| th c } }
       end
       tbody do
-        @shipments.each { |s| shipment_row(shipment: s) }
+        params.shipments.each { |s| shipment_row(shipment: s) }
       end
     end
 

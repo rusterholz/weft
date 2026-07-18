@@ -2,24 +2,31 @@
 
 module DropshipUI
   # Visual primitive: a labeled stat with a big value and optional accent
-  # color. label/value/accent are builder-method kwargs (extracted from
-  # the attributes hash in build), not wire state — they describe how to
-  # render, not what to remember across requests. Subclasses that DO want
-  # wire state (e.g. Oms::OrderStatusCard's `param :status`) declare
-  # it themselves and derive label/value/accent in their own build.
+  # color. Direct `stat_card(label:, value:, accent:)` callers hand the
+  # values over; subclasses that derive them instead (e.g.
+  # Oms::OrderStatusCard from its `status` param) override the readers and
+  # take no hand-off at all.
   class StatCard < Weft::Component
     builder_method :stat_card
 
+    receives :label, default: nil
+    receives :value, default: nil
+    receives :accent, default: nil
+
     def build(attributes = {})
-      @label = attributes.delete(:label)
-      @value = attributes.delete(:value)
-      @accent = attributes.delete(:accent)
       super
       add_class "stat-card"
-      add_class "border-#{@accent}" if @accent
+      add_class "border-#{stat_accent}" if stat_accent
 
-      div(class: "stat-label") { text_node @label.to_s }
-      div(class: "stat-value") { text_node @value.to_s }
+      div(class: "stat-label") { text_node stat_label.to_s }
+      div(class: "stat-value") { text_node stat_value.to_s }
     end
+
+    private
+
+    # Prefixed to avoid shadowing the `label` tag builder.
+    def stat_label = params.label
+    def stat_value = params.value
+    def stat_accent = params.accent
   end
 end

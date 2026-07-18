@@ -31,7 +31,7 @@ module Delivery
             end
             dt("Order", class: "col-sm-3 text-muted")
             dd(class: "col-sm-9") do
-              tooltip(src: "/shipments/#{shipment.id}/summary") do
+              tooltip(content: Logistics::ShipmentSummary, with: { shipment_id: shipment.id }) do
                 a shipment.order_id[..7], href: "/orders/#{shipment.order_id}", class: "mono"
               end
             end

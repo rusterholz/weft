@@ -30,7 +30,11 @@ RSpec.describe ApplicationPage, type: :component do
   end
 
   it "marks the current_path nav link as active" do
-    html = render_arbre_html { application_page current_path: "/orders" }
+    page_class = Class.new(described_class) do
+      def self.name = "NavStubPage"
+      def current_path = "/orders"
+    end
+    html = render_arbre_html { insert_tag(page_class) }
     expect(html).to include('class="nav-link active" href="/orders"')
   end
 

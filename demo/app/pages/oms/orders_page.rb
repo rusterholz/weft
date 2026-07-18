@@ -9,7 +9,6 @@ module Oms
 
     def build(attributes = {})
       attributes[:title] ||= "Orders"
-      attributes[:current_path] = "/orders"
       super
       div(class: "page-header d-flex justify-content-between align-items-center") do
         h1 "Orders"
@@ -17,5 +16,9 @@ module Oms
       end
       orders_panel
     end
+
+    private
+
+    def current_path = "/orders"
   end
 end

@@ -6,7 +6,6 @@ module Oms
 
     def build(attributes = {})
       attributes[:title] ||= "New Order"
-      attributes[:current_path] = "/orders"
       super
       div(class: "page-header") { h1 "New Order" }
 
@@ -14,5 +13,9 @@ module Oms
         order_form
       end
     end
+
+    private
+
+    def current_path = "/orders"
   end
 end

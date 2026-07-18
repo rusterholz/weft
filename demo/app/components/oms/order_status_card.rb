@@ -2,25 +2,21 @@
 
 module Oms
   # A DropshipUI::StatCard that queries the order count for a given
-  # status. Self-refreshes every 10 seconds; the subclass derives label,
-  # value, and accent from the status attr before calling super.
+  # status. Self-refreshes every 10 seconds. The status is a dual-source
+  # key: embedded cards get it handed at the call site, and it serializes
+  # as a wire param so the refresh reconstructs it standalone.
   class OrderStatusCard < DropshipUI::StatCard
     builder_method :order_status_card
 
     param :status
+    receives :status
 
     refreshes every: 10
 
-    def build(attributes = {})
-      # Caller hand-off with wire fallback: embedded cards get status as a
-      # kwarg (deleted before super, Pager-style), wire refreshes get it as
-      # a param. A refresh of an embedded card loses its status until the
-      # dedicated caller-hand-off declaration arrives.
-      status = attributes.delete(:status) || params.status
-      attributes[:label] = status.to_s.capitalize
-      attributes[:value] = Oms::Order.where(status: status).count
-      attributes[:accent] = status
-      super
-    end
+    private
+
+    def stat_label = params.status.to_s.capitalize
+    def stat_value = Oms::Order.where(status: params.status).count
+    def stat_accent = params.status
   end
 end

@@ -9,7 +9,6 @@ module Logistics
     def build(attributes = {})
       shipment = Logistics::Shipment.includes(:warehouse).find(params.shipment_id)
       attributes[:title] ||= "Shipment #{shipment.id[..7]}"
-      attributes[:current_path] = "/shipments"
       super
       order = Oms::Order.find(shipment.order_id)
       driver = Delivery::Driver.find_by(id: shipment.driver_id)
@@ -20,6 +19,8 @@ module Logistics
     end
 
     private
+
+    def current_path = "/shipments"
 
     def render_header(shipment)
       div(class: "page-header") do
