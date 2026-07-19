@@ -25,15 +25,13 @@ module Oms
       super
       add_class "page-header d-flex justify-content-between align-items-center"
 
-      order = params.order
-
       h1 do
         text_node "Order "
-        span(order.id[..7], class: "mono")
+        span(params.order.id[..7], class: "mono")
         text_node " "
-        status_badge order.status
+        status_badge params.order.status
       end
-      return if order.status == "fulfilled"
+      return if params.order.status == "fulfilled"
 
       button "Force Advance", class: "btn btn-sm btn-outline-secondary",
                               action: :advance

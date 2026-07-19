@@ -14,18 +14,16 @@ module Delivery
       super
       add_class "page-header d-flex justify-content-between align-items-center"
 
-      driver = params.driver
-
       h1 do
-        text_node "#{driver.name} "
-        if driver.current_shipment_id
+        text_node "#{params.driver.name} "
+        if params.driver.current_shipment_id
           status_badge "busy"
         else
           status_badge "available"
         end
       end
       div(class: "mono", style: "font-size:0.875rem; color:#64748b") do
-        text_node "#{format('%.1f', driver.total_mileage)} mi"
+        text_node "#{format('%.1f', params.driver.total_mileage)} mi"
       end
     end
   end

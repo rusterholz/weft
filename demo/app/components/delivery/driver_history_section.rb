@@ -16,16 +16,15 @@ module Delivery
 
     def build(attributes = {})
       super
-      completed = params.completed
 
-      card(title: "Delivery History (#{completed.size})") do
-        if completed.any?
+      card(title: "Delivery History (#{params.completed.size})") do
+        if params.completed.any?
           table(class: "table table-data mb-0") do
             thead do
               tr { %w[Shipment Order Warehouse].each { |c| th c } }
             end
             tbody do
-              completed.each do |s|
+              params.completed.each do |s|
                 tr do
                   td(class: "mono") { a s.id[..7], href: "/shipments/#{s.id}" }
                   td(class: "mono") { a s.order_id[..7], href: "/orders/#{s.order_id}" }

@@ -8,18 +8,17 @@ module Logistics
 
     def build(attributes = {})
       super
-      shipment = params.shipment
-      driver = Delivery::Driver.find_by(id: shipment.driver_id)
+      driver = Delivery::Driver.find_by(id: params.shipment.driver_id)
 
-      td(class: "mono") { a shipment.id[..7], href: "/shipments/#{shipment.id}" }
-      td shipment.warehouse.name
+      td(class: "mono") { a params.shipment.id[..7], href: "/shipments/#{params.shipment.id}" }
+      td params.shipment.warehouse.name
       td(class: "mono") do
-        tooltip(content: Logistics::ShipmentManifest, with: { shipment_id: shipment.id }) do
-          text_node shipment.item_count.to_s
+        tooltip(content: Logistics::ShipmentManifest, with: { shipment_id: params.shipment.id }) do
+          text_node params.shipment.item_count.to_s
         end
       end
       td { driver ? a(driver.name, href: "/drivers/#{driver.id}") : span("—", class: "text-muted") }
-      td { status_badge shipment.status }
+      td { status_badge params.shipment.status }
     end
 
     def tag_name

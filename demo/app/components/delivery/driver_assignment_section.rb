@@ -20,9 +20,8 @@ module Delivery
 
     def build(attributes = {})
       super
-      shipment = params.shipment
 
-      if shipment
+      if (shipment = params.shipment)
         card(title: "Current Assignment", class: "mb-3") do
           dl(class: "row mb-0", style: "font-size:0.875rem") do
             dt("Shipment", class: "col-sm-3 text-muted")
