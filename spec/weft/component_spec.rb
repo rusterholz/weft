@@ -318,6 +318,40 @@ RSpec.describe Weft::Component do
 
       expect { Weft::Context.new { insert_tag(klass) }.to_s }.not_to raise_error
     end
+
+    it "defines fills a superclass's expectations through the bag" do
+      base = Class.new(described_class) do
+        def self.name = "FaceCard"
+        receives :label, default: nil
+
+        def build(attributes = {})
+          super
+          span params.label.to_s
+        end
+      end
+      child = Class.new(base) do
+        def self.name = "StaticFaceCard"
+        defines label: "Drivers"
+      end
+
+      expect(Weft::Context.new { insert_tag(child) }.to_s).to include("Drivers")
+    end
+
+    it "two divergent defines of one key trip the divergence warning like any derivations" do
+      allow(Weft.logger).to receive(:warn)
+      parent_class = Class.new(described_class) { def self.name = "DefiningParent" }
+      parent_class.defines(label: "upstream")
+      child_class = Class.new(described_class) { def self.name = "DefiningChild" }
+      child_class.defines(label: "local")
+      parent_class.define_method(:build) do |attributes = {}|
+        super(attributes)
+        insert_tag(child_class)
+      end
+
+      Weft::Context.new { insert_tag(parent_class) }.to_s
+
+      expect(Weft.logger).to have_received(:warn).with(/DefiningChild.*:label/m)
+    end
   end
 
   describe "dual-pipeline keys (derives + receives parity)" do

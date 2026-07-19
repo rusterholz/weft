@@ -28,6 +28,7 @@
   - **Blocks are `(params) -> value` pure functions.** They execute against a void `self`: reading `params` and lexical constants works; touching component state fails fast (`NameError` on a bare method call, `FrozenError` on an instance-variable write). A failing derivation raises at first read — inside the `recovers`-wrapped render, where `recovers from: ActiveRecord::RecordNotFound` and friends already do the right thing. A derivation nobody reads never raises.
   - **Duals.** `derives` + `receives` on one key is the parity pattern completed: handed the value when embedded (no query), self-fetching when rendered standalone. `param` + `derives` gives wire-if-present-else-derive. A `derives` dual also satisfies the refresh-safety lint.
   - **Divergence warning.** When an inherited value shadows a component's own, *different* derivation for the same key, Weft logs a one-time warning (the ancestor's value wins; a derivation shared via a mixin stays silent).
+  - **`defines key: value, ...`** — sugar for statically-known derivations: each pair is exactly `derives(key) { value }`, with identical priority, overridability, and laziness. The values are fixed when the class body runs, which is the point — and the caveat: anything computed per render (a query, a clock) belongs in `derives`, because an interpolated value here would freeze at load time.
   - `params.to_h` and delegated Hash-API calls materialize all remaining derivations first — the explicit eager escape hatch.
 
 ## v0.1.0 (2026-07-12)

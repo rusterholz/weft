@@ -204,4 +204,46 @@ RSpec.describe Weft::DSL::Params do
       expect(child.derived_params[:foo][:block].call(nil)).to eq("child")
     end
   end
+
+  describe ".defines" do
+    it "registers a constant derivation per pair, in the derived store" do
+      klass = Class.new(base_class) do
+        def self.name = "DefinesTest"
+        defines label: "Drivers", accent: "available"
+      end
+
+      expect(klass.derived_params.keys).to eq(%i[label accent])
+      expect(klass.derived_params[:label][:block].call(nil)).to eq("Drivers")
+      expect(klass.derived_params[:accent][:block].call(nil)).to eq("available")
+    end
+
+    it "records the declaration site, not the sugar's internals, as the derivation's origin" do
+      first = Class.new(base_class) do
+        def self.name = "FirstDefiner"
+        defines label: "A"
+      end
+      second = Class.new(base_class) do
+        def self.name = "SecondDefiner"
+        defines label: "B"
+      end
+
+      expect(first.derived_params[:label][:source_location].first).to end_with("params_spec.rb")
+      expect(first.derived_params[:label][:source_location]).
+        not_to eq(second.derived_params[:label][:source_location])
+    end
+
+    it "is just derives: a child redeclaration through either verb replaces the other's" do
+      parent = Class.new(base_class) do
+        def self.name = "DefinedParent"
+        defines label: "static"
+      end
+      child = Class.new(parent) do
+        def self.name = "DerivingChild"
+        derives(:label) { |_p| "computed" }
+      end
+
+      expect(child.derived_params[:label][:block].call(nil)).to eq("computed")
+      expect(parent.derived_params[:label][:block].call(nil)).to eq("static")
+    end
+  end
 end

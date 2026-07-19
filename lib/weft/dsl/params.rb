@@ -73,7 +73,22 @@ module Weft
                   "derives #{name.inspect} requires a block — the derivation is the declaration"
           end
 
-          own_derived_params[name] = { block: block }
+          own_derived_params[name] = { block: block, source_location: block.source_location }
+        end
+
+        # Sugar for statically-known derivations: each pair registers
+        # `derives(key) { value }`. This is just `derives` — identical
+        # priority, overridability, and laziness; only the value is fixed at
+        # declaration. For anything computed per render (queries, clocks),
+        # use `derives` — an interpolated value here would freeze at
+        # class-load time.
+        #   defines label: "Drivers", accent: "available"
+        def defines(pairs)
+          site = caller_locations(1, 1).first
+          pairs.each do |name, value|
+            own_derived_params[name] = { block: proc { |_p| value },
+                                         source_location: [site.path, site.lineno] }
+          end
         end
 
         # All declared derivations (own + inherited), preserving declaration
@@ -180,7 +195,7 @@ module Weft
       def bag_provenance(bag, inherited, inherited_provenance)
         provenance = inherited_provenance.select { |key, _| bag[key].equal?(inherited[key]) }
         self.class.derived_params.each do |key, meta|
-          provenance[key] = meta[:block].source_location if
+          provenance[key] = meta[:source_location] if
             bag[key].is_a?(Weft::Params::Thunk) && !provenance.key?(key)
         end
         provenance
@@ -208,7 +223,7 @@ module Weft
 
       def warn_divergence(key, upstream)
         meta = self.class.derived_params[key]
-        return if upstream.nil? || upstream == meta[:block].source_location
+        return if upstream.nil? || upstream == meta[:source_location]
         return unless Weft::DSL::Params.warned_divergences.add?([self.class, key])
 
         Weft.logger.warn(divergence_message(key, meta, upstream))
@@ -216,7 +231,7 @@ module Weft
 
       def divergence_message(key, meta, upstream)
         "#{self.class.name}: inherited #{key.inspect} (derived at #{upstream.join(':')}) shadows " \
-          "this class's own derivation (#{meta[:block].source_location.join(':')}) — the ancestor's " \
+          "this class's own derivation (#{meta[:source_location].join(':')}) — the ancestor's " \
           "value wins. Use distinct keys or share one derivation if that isn't intended."
       end
 

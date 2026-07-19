@@ -30,8 +30,6 @@ module Weft
       def initialize(block)
         @block = block
       end
-
-      def source_location = block.source_location
     end
 
     # @api private
