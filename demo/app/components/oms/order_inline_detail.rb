@@ -8,6 +8,9 @@ module Oms
 
     param :order_id
 
+    derives(:order) { |p| Oms::Order.includes(:line_items).find(p.order_id) }
+    derives(:shipments) { |p| Logistics::Shipment.for_order(p.order.id).includes(:warehouse) }
+
     dismisses :close
 
     def tag_name
@@ -18,8 +21,8 @@ module Oms
       super
       add_class "order-detail"
 
-      order = Oms::Order.includes(:line_items).find(params.order_id)
-      shipments = Logistics::Shipment.for_order(order.id).includes(:warehouse)
+      order = params.order
+      shipments = params.shipments
 
       td(colspan: "7", style: "background:#f8fafc; padding:1rem 1.5rem") do
         div(class: "d-flex justify-content-between align-items-start mb-2") do

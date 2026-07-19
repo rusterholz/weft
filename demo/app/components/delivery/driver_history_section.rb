@@ -6,13 +6,17 @@ module Delivery
 
     param :driver_id
 
+    derives(:driver) { |p| Delivery::Driver.find(p.driver_id) }
+    derives(:completed) do |p|
+      Logistics::Shipment.where(driver_id: p.driver.id, status: "delivered").
+        order(updated_at: :desc).limit(10)
+    end
+
     refreshes on: "delivery-completed"
 
     def build(attributes = {})
       super
-      driver = Delivery::Driver.find(params.driver_id)
-      completed = Logistics::Shipment.where(driver_id: driver.id, status: "delivered").
-                  order(updated_at: :desc).limit(10)
+      completed = params.completed
 
       card(title: "Delivery History (#{completed.size})") do
         if completed.any?

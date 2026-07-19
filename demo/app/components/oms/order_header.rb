@@ -6,6 +6,8 @@ module Oms
 
     param :order_id
 
+    derives(:order) { |p| Oms::Order.find(p.order_id) }
+
     performs :advance do |params|
       order = Oms::Order.find(params.order_id)
       case order.status
@@ -23,7 +25,7 @@ module Oms
       super
       add_class "page-header d-flex justify-content-between align-items-center"
 
-      order = Oms::Order.find(params.order_id)
+      order = params.order
 
       h1 do
         text_node "Order "

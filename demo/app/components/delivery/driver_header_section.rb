@@ -6,13 +6,15 @@ module Delivery
 
     param :driver_id
 
+    derives(:driver) { |p| Delivery::Driver.find(p.driver_id) }
+
     refreshes on: "delivery-completed"
 
     def build(attributes = {})
       super
       add_class "page-header d-flex justify-content-between align-items-center"
 
-      driver = Delivery::Driver.find(params.driver_id)
+      driver = params.driver
 
       h1 do
         text_node "#{driver.name} "

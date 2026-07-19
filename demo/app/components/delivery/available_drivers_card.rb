@@ -6,12 +6,10 @@ module Delivery
   class AvailableDriversCard < DropshipUI::StatCard
     builder_method :available_drivers_card
 
+    derives(:label) { |_p| "Drivers" }
+    derives(:value) { |_p| "#{Delivery::Driver.available.count}/#{Delivery::Driver.count}" }
+    derives(:accent) { |_p| "available" }
+
     refreshes every: 10
-
-    private
-
-    def stat_label = "Drivers"
-    def stat_value = "#{Delivery::Driver.available.count}/#{Delivery::Driver.count}"
-    def stat_accent = "available"
   end
 end
