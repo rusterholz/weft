@@ -55,6 +55,21 @@ RSpec.describe Weft::Component do
       # Parent is unaffected
       expect(parent.params.keys).to eq(%i[status])
     end
+
+    it "an overriding redeclaration takes effect end to end" do
+      parent = Class.new(described_class) do
+        def self.name = "PagedBase"
+        param :per_page, default: 25
+      end
+      child = Class.new(parent) do
+        def self.name = "WidePager"
+        param :per_page, default: 100
+      end
+      component = Weft::Context.new { insert_tag(child) }.children.first
+
+      expect(component.params.per_page).to eq(100)
+      expect(component.weft_url).to eq("/_components/wide_pager?per_page=100")
+    end
   end
 
   describe "receives DSL" do
@@ -62,6 +77,17 @@ RSpec.describe Weft::Component do
       component_class = Class.new(described_class) do
         def self.name = "HandOffOnly"
         receives :order
+      end
+
+      expect(component_class.routable?).to be(false)
+    end
+  end
+
+  describe "derives DSL" do
+    it "does not make a component routable" do
+      component_class = Class.new(described_class) do
+        def self.name = "DeriveOnly"
+        derives(:order) { |_p| nil }
       end
 
       expect(component_class.routable?).to be(false)
@@ -186,6 +212,319 @@ RSpec.describe Weft::Component do
       # with call-site kwargs to test receiving components.
       expect { receiver_class.render(order: order) }.
         to raise_error(Weft::NotReceived)
+    end
+  end
+
+  describe "derives behavior" do
+    it "derives from other params at first read, in build, before or after super" do
+      klass = Class.new(described_class) do
+        def self.name = "DerivingCard"
+        param :order_id
+        derives(:order) { |p| "order-#{p.order_id}" }
+
+        def build(attributes = {})
+          attributes[:class] = "pre-#{params.order}"
+          super
+          span params.order
+        end
+      end
+
+      ctx = Weft::Context.new({}, nil, wire_params: { "order_id" => 7 }) { insert_tag(klass) }
+
+      expect(ctx.children.first.class_list).to include("pre-order-7")
+      expect(ctx.to_s).to include("order-7")
+    end
+
+    it "never runs an unread derivation" do
+      runs = 0
+      klass = Class.new(described_class) do
+        def self.name = "UntouchedDerives"
+        param :status
+      end
+      klass.derives(:expensive) { |_p| runs += 1 }
+
+      Weft::Context.new({}, nil, wire_params: { "status" => "hot" }) { insert_tag(klass) }.to_s
+
+      expect(runs).to eq(0)
+    end
+
+    it "memoizes per render: two reads, one derivation" do
+      runs = 0
+      klass = Class.new(described_class) do
+        def self.name = "MemoizedDerives"
+      end
+      klass.derives(:order) do |_p|
+        runs += 1
+        "the-order"
+      end
+      klass.define_method(:build) do |attributes = {}|
+        super(attributes)
+        span params.order
+        span params.order
+      end
+
+      Weft::Context.new { insert_tag(klass) }.to_s
+
+      expect(runs).to eq(1)
+    end
+
+    it "works in a plain Arbre::Context (registration is receiver-side)" do
+      klass = Class.new(described_class) do
+        def self.name = "PlainDerives"
+        derives(:greeting) { |_p| "hello" }
+
+        def build(attributes = {})
+          super
+          span params.greeting
+        end
+      end
+
+      expect(Arbre::Context.new { insert_tag(klass) }.to_s).to include("hello")
+    end
+
+    it "does not force derivations for serialization surfaces" do
+      runs = 0
+      klass = Class.new(described_class) do
+        def self.name = "QuietlyDerivingPanel"
+        param :status
+        refreshes every: 5
+      end
+      klass.derives(:order) { |_p| runs += 1 }
+      component = Weft::Context.new({}, nil, wire_params: { "status" => "hot" }) do
+        insert_tag(klass)
+      end.children.first
+
+      expect(component.get_attribute("hx-get")).to eq("/_components/quietly_deriving_panel?status=hot")
+      expect(component.weft_id).to eq("quietly-deriving-panel-hot")
+      expect(runs).to eq(0)
+    end
+
+    it "forces a thunk occupying a WIRE-schema key at serialization (the refresh contract wins)" do
+      klass = Class.new(described_class) do
+        def self.name = "DualWireDerives"
+        param :order_id
+        derives(:order_id) { |_p| 99 }
+      end
+      component = Weft::Context.new { insert_tag(klass) }.children.first
+
+      expect(component.weft_url).to eq("/_components/dual_wire_derives?order_id=99")
+    end
+
+    it "a declared-but-never-read failing derivation never raises" do
+      klass = Class.new(described_class) do
+        def self.name = "SafelyBrokenDerives"
+        derives(:doomed) { |_p| raise "boom" }
+      end
+
+      expect { Weft::Context.new { insert_tag(klass) }.to_s }.not_to raise_error
+    end
+  end
+
+  describe "dual-pipeline keys (derives + receives parity)" do
+    let(:runs) { [] }
+    let(:dual_class) do
+      collector = runs
+      Class.new(described_class) do
+        def self.name = "ParityCard"
+        receives :order
+        derives(:order) do |_p|
+          collector << :derived
+          "self-fetched"
+        end
+      end
+    end
+
+    it "prefers a handed value; the derivation never runs" do
+      klass = dual_class
+      component = Weft::Context.new { insert_tag(klass, order: "handed") }.children.first
+
+      expect(component.params.order).to eq("handed")
+      expect(runs).to be_empty
+    end
+
+    it "self-derives when nothing is handed — the dual softens the receives, no raise" do
+      klass = dual_class
+      component = Weft::Context.new { insert_tag(klass) }.children.first
+
+      expect(component.params.order).to eq("self-fetched")
+    end
+
+    it "on a param+derives key, the wire wins when present and the derivation covers absence" do
+      klass = Class.new(described_class) do
+        def self.name = "WireOrDeriveCard"
+        param :status
+        derives(:status) { |_p| "derived" }
+      end
+
+      wired = Weft::Context.new({}, nil, wire_params: { "status" => "hot" }) do
+        insert_tag(klass)
+      end.children.first
+      bare = Weft::Context.new { insert_tag(klass) }.children.first
+
+      expect(wired.params.status).to eq("hot")
+      expect(bare.params.status).to eq("derived")
+    end
+  end
+
+  describe "divergent derivation warning" do
+    before { allow(Weft.logger).to receive(:warn) }
+
+    def embed_under(parent_class, child_class, force: false)
+      parent_class.define_method(:build) do |attributes = {}|
+        super(attributes)
+        params.order if force
+        insert_tag(child_class)
+      end
+      Weft::Context.new { insert_tag(parent_class) }.to_s
+    end
+
+    it "warns once when an inherited derivation shadows the child's own, divergent one" do
+      parent_class = Class.new(described_class) { def self.name = "UpstreamDeriver" }
+      parent_class.derives(:order) { |_p| "upstream" }
+      child_class = Class.new(described_class) { def self.name = "ShadowedDeriver" }
+      child_class.derives(:order) { |_p| "local" }
+
+      embed_under(parent_class, child_class)
+      embed_under(parent_class, child_class)
+
+      expect(Weft.logger).to have_received(:warn).with(/ShadowedDeriver.*:order/m).once
+    end
+
+    it "warns even after the ancestor forced its value (provenance survives forcing)" do
+      parent_class = Class.new(described_class) { def self.name = "ForcedUpstream" }
+      parent_class.derives(:order) { |_p| "upstream" }
+      child_class = Class.new(described_class) { def self.name = "ForcedShadowed" }
+      child_class.derives(:order) { |_p| "local" }
+
+      embed_under(parent_class, child_class, force: true)
+
+      expect(Weft.logger).to have_received(:warn).with(/ForcedShadowed.*:order/m)
+    end
+
+    it "stays silent for a shared derivation (same proc via a mixin)" do
+      shared = proc { |_p| "current-user" }
+      parent_class = Class.new(described_class) { def self.name = "SharingParent" }
+      parent_class.derives(:current_user, &shared)
+      child_class = Class.new(described_class) { def self.name = "SharingChild" }
+      child_class.derives(:current_user, &shared)
+
+      embed_under(parent_class, child_class)
+
+      expect(Weft.logger).not_to have_received(:warn)
+    end
+
+    it "stays silent when the inherited value came through another door (no derivation to diverge from)" do
+      parent_class = Class.new(described_class) do
+        def self.name = "HandedUpstream"
+        receives :order
+      end
+      child_class = Class.new(described_class) { def self.name = "QuietDeriver" }
+      child_class.derives(:order) { |_p| "local" }
+      parent_class.define_method(:build) do |attributes = {}|
+        super(attributes)
+        insert_tag(child_class)
+      end
+
+      Weft::Context.new { insert_tag(parent_class, order: "handed") }.to_s
+
+      expect(Weft.logger).not_to have_received(:warn)
+    end
+
+    it "warns when a class-ancestry override is shadowed by a tree ancestor of the parent class" do
+      parent_class = Class.new(described_class) { def self.name = "BaseDeriver" }
+      parent_class.derives(:foo) { |_p| "base" }
+      child_class = Class.new(parent_class) { def self.name = "OverridingDeriver" }
+      child_class.derives(:foo) { |_p| "overridden" }
+      # only the parent inserts — the child inherits this build and must not self-insert
+      parent_class.define_method(:build) do |attributes = {}|
+        super(attributes)
+        insert_tag(child_class) if instance_of?(parent_class)
+      end
+
+      Weft::Context.new { insert_tag(parent_class) }.to_s
+
+      expect(Weft.logger).to have_received(:warn).with(/OverridingDeriver.*:foo/m)
+    end
+
+    it "stays silent for a redeclaration rendered without tree shadowing" do
+      parent_class = Class.new(described_class) { def self.name = "UnshadowedBase" }
+      parent_class.derives(:foo) { |_p| "base" }
+      child_class = Class.new(parent_class) { def self.name = "UnshadowedOverride" }
+      child_class.derives(:foo) { |_p| "overridden" }
+
+      Weft::Context.new { insert_tag(child_class) }.to_s
+
+      expect(Weft.logger).not_to have_received(:warn)
+    end
+  end
+
+  describe "derives across the inheritance axis (copy-on-branch memo)" do
+    def embed_pair(parent_class, *child_classes)
+      parent_class.define_method(:build) do |attributes = {}|
+        super(attributes)
+        child_classes.each { |c| insert_tag(c) }
+      end
+      Weft::Context.new { insert_tag(parent_class) }
+    end
+
+    it "rides an ancestor-forced value down: one derivation, same object" do
+      runs = 0
+      child_class = Class.new(described_class) { def self.name = "RidingChild" }
+      parent_class = Class.new(described_class) { def self.name = "ForcingParent" }
+      parent_class.derives(:order) { |_p| Object.new.tap { runs += 1 } }
+      # force before the child branches; params need no super (construction-resolved)
+      parent_class.define_method(:build) do |_attributes = {}|
+        params.order
+        insert_tag(child_class)
+      end
+
+      ctx = Weft::Context.new { insert_tag(parent_class) }
+      parent = ctx.children.first
+      child = parent.children.find { |el| el.is_a?(child_class) }
+
+      expect(child.params.order).to be(parent.params.order)
+      expect(runs).to eq(1)
+    end
+
+    it "does not force an unread ancestor thunk just by branching" do
+      runs = 0
+      parent_class = Class.new(described_class) { def self.name = "LazyParent" }
+      parent_class.derives(:expensive) { |_p| runs += 1 }
+      child_class = Class.new(described_class) { def self.name = "IdleChild" }
+
+      embed_pair(parent_class, child_class).to_s
+
+      expect(runs).to eq(0)
+    end
+
+    it "re-derives per branch when siblings force an inherited thunk independently" do
+      runs = 0
+      parent_class = Class.new(described_class) { def self.name = "SharedThunkParent" }
+      parent_class.derives(:order) { |_p| runs += 1 }
+      # params resolve at construction, so a reader needn't even call super
+      reader = proc { |_attributes = {}| params.order }
+      first_child = Class.new(described_class) { def self.name = "GreedySiblingA" }
+      first_child.define_method(:build, &reader)
+      second_child = Class.new(described_class) { def self.name = "GreedySiblingB" }
+      second_child.define_method(:build, &reader)
+
+      embed_pair(parent_class, first_child, second_child).to_s
+
+      expect(runs).to eq(2)
+    end
+
+    it "lets an inherited unforced thunk beat the child's own default (it occupies the key)" do
+      parent_class = Class.new(described_class) { def self.name = "ThunkedParent" }
+      parent_class.derives(:status) { |_p| "derived" }
+      child_class = Class.new(described_class) do
+        def self.name = "DefaultingChild"
+        param :status, default: "fallback"
+      end
+
+      ctx = embed_pair(parent_class, child_class)
+      child = ctx.children.first.children.find { |el| el.is_a?(child_class) }
+
+      expect(child.params.status).to eq("derived")
     end
   end
 

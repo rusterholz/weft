@@ -105,4 +105,103 @@ RSpec.describe Weft::DSL::Params do
       expect(klass.received_params.keys).to eq(%i[status])
     end
   end
+
+  describe "subclass redeclaration (override semantics)" do
+    it "replaces the parent's param meta, keeping the parent's declaration position" do
+      parent = Class.new(base_class) do
+        def self.name = "OverrideParent"
+        param :region
+        param :per_page, default: 25
+      end
+      child = Class.new(parent) do
+        def self.name = "OverrideChild"
+        param :per_page, default: 100
+      end
+
+      expect(child.params.keys).to eq(%i[region per_page])
+      expect(child.params[:per_page]).to eq(default: 100)
+      expect(parent.params[:per_page]).to eq(default: 25)
+    end
+
+    it "softens a required hand-off with a default" do
+      strict_parent = Class.new(base_class) do
+        def self.name = "StrictParent"
+        receives :order
+      end
+      softened = Class.new(strict_parent) do
+        def self.name = "SoftenedChild"
+        receives :order, default: nil
+      end
+
+      expect(softened.received_params[:order]).to eq(default: nil)
+    end
+
+    it "hardens a defaulted hand-off back to required" do
+      soft_parent = Class.new(base_class) do
+        def self.name = "SoftParent"
+        receives :label, default: nil
+      end
+      hardened = Class.new(soft_parent) do
+        def self.name = "HardenedChild"
+        receives :label
+      end
+
+      expect(hardened.received_params[:label]).to eq({})
+    end
+
+    it "duals, not replaces, across doors" do
+      parent = Class.new(base_class) do
+        def self.name = "WireParent"
+        param :status, default: "all"
+      end
+      child = Class.new(parent) do
+        def self.name = "ReceivingChild"
+        receives :status
+      end
+
+      # the wire door survives — the key stays routable-making and serialized
+      expect(child.params[:status]).to eq(default: "all")
+      expect(child.received_params.keys).to eq(%i[status])
+    end
+  end
+
+  describe ".derives" do
+    it "declares a derivation, separate from the other stores" do
+      klass = Class.new(base_class) do
+        def self.name = "DerivesTest"
+        param :order_id
+        derives(:order, &:order_id)
+      end
+
+      expect(klass.derived_params.keys).to eq(%i[order])
+      expect(klass.params.keys).to eq(%i[order_id])
+      expect(klass.received_params.keys).to eq(%i[])
+    end
+
+    it "requires a block" do
+      expect do
+        Class.new(base_class) do
+          def self.name = "BlocklessDerives"
+          derives :order
+        end
+      end.to raise_error(Weft::InvalidDefinition, /derives.*:order.*block/)
+    end
+
+    it "merges parent and child declarations; a child redeclaration replaces the parent's block" do
+      parent = Class.new(base_class) do
+        def self.name = "DerivesParent"
+        derives(:foo) { |_p| "parent" }
+        derives(:bar) { |_p| "bar" }
+      end
+      child = Class.new(parent) do
+        def self.name = "DerivesChild"
+        derives(:foo) { |_p| "child" }
+      end
+
+      expect(child.derived_params.keys).to eq(%i[foo bar]) # parent's position, child's block
+      expect(child.derived_params[:foo][:block]).not_to eq(parent.derived_params[:foo][:block])
+      expect(parent.derived_params[:foo][:block].call(nil)).to eq("parent")
+      expect(child.derived_params[:foo][:block].call(nil)).to eq("child")
+    end
+  end
 end

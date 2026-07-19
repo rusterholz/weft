@@ -187,6 +187,20 @@ RSpec.describe Weft::Registry do
       expect(Weft.logger).not_to have_received(:warn)
     end
 
+    it "stays quiet when the hand-off has a derives dual" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "DerivesDualedPanel"
+        param :status
+        receives :order
+        derives(:order) { |_p| nil }
+      end
+      registry.register(klass)
+
+      registry.lookup("/_components/derives_dualed_panel")
+
+      expect(Weft.logger).not_to have_received(:warn)
+    end
+
     it "stays quiet when the hand-off has a wire dual" do
       klass = Class.new(Weft::Component) do
         def self.name = "DualedPanel"
