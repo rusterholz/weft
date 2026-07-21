@@ -54,6 +54,7 @@ Elements get their own vocabulary — `action:`, `loads:`, `trigger:` kwargs and
 - **[Build your first Weft app](docs/tutorial.md)** — the tutorial: empty directory to a working app with pages, components, a validated form action, and live updates.
 - **[Examples](docs/examples/README.md)** — twenty-one worked patterns with captured wire traffic. Coming from htmx? This catalog deliberately covers the ground of htmx's own examples.
 - **[The Weft DSL](docs/dsl.md)** — every verb, element kwarg, and interaction preset.
+- **[How params flow](docs/params.md)** — the data lifecycle: a request comes in, each component pulls what it needs through `param`/`receives`/`derives`/`defines`, and renders with enough of its own wire state to refresh or act on its own.
 - **[Application patterns](docs/app-patterns.md)** — the app around the components: service objects, databases, background jobs, authentication, CSRF, assets, and testing.
 - **[Arbre: the HTML layer](docs/arbre.md)** — the HTML builder inside every `build` method, in depth.
 - **[Routing](docs/routing.md)** — how classes become URLs, what's routable, and collision detection.

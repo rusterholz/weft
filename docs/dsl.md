@@ -46,7 +46,7 @@ A component's inputs all reach it through `params`, and there are four ways to d
 - **[`derives`](#derives--lazy-server-side-derivations)** — lazy server-side derivations: values the component works out for itself, on demand.
 - **[`defines`](#defines--static-values)** — static values a subclass pins; sugar over `derives`.
 
-Whichever door a value comes through, you read it the same way — `params.name`, or `params[:name]` — and `build` and action callables see the same resolved values.
+Whichever door a value comes through, you read it the same way — `params.name`, or `params[:name]` — and `build` and action callables see the same resolved values. For the bigger picture — how params travel in from a request, down the render tree, and back out into the next refresh or action — see [How params flow](params.md).
 
 ### `param` — wire state
 
