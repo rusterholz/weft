@@ -102,3 +102,5 @@ The `receives :contact_id` is what consumes the `contact_row(contact_id: id)` ha
 ## The shape of it
 
 End to end: a request's wire params resolve into the top component and flow down the tree; each component reads what it inherits and declares what it wants to own; at render time each bakes its own wire params into its refresh URL and action payloads; and the next request — refresh or action — arrives carrying exactly what that component needs to do it all again. Data in from the wire, data down the tree, data forward into the next request. That loop is the whole of it.
+
+That loop moves *data* down the tree. Once in a while a component needs to reach the other way — *up* the tree, for an ancestor's **identity** rather than its data: a nested pager needs its enclosing panel's route and DOM id to aim a swap at it. That's a separate affordance, [`closest` / `enclosing`](arbre.md#reaching-enclosing-components) — not part of the params flow, but its natural complement. Params come *to* you; identity you reach *for*.

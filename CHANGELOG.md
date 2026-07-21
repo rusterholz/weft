@@ -31,6 +31,8 @@
   - **`defines key: value, ...`** — sugar for statically-known derivations: each pair is exactly `derives(key) { value }`, with identical priority, overridability, and laziness. The values are fixed when the class body runs, which is the point — and the caveat: anything computed per render (a query, a clock) belongs in `derives`, because an interpolated value here would freeze at load time.
   - `params.to_h` and delegated Hash-API calls materialize all remaining derivations first — the explicit eager escape hatch.
 
+- **`closest` / `enclosing` — reach an enclosing component or page.** Where params flow *down* the render tree, these reach *up* it: a nested component finds an ancestor and reads its identity — the affordance behind "child affects ancestor." A pager reaches its enclosing panel for the route and DOM id to target (`enclosing(Weft::Component)`) instead of being hand-fed them at every call site. `closest(matcher)` is impedance-matched to the DOM's `element.closest()` (self included, nearest-first, `nil` if none); `enclosing(matcher)` is the same walk strictly above self; `closest!` / `enclosing!` raise `Weft::AncestorNotFound` for a required ancestor. The matcher is a Class/Module (matched `is_a?`), a Symbol tag name, or those refined by a block. Callable inside `build`; documented under [Reaching enclosing components](docs/arbre.md#reaching-enclosing-components).
+
 ## v0.1.0 (2026-07-12)
 
 First usable release. Weft is component-oriented hypermedia for Ruby: components declare their structure, their data, and their interactive behaviors, and the framework derives the routing, request handling, and client-side wiring automatically.

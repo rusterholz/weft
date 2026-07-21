@@ -12,6 +12,7 @@ Arbre's own upstream documentation is famously thin, so this document doesn't as
 - [Inside `build`: the component contract](#inside-build-the-component-contract)
 - [Receiving caller content](#receiving-caller-content)
 - [Working with the tree](#working-with-the-tree)
+- [Reaching enclosing components](#reaching-enclosing-components)
 - [Forms](#forms)
 - [Testing components](#testing-components)
 - [Arbre 1.x vs 2.x](#arbre-1x-vs-2x)
@@ -244,6 +245,34 @@ end                            # <div>replacement</div>
 ```
 
 It's the right tool for wholesale swaps and a footgun everywhere else. To add without destroying, create elements normally or use `text_node`.
+
+## Reaching enclosing components
+
+`parent` and `ancestors` walk the *element* tree — the divs and spans. Weft adds a **component**-level parallel: a nested component can reach an enclosing component or page and read its identity. This is how a child affects an ancestor. A pager, for instance, needs its enclosing panel's route and DOM id to aim its "next page" swap at the panel — rather than being hand-fed all of that at the call site, it reaches for it:
+
+```ruby
+class Pager < Weft::Component
+  def build(attributes = {})
+    super
+    panel = enclosing(Weft::Component)     # the nearest ancestor component
+    button "Next →", loads: panel.class, target: "##{panel.weft_id}"
+  end
+end
+```
+
+**`closest` and `enclosing`.** `closest(matcher)` returns the nearest matching node, *self included*, walking upward — impedance-matched to the DOM's `element.closest()`. `enclosing(matcher)` is the same walk but strictly above self — the natural read for "my enclosing X." Both return `nil` when nothing matches; the `!` variants (`closest!` / `enclosing!`) raise `Weft::AncestorNotFound` instead, for a component that genuinely requires the ancestor (pair it with [`dependent!`](routing.md#abstract-and-routable)).
+
+What you can match on:
+
+- a **Class or Module** — matched `is_a?`, so subclasses and included modules count: `enclosing(Weft::Page)` finds the nearest page of any kind, `enclosing(OrdersPanel)` a specific type, `enclosing(Paginatable)` anything that mixes in that role.
+- a **Symbol** — matched against the tag name: `closest(:section)` hands back the nearest enclosing `<section>`, no need to know Arbre's internal element classes.
+- an optional **block** that *refines*: a candidate must match the positional matcher **and** the block — `closest(Weft::Component) { |c| c.params.key?(:order_id) }`.
+
+The return value is the matching node — a component for a class match, a plain element for a tag.
+
+**What to rely on.** The ancestor you reach mid-`build` is itself mid-build, above you on the stack — so lean on its *identity* and *params* (its class, `weft_id`, route, resolved params, all fixed at construction), not on instance variables its own `build` may not have set yet. And mind one edge of the refining block: it runs only on nodes that already matched the positional, but `closest(Weft::Component, &:paginatable?)` still raises if a matched component doesn't define `paginatable?` — prefer matching the **role module** (`closest(Paginatable)`) over a predicate where you can.
+
+One include-self subtlety: because `closest` includes self and *every* component is a `Weft::Component`, `closest(Weft::Component)` returns **self**. "My nearest ancestor component" is `enclosing(Weft::Component)` (or `closest(Weft::Component, include_self: false)`).
 
 ## Forms
 
