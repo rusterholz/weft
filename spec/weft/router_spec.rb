@@ -663,6 +663,72 @@ RSpec.describe Weft::Router do
     end
   end
 
+  describe "verb blocks run against a sandbox self, not the component class" do
+    # performs/transfers/recovers/includes blocks execute in a fresh
+    # Weft::DSL::Sandbox, so `self` reaches no component or class state. A block
+    # that reports `self.class.name` names the sandbox — before the flip, a
+    # class-body proc's self was the component class, so `self.class` was `Class`.
+
+    it "runs a performs callable in the sandbox" do
+      Class.new(Weft::Component) do
+        def self.name = "SandboxPerform"
+        param :marker, default: "start"
+        performs(:probe, method: :get) { |_params| { marker: self.class.name } }
+
+        def build(attributes = {})
+          super
+          span(class: "marker") { text_node params.marker }
+        end
+      end
+
+      get "/_components/sandbox_perform/probe"
+
+      expect(last_response.body).to include("Weft::DSL::Sandbox")
+    end
+
+    it "runs a recovers block in the sandbox" do
+      Class.new(Weft::Component) do
+        def self.name = "SandboxRecover"
+        param :id
+        param :recovered_by
+        recovers(from: StandardError) { |_params, _error| { recovered_by: self.class.name } }
+
+        def build(attributes = {})
+          super
+          raise "trigger" unless params.recovered_by
+
+          span(class: "who") { text_node params.recovered_by }
+        end
+      end
+
+      get "/_components/sandbox_recover", id: "1"
+
+      expect(last_response.body).to include("Weft::DSL::Sandbox")
+    end
+
+    it "runs an includes block in the sandbox" do # rubocop:disable RSpec/ExampleLength
+      sink = Class.new(Weft::Component) do
+        def self.name = "SandboxIncluded"
+        param :label, default: "none"
+
+        def build(attributes = {})
+          super
+          span(class: "included-label") { text_node params.label }
+        end
+      end
+      source = Class.new(Weft::Component) do
+        def self.name = "SandboxIncluding"
+        param :id
+        performs(:go) { nil }
+      end
+      source.includes(sink) { |_params| { label: self.class.name } }
+
+      post "/_components/sandbox_including/go", id: "1"
+
+      expect(last_response.body).to include("Weft::DSL::Sandbox")
+    end
+  end
+
   describe "dismisses error handling" do
     it "sets HX-Reswap on error for delete swap actions" do
       Class.new(Weft::Component) do

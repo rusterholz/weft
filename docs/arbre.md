@@ -150,21 +150,22 @@ class EventSummary < Weft::Component
 end
 ```
 
-**Arguments arrive positionally — always.** When a call site writes `event_summary(event_id: "bbq", class: "compact")`, Arbre collects the arguments and passes them positionally to `build`; the keywords become one trailing hash. Declaring Ruby keyword parameters (`def build(event_id:)`) raises `ArgumentError: wrong number of arguments`. Take the hash.
+**Arguments arrive positionally — always.** When a call site writes `event_summary(class: "compact")`, Arbre collects the arguments and passes them positionally to `build`; the keywords become one trailing hash. Declaring Ruby keyword parameters — `def build(compact:)` — raises `ArgumentError: wrong number of arguments`. Take the hash. Note what's *not* in that call: the component's `event_id` param. Params travel their own channel — from the request, or down the render tree from an enclosing page — never through the builder call. What you pass here is HTML chrome for the wrapper.
 
-**`super` is where the hash becomes reality.** In a Weft component, `super` extracts your declared params into `params`, applies whatever remains as HTML attributes on the wrapper element (that's where `class: "compact"` went), and sets the wrapper's DOM id ([derived from your first param](dsl.md#params)). Skip `super` and none of that happens — the classic symptom is a component that ignores the `class:` you pass it.
+**`super` applies the hash and wires the wrapper.** Your params are already resolved before `build` runs — Weft resolves them when the component is constructed, so you can read `params` even above the `super` call (deriving a heading from a record looked up by param, say). What `super` does is apply the trailing hash as HTML attributes on the wrapper element (that's where `class: "compact"` went), set the wrapper's DOM id ([derived from your first param](dsl.md#params)), and attach any refresh or push wiring. Skip `super` and none of that happens — the classic symptom is a component that ignores the `class:` you pass it.
 
-**Rich objects ride the same hash — pull them out first.** Wire params (declared with `param`) are for values that travel in URLs. When a call site already holds a rich object, passing it in the hash is fine — just `delete` it before `super` so it doesn't get sprayed onto the wrapper as an HTML attribute:
+**Rich objects come through `receives`.** Wire params (declared with `param`) are for values small enough to travel in a URL. When a call site hands the component a rich object it already holds — a record, a computed value, anything that can't ride a query string — declare it with [`receives`](dsl.md#receives--caller-hand-offs) and read it from `params` like any other input. The value is handed straight across: it never serializes into a URL, and it never lands on the wrapper as an HTML attribute.
 
 ```ruby
 class AttendeeRow < Weft::Component
   builder_method :attendee_row
 
+  receives :attendee
+
   def build(attributes = {})
-    @attendee = attributes.delete(:attendee)   # rich object out first
     super
-    td @attendee.name
-    td @attendee.answer
+    td params.attendee.name
+    td params.attendee.answer
   end
 
   def tag_name
@@ -182,7 +183,7 @@ end
 Composable components take a block of caller content:
 
 ```ruby
-event_card(event_id: event.id) do
+event_card do
   para "Bring a dish to share!"
 end
 ```
@@ -267,22 +268,23 @@ RSpec.describe AttendeeList do
 end
 ```
 
-`Component.render(**attrs)` is the gem-provided entry point and covers most component testing. When you want the element tree rather than the string — asserting on classes, structure, or specific descendants — build a context and search it:
+`Component.render` is the gem-provided entry point and covers most component testing — its keyword arguments are exactly the wire params a request would carry. When you want the element tree rather than the string — asserting on classes, structure, or specific descendants — build a `Weft::Context` and search it. Its `wire_params:` argument stands in for the request, so the component's declared params resolve just as they would over the wire:
 
 ```ruby
-ctx = Arbre::Context.new do
-  attendee_list(event_id: "trivia-night")
+ctx = Weft::Context.new({}, nil, wire_params: { "event_id" => "trivia-night" }) do
+  attendee_list
 end
 list = ctx.children.first
 expect(list.class_list).to include("roster")
 expect(ctx.find_by_tag("li").length).to eq(2)
 ```
 
-Three Arbre-specific notes for test code:
+A value the component `receives` is handed the way it is in production — as a builder kwarg, `attendee_list(roster: some_roster)` — since a declared `receives` key consumes the kwarg rather than letting it fall through to an HTML attribute. Capture that value into a local first: the block runs *inside* the context, so a bare `let` name isn't in scope there.
+
+Two Arbre-specific notes for test code:
 
 - **Give test component classes real names.** `builder_method` resolves its class by name at call time, so an anonymous class (`Class.new(Weft::Component)`) with a stubbed `name` raises `NameError` the first time its builder is invoked — and under Arbre 1.x, even `insert_tag` with a truly anonymous class crashes. Define named classes (a `TestCard = Class.new(...)` constant works) rather than fighting it.
-- **Pass data via assigns, not local-variable capture,** when a context block needs outside data: `Arbre::Context.new(event: event) { ... }` makes `event` resolve through Arbre's lookup chain — the same resolution production code uses — where a captured local would quietly bypass it.
-- **The helpers slot** (`Arbre::Context.new(assigns, helpers)`) makes any object's methods callable inside the block. Weft renders components without helpers, so tests should too, unless you're testing raw Arbre code that expects them.
+- **`assigns` and `helpers` are Arbre's channels, not Weft's.** `Weft::Context.new(assigns, helpers, wire_params:)` still carries Arbre's two data slots — `assigns` (resolved through Arbre's lookup chain) and `helpers` (an object whose methods become callable bare in the block). Weft components read `params` and use neither; reach for these only when a block holds raw Arbre code that expects them.
 
 ## Arbre 1.x vs 2.x
 

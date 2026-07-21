@@ -23,7 +23,7 @@ module Weft
       end
 
       def render_oob_component(inclusion, primary_params)
-        wire_params = inclusion[:block] ? inclusion[:block].call(primary_params) : filtered_params
+        wire_params = inclusion[:block] ? Weft::DSL::Sandbox.run(primary_params, &inclusion[:block]) : filtered_params
         component = build_component_with_wire(inclusion[:component_class], wire_params)
         component.set_attribute("hx-swap-oob", "true")
         component.to_s

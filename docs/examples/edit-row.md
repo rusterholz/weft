@@ -17,6 +17,7 @@ class PersonRow < Weft::Component
   builder_method :person_row
 
   param :person_id
+  receives :person_id
 
   def tag_name
     "tr"
@@ -88,6 +89,8 @@ end
 ## How it works
 
 **It's click-to-edit, once per row.** Both components render as `<tr>` (the `tag_name` override), with the identifying param declared first so each carries a usable DOM id. Entering edit mode changes nothing on the server, so Edit is a [`loads:`](../dsl.md#loads) — a GET that fetches the editor row and replaces the display row (`swap: :replace, target: self`). Saving is a [`transfers`](../dsl.md#transfers--actions-that-render-something-else): the write runs, then the *display* row renders in the editor's place. Cancel is the Edit button's mirror image, pointed back at `PersonRow`. As in click-to-edit, defining the display component first lets `transfers :save, to: PersonRow` resolve in the editor's class body, while `loads: PersonRowEditor` waits until render.
+
+**Where `person_id` comes from differs by component.** The table hands each display row its `person_id` (`person_row(person_id: id)`) — a [`receives`](../dsl.md#receives--caller-hand-offs) hand-off, since per-row values can't inherit down the render tree — and `PersonRow` declares it as a `param` too, so the same id serializes into the row's own route and DOM id. The editor is different: it's always *fetched* by URL (Edit and Cancel both `loads:` it with `with: { person_id: … }`), so it reads `person_id` straight from the wire — `param` alone, no hand-off.
 
 **A form can't wrap table cells — so the cells point at the form.** HTML won't allow a `<form>` to span `<td>`s inside a row, which is the structural puzzle of this pattern. htmx's original solves it with `hx-include="closest tr"`; here plain HTML does the same job: the form lives in the last cell, and the name and email inputs associate with it from their own cells via the standard [`form` attribute](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input#form). Form-associated elements are part of the form's submission set, so both htmx's payload *and* the no-JavaScript fallback submission include all three fields — nothing about the association needs scripting.
 

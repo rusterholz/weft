@@ -23,7 +23,7 @@ end
 
 **In this document:**
 
-- [Params](#params)
+- [Params](#params) — the four doors: [`param`](#param--wire-state), [`receives`](#receives--caller-hand-offs), [`derives`](#derives--lazy-server-side-derivations), [`defines`](#defines--static-values), [how they combine](#how-the-doors-combine), [inheritance](#inheritance-and-the-render-tree)
 - [Verbs](#verbs)
   - [`refreshes` — the client re-fetches](#refreshes--the-client-re-fetches)
   - [`pushes` — the server sends updates](#pushes--the-server-sends-updates)
@@ -39,12 +39,23 @@ end
 
 ## Params
 
+A component's inputs all reach it through `params`, and there are four ways to declare them — four *doors* into the same bag, each suited to a different kind of value:
+
+- **[`param`](#param--wire-state)** — wire state: values small enough to travel in a URL (an id, a page number, a filter).
+- **[`receives`](#receives--caller-hand-offs)** — caller hand-offs: rich objects a call site already holds and passes straight in (a record, a computed collection).
+- **[`derives`](#derives--lazy-server-side-derivations)** — lazy server-side derivations: values the component works out for itself, on demand.
+- **[`defines`](#defines--static-values)** — static values a subclass pins; sugar over `derives`.
+
+Whichever door a value comes through, you read it the same way — `params.name`, or `params[:name]` — and `build` and action callables see the same resolved values. For the bigger picture — how params travel in from a request, down the render tree, and back out into the next refresh or action — see [How params flow](params.md).
+
+### `param` — wire state
+
 ```ruby
 param :status, default: "active"
 param :page, default: 1
 ```
 
-Params are a component's *wire state* — the values that identify what this particular instance shows, small enough to travel in a URL. When the component renders inside a page, params come from the rendering call (`orders_panel(status: "shipped")`); when it renders over the wire — a refresh, an action, an SSE push — they come from request parameters. Either way, `build` and action callables see the same resolved values.
+Params are a component's *wire state* — the values that identify what this particular instance shows, small enough to travel in a URL. They come from the request: query, path, and body values. When the component renders inside a page, it reads the same wire params the page does (see [Inheritance and the render tree](#inheritance-and-the-render-tree)); when it renders over the wire — a refresh, an action, an SSE push — they come from that request's parameters.
 
 Wire values arrive as strings, so Weft coerces them based on each param's default: an `Integer` default coerces with `to_i`, a `Float` with `to_f`, and a `true`/`false` default maps `"true"` and `"1"` to `true` (anything else to `false`). Params with other defaults (strings, `nil`) pass through untouched. A `type:` kwarg is accepted on `param` but reserved for future use — today, the default *is* the type declaration.
 
@@ -59,7 +70,93 @@ params.to_h        # the underlying hash
 
 Declared param names always win over hash methods — if you declare `param :count`, `params.count` is your value, not `Hash#count`. For anything not declared, the hash API is available directly on `params`.
 
-Declaring params has a routing consequence: a component with params (or any verb below) is considered independently addressable and gets its own route. See [Routing](routing.md).
+Only a component's *own* declared params serialize — into its refresh and stream URLs and its action payloads. That's the refresh contract: a standalone request must be able to reconstruct the component from its URL, so only URL-safe wire state belongs there. The other three doors are server-side and never serialize.
+
+Declaring a param has a routing consequence: a component with params (or any verb below) is considered independently addressable and gets its own route. See [Routing](routing.md).
+
+### `receives` — caller hand-offs
+
+```ruby
+receives :order
+receives :page_num, default: 1
+```
+
+Some values can't ride a URL — an `ActiveRecord` object, a pre-built collection, anything rich. `receives` declares that a call site hands the value over directly: `order_row(order: order)` fills `params.order`. The kwarg is consumed as the hand-off, so it never becomes an HTML attribute on the wrapper, and the value never serializes into a URL.
+
+A hand-off is **required by default**: a call site that omits it raises `Weft::NotReceived`, with the backtrace pointing at the call site rather than deep inside the framework. Declaring a default makes it optional — `receives :page_num, default: 1`, and an explicit `default: nil` counts too (the presence of the keyword is what makes it optional, not the value).
+
+Hand-offs are server-side: declaring one doesn't make a component routable, since there's no way to reconstruct an `Order` from a URL. A component that lives only inside a parent — always handed its data, never served standalone — can say so with **`dependent!`** (an alias of [`abstract!`](routing.md)): "my parent passes this in every time; serving me on my own makes no sense."
+
+If a component *is* routable and declares a required hand-off with no wire counterpart, Weft warns at route validation — such a component renders fine embedded but would raise `Weft::NotReceived` on every standalone refresh. Give it a wire dual (below) or mark it `dependent!`.
+
+### `derives` — lazy server-side derivations
+
+```ruby
+derives(:order) { |params| Oms::Order.find(params.order_id) }
+```
+
+A derivation is a value the component computes for itself — the replacement for the find-by-id dance at the top of every `build`. Declaring one registers the block; it runs **at most once per render**, when `params.order` is first read, and **never runs if nothing reads it**. The result is memoized for the rest of that render.
+
+Derivations chain lazily. A block that reads another derived key forces it on demand:
+
+```ruby
+derives(:order)     { |p| Oms::Order.find(p.order_id) }
+derives(:shipments) { |p| Logistics::Shipment.for_order(p.order.id) }
+```
+
+Reading `params.shipments` forces `shipments`, which reads `params.order` and forces that in turn — so a render computes exactly what it touches and nothing more. Derived values are server-side (never serialized, not routable-making), but they do flow down the render tree like everything else in the bag, and a value an ancestor already computed is not recomputed by a child.
+
+**The block is a `(params) -> value` pure function.** It runs against a sandboxed `self`: `params` and lexical constants are in reach, and `Kernel` stays available (`raise`, `format`, `Integer()`), but nothing component-specific is — a bare method call raises `NameError`, which keeps a derivation portable and side-effect-free. Each block runs in its own fresh, disposable context, so scratch instance variables are allowed but never outlive the one execution. If the derivation belongs to a service, call it explicitly: `derives(:report) { |p| ReportService.call(p.account_id) }`.
+
+A failing derivation raises at *first read* — which lands inside the `recovers`-wrapped render, so `recovers from: ActiveRecord::RecordNotFound` and friends handle it the same way they handle a failure in `build`. A derivation nobody reads never raises. (Failures aren't memoized: like an RSpec `let`, a re-read runs the block again.)
+
+`params.to_h` and any delegated Hash-API call materialize every remaining derivation first — the eager escape hatch when you genuinely want the whole bag.
+
+### `defines` — static values
+
+```ruby
+defines label: "Drivers", accent: "available"
+```
+
+`defines` is sugar for statically-known derivations: each pair is exactly `derives(key) { value }`, with identical priority, overridability, and laziness. It shines in a subclass that pins constant faces of an inherited component while deriving the dynamic ones:
+
+```ruby
+class AvailableDriversCard < StatCard
+  defines label: "Drivers", accent: "available"          # fixed
+  derives(:value) { |_p| "#{Driver.available.count}/#{Driver.count}" }  # per render
+end
+```
+
+The catch is in the name: the values are fixed **when the class body runs**, not per render. Anything computed — a query, a count, a clock — must stay in `derives`, because an interpolated value here would freeze at load time. If it isn't a literal constant, it's a `derives`.
+
+### How the doors combine
+
+A key can have more than one door, and Weft resolves the value from a fixed order of sources. Highest wins; `nil` at any level falls through to the next:
+
+1. a **received** hand-off (`receives`)
+2. the component's **own wire** value (`param`)
+3. an **inherited** value from an ancestor in the render tree
+4. the component's **own derivation** (`derives` / `defines`)
+5. the declared **default**
+
+That order is what makes *duals* work — declaring a key through two doors so it resolves whether it's handed over or has to fetch itself:
+
+- **`param` + `receives`** — handed the value when embedded (no query round-trip), wire-borne when rendered standalone, so a self-refreshing card embedded with `status_card(status: "hot")` keeps its status across refreshes.
+- **`derives` + `receives`** — handed the value when embedded, self-fetching when standalone. A `derives` dual also satisfies the refresh-safety lint.
+- **`param` + `derives`** — use the wire value if present, otherwise derive one.
+
+When an inherited value (level 3) shadows the component's *own, different* derivation (level 4) for the same key, Weft logs a one-time warning: the ancestor's value wins, and a silent shadow of your own `derives` is worth knowing about. (A derivation shared through a mixin — same block object — stays quiet; it's genuine divergence that warns.)
+
+### Inheritance and the render tree
+
+Within one render, each component starts from a copy of its nearest ancestor component's (or page's) resolved params: it sees everything *above* it in the tree, nothing *beside* it. A bare `shipments_card` embedded in a page that declares `param :order_id` reads `params.order_id` without declaring anything itself.
+
+Two shapes of consumption both work, and both are idiomatic:
+
+- **Declare-and-read.** The component declares the keys it consumes (through whichever door fits) and reads them. Self-documenting; the declaration is a contract. Most components want this.
+- **Inherit-and-read.** A base component reads `params.order_id` that it never declares, trusting the render tree — or a subclass — to supply it. This keeps the base pipeline-agnostic: each subclass chooses its own door (`param`, `receives`, or `derives`) to fill the key, and the shared `build` stays the same. The cost is that the dependency is implicit — nothing in the base names what it needs.
+
+Subclasses can also **redeclare** an inherited key. Redeclaring through the *same* door overrides the parent's declaration (the block or metadata is replaced, keeping the parent's declaration-order position). Redeclaring through a *different* door adds a dual — it doesn't replace the parent's door. There's no way to *un*-declare a key a parent declared; a subclass that needs different behavior overrides or duals, it doesn't remove.
 
 ## Verbs
 
@@ -127,6 +224,8 @@ end
 ```
 
 `Weft.redirect` takes a `Weft::Page` subclass plus params (interpolated into the page's path pattern), or a plain URL string. The Router handles transport: htmx requests get an `HX-Redirect` header, traditional form submissions get a 302.
+
+Like every verb block — the action callable here, and the blocks for `transfers`, `recovers`, and `includes` — the callable runs against a [sandboxed `self`](#derives--lazy-server-side-derivations): `params` and lexical constants are in reach and `Kernel` is available, but nothing component-specific is. Do your side effects through the objects you call (`Oms::AdvanceOrder.call(order)`), never through a method on the component.
 
 If the callable raises, the error walks the component's recovery chain — see [Error handling](error-handling.md).
 

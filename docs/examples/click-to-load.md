@@ -31,7 +31,7 @@ end
 
 (The `AGENTS` array stands in for your data layer — swap in ActiveRecord or whatever your app uses.)
 
-Render `agent_rows(page: 1)` wherever the list lives, and the pattern takes care of itself from there.
+Render a bare `agent_rows` wherever the list lives — its `page` param defaults to 1 — and the pattern takes care of itself from there.
 
 ## How it works
 

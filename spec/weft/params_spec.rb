@@ -148,14 +148,22 @@ RSpec.describe Weft::Params do
       expect(runs).to eq(%i[summary order])
     end
 
-    it "runs blocks against a void self" do
+    it "forces blocks in a sandbox self with no component state in reach" do
       bag = described_class.new(
-        selfish: described_class::Thunk.new(proc { |_p| some_component_method }),
-        stateful: described_class::Thunk.new(proc { |_p| @stash = 1 })
+        selfish: described_class::Thunk.new(proc { |_p| some_component_method })
       )
 
       expect { bag.selfish }.to raise_error(NameError, /some_component_method/)
-      expect { bag.stateful }.to raise_error(FrozenError)
+    end
+
+    it "gives each derivation a fresh sandbox, so scratch ivars don't leak between them" do
+      bag = described_class.new(
+        writes: described_class::Thunk.new(proc { |_p| @stash = 1 }),
+        reads: described_class::Thunk.new(proc { |_p| instance_variable_defined?(:@stash) })
+      )
+
+      expect(bag.writes).to eq(1)
+      expect(bag.reads).to be(false)
     end
 
     it "raises a clear error on circular derivation instead of overflowing" do

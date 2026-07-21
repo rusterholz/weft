@@ -55,7 +55,7 @@ class ContactSearch < Weft::Component
     input type: "search", name: "q", placeholder: "Begin typing to search...",
           live_search: ContactResults, target: "#search-results"
     div id: "search-results" do
-      contact_results(q: "")
+      contact_results
     end
   end
 end
@@ -75,7 +75,7 @@ input type: "search", name: "q",
       trigger: "keyup changed delay:500ms"
 ```
 
-**Results refill a stable container.** The `:fill` swap replaces the *contents* of `#search-results`, so the container div persists across searches while a fresh `ContactResults` lands inside it each time. Pre-rendering `contact_results(q: "")` in the container means the page starts with the full directory rather than an empty pane — the initial state and every subsequent state are the same component.
+**Results refill a stable container.** The `:fill` swap replaces the *contents* of `#search-results`, so the container div persists across searches while a fresh `ContactResults` lands inside it each time. Pre-rendering a bare `contact_results` in the container means the page starts with the full directory rather than an empty pane — its `q` param defaults to the empty string, which matches everyone — and the initial state and every subsequent state are the same component.
 
 **The whole result set re-renders per search.** No row diffing, no client-side state: each request returns the complete table (or the "no matches" paragraph) for that query. At search-box scale this is the simple, correct trade.
 

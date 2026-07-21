@@ -49,7 +49,7 @@ class ContactDirectory < Weft::Component
     h3 "Contact directory"
     table do
       thead { tr { th "Name"; th "Email" } }
-      contact_rows(page: 1)
+      contact_rows
     end
   end
 end
