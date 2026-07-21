@@ -190,8 +190,8 @@ class EventPage < Weft::Page
   param :event_id
 
   def build(attributes = {})
-    event = EventStore.find(attributes[:event_id])
-    raise Weft::NotFound, "no event called #{attributes[:event_id]}" unless event
+    event = EventStore.find(params.event_id)
+    raise Weft::NotFound, "no event called #{params.event_id}" unless event
 
     attributes[:title] = event.name
     super
@@ -206,7 +206,7 @@ Restart (new file), then click through to an event. Two new ideas here:
 
 **Params are a page's wire state.** `param :event_id` declares that this page is parameterized, and the `page_path` pattern says where the value comes from: `/events/summer-bbq` gives the page `event_id = "summer-bbq"`. A page with params needs an explicit `page_path` — there's no way to derive a parameterized pattern from a class name, and Weft will tell you exactly that if you forget.
 
-One timing wrinkle: before the `super` call, read incoming values from the raw `attributes` hash (as above). After `super`, the resolved values are available the nicer way — `params.event_id`. You'll see `params` used in the components below, where `super` comes first.
+One nicety worth calling out: `params` is resolved before `build` runs, so `params.event_id` is available throughout — *including* before `super`. That's what lets us look the event up in time to set the page title, which has to be in place before `super` renders the `<head>`. (The `attributes` hash is a separate thing: it carries the page's shell chrome, like `title`, into `super`.)
 
 **Raising is error handling.** For an unknown event, we `raise Weft::NotFound` and we're done — Weft turns it into a proper 404 response with its default not-found page. Try [http://localhost:9292/events/nope](http://localhost:9292/events/nope). There's a whole family of semantic errors (`Weft::Unprocessable` will appear shortly), and everything about the resulting rendering is customizable — see [Error handling](error-handling.md).
 
@@ -242,8 +242,10 @@ end
 Add it to `EventPage`, before the back-link:
 
 ```ruby
-    attendee_list(event_id: event.id)
+    attendee_list
 ```
+
+Notice there's no `event_id:` here. The component is nested inside a page that already carries `event_id`, and params flow down the render tree — so `attendee_list` inherits it automatically. That inheritance is central to how Weft composes; the [DSL reference](dsl.md#inheritance-and-the-render-tree) has the full picture.
 
 Restart, and the Summer BBQ page shows Priya under "Who's coming".
 
@@ -312,8 +314,8 @@ end
 Add it to `EventPage` above the attendee list:
 
 ```ruby
-    rsvp_form(event_id: event.id)
-    attendee_list(event_id: event.id)
+    rsvp_form
+    attendee_list
 ```
 
 Restart, open Trivia Night, RSVP as yourself — **the attendee list updates without a page reload**, and the form clears. Then try submitting with a blank name: a red message appears in the form, and the list is untouched.

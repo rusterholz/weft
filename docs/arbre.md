@@ -150,21 +150,22 @@ class EventSummary < Weft::Component
 end
 ```
 
-**Arguments arrive positionally — always.** When a call site writes `event_summary(event_id: "bbq", class: "compact")`, Arbre collects the arguments and passes them positionally to `build`; the keywords become one trailing hash. Declaring Ruby keyword parameters (`def build(event_id:)`) raises `ArgumentError: wrong number of arguments`. Take the hash.
+**Arguments arrive positionally — always.** When a call site writes `event_summary(class: "compact")`, Arbre collects the arguments and passes them positionally to `build`; the keywords become one trailing hash. Declaring Ruby keyword parameters — `def build(compact:)` — raises `ArgumentError: wrong number of arguments`. Take the hash. Note what's *not* in that call: the component's `event_id` param. Params travel their own channel — from the request, or down the render tree from an enclosing page — never through the builder call. What you pass here is HTML chrome for the wrapper.
 
-**`super` is where the hash becomes reality.** In a Weft component, `super` extracts your declared params into `params`, applies whatever remains as HTML attributes on the wrapper element (that's where `class: "compact"` went), and sets the wrapper's DOM id ([derived from your first param](dsl.md#params)). Skip `super` and none of that happens — the classic symptom is a component that ignores the `class:` you pass it.
+**`super` applies the hash and wires the wrapper.** Your params are already resolved before `build` runs — Weft resolves them when the component is constructed, so you can read `params` even above the `super` call (deriving a heading from a record looked up by param, say). What `super` does is apply the trailing hash as HTML attributes on the wrapper element (that's where `class: "compact"` went), set the wrapper's DOM id ([derived from your first param](dsl.md#params)), and attach any refresh or push wiring. Skip `super` and none of that happens — the classic symptom is a component that ignores the `class:` you pass it.
 
-**Rich objects ride the same hash — pull them out first.** Wire params (declared with `param`) are for values that travel in URLs. When a call site already holds a rich object, passing it in the hash is fine — just `delete` it before `super` so it doesn't get sprayed onto the wrapper as an HTML attribute:
+**Rich objects come through `receives`.** Wire params (declared with `param`) are for values small enough to travel in a URL. When a call site hands the component a rich object it already holds — a record, a computed value, anything that can't ride a query string — declare it with [`receives`](dsl.md#receives--caller-hand-offs) and read it from `params` like any other input. The value is handed straight across: it never serializes into a URL, and it never lands on the wrapper as an HTML attribute.
 
 ```ruby
 class AttendeeRow < Weft::Component
   builder_method :attendee_row
 
+  receives :attendee
+
   def build(attributes = {})
-    @attendee = attributes.delete(:attendee)   # rich object out first
     super
-    td @attendee.name
-    td @attendee.answer
+    td params.attendee.name
+    td params.attendee.answer
   end
 
   def tag_name
@@ -182,7 +183,7 @@ end
 Composable components take a block of caller content:
 
 ```ruby
-event_card(event_id: event.id) do
+event_card do
   para "Bring a dish to share!"
 end
 ```
