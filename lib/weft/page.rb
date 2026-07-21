@@ -27,6 +27,7 @@ module Weft
     include Weft::DSL::Params
     include Weft::DSL::Recoveries
     include Weft::DSL::Containers
+    include Weft::Traversal
 
     # @!method weft_page(*args, &block)
     #   @api private
