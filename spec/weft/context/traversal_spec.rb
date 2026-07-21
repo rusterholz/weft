@@ -39,7 +39,7 @@ module M7Fixtures
   end
 end
 
-RSpec.describe Weft::Traversal do
+RSpec.describe Weft::Context::Traversal do
   let(:nodes) do
     M7Fixtures::NODES.clear
     Weft::Context.new { insert_tag M7Fixtures::Outer }
