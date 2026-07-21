@@ -2,35 +2,41 @@
 
 require "spec_helper"
 
+# Real named fixtures (constants) so the panel's route derives from its name and
+# the pager's builder_method resolves. The pager reaches its enclosing panel via
+# `enclosing` for the swap target (the panel's route + DOM id) and push_url (the
+# panel's declared page_class); the fake panel supplies those and forwards each
+# example's pager attrs through a class-level accessor.
+module PagerSpecFixtures
+  class Page < Weft::Page
+    def self.name = "FakePage"
+    self.page_path = "/fake"
+  end
+
+  class Panel < Weft::Component
+    def self.name = "FakeTarget"
+
+    class << self
+      attr_accessor :pager_attrs
+    end
+
+    def page_class = PagerSpecFixtures::Page
+
+    def build(attributes = {})
+      super
+      pager(**self.class.pager_attrs)
+    end
+  end
+end
+
 RSpec.describe DropshipUI::Pager, type: :component do
-  # A fake target component class — Pager passes its class + DOM id to the
-  # :paginate preset expansion, which renders htmx attrs that load the
-  # target back into the target selector.
-  let(:fake_target_class) do
-    Class.new(Weft::Component) do
-      def self.name = "FakeTarget"
-      param :page, default: 1
-    end
-  end
-
-  # A fake target page class — Pager uses its resolve_page_path for push_url.
-  let(:fake_page_class) do
-    Class.new(Weft::Page) do
-      def self.name = "FakePage"
-      self.page_path = "/fake"
-    end
-  end
-
-  def render(**attrs)
-    tc = fake_target_class
-    pc = fake_page_class
-    defaults = { target_class: tc, target_id: "fake-target", target_page_class: pc }
-    render_weft_html { pager(**defaults, **attrs) }
+  def render(**pager_attrs)
+    PagerSpecFixtures::Panel.pager_attrs = pager_attrs
+    render_weft_html { insert_tag(PagerSpecFixtures::Panel) }
   end
 
   it "renders nothing visible when total is 0" do
     html = render(page_num: 1, per_page: 25, total: 0)
-    # Wrapper exists but is empty (no offset text or buttons)
     expect(html).not_to include("Page ")
     expect(html).not_to include("Prev")
     expect(html).not_to include("Next")
@@ -46,7 +52,6 @@ RSpec.describe DropshipUI::Pager, type: :component do
     html = render(page_num: 3, per_page: 25, total: 120)
     expect(html).to include("Prev")
     expect(html).to include("Next")
-    # Neither should be the disabled span
     expect(html).to match(/<button[^>]*>← Prev/)
     expect(html).to match(/<button[^>]*>Next →/)
   end
@@ -68,13 +73,13 @@ RSpec.describe DropshipUI::Pager, type: :component do
     expect(html).to include('hx-trigger="click"')
   end
 
-  it "builds hx-get URLs from the target_class component path with page params" do
+  it "builds hx-get URLs from the enclosing panel's component path with page params" do
     html = render(page_num: 2, per_page: 25, total: 120)
     expect(html).to include('hx-get="/_components/fake_target?page=1"')
     expect(html).to include('hx-get="/_components/fake_target?page=3"')
   end
 
-  it "builds push_url URLs from the target_page_class page path" do
+  it "builds push_url URLs from the panel's page_class page path" do
     html = render(page_num: 2, per_page: 25, total: 120)
     expect(html).to include('hx-push-url="/fake?page=3"')
   end

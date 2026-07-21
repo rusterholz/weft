@@ -19,11 +19,10 @@ module Logistics
       card(title: "All Shipments (#{total})") do
         shipment_table shipments: records
       end
-      pager(
-        page_num: page_num, per_page: PER_PAGE, total: total,
-        target_class: self.class, target_id: weft_id,
-        target_page_class: ShipmentsPage
-      )
+      pager(page_num: page_num, per_page: PER_PAGE, total: total)
     end
+
+    # The page this panel lives on — read by the embedded pager for push_url.
+    def page_class = ShipmentsPage
   end
 end
