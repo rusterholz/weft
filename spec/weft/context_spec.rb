@@ -413,6 +413,24 @@ RSpec.describe Weft::Context do
       expect(html).to include('hx-get="/_components/shipment_summary?order_id=77"')
     end
 
+    it "keeps hand-offs out of the defaulted with: params" do
+      target = target_class
+      klass = Class.new(Weft::Component) do
+        def self.name = "HandedHost"
+        param :order_id
+        receives :order
+      end
+      handed = Struct.new(:id).new(3)
+      html = described_class.new({}, nil, wire_params: { "order_id" => 77 }) do
+        insert_tag(klass, order: handed) do
+          div loads: target, swap: :fill, target: :self
+        end
+      end.to_s
+
+      expect(html).to include('hx-get="/_components/shipment_summary?order_id=77"')
+      expect(html).not_to include("struct")
+    end
+
     it "preserves other attributes alongside loads: attrs" do
       target = target_class
       klass = component_class

@@ -15,6 +15,16 @@ module Weft
         end
       end
 
+      # Coerce only the keys actually present on the wire — no default fill.
+      # The construction-time source stack uses this to tell wire-satisfied
+      # keys apart from keys that fall through to lower sources.
+      def resolve_present(component_class, params)
+        component_class.params.each_with_object({}) do |(name, meta), result|
+          raw = params[name.to_s] || params[name]
+          result[name] = coerce(raw, meta[:default]) unless raw.nil?
+        end
+      end
+
       private
 
       def coerce(value, default)

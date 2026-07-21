@@ -34,6 +34,14 @@ RSpec.describe Logistics::ShipmentsCard, type: :component do
     expect(html).to include("Shipments (0)")
   end
 
+  it "derives its title into the card header, not onto the wrapper" do
+    o = order
+    html = render_weft_html(wire: { "order_id" => o.id }) { shipments_card }
+
+    expect(html).to include("<h2>Shipments (0)</h2>")
+    expect(html).not_to include('title="Shipments')
+  end
+
   it "declares includes Oms::OrderHeader for OOB swap" do
     inclusions = described_class.inclusions
     expect(inclusions.size).to eq(1)

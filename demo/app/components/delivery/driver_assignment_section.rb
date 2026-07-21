@@ -6,6 +6,9 @@ module Delivery
 
     param :driver_id
 
+    derives(:driver) { |p| Delivery::Driver.find(p.driver_id) }
+    derives(:shipment) { |p| Logistics::Shipment.find_by(id: p.driver.current_shipment_id) }
+
     refreshes on: "delivery-completed"
     triggers "delivery-completed"
 
@@ -17,10 +20,8 @@ module Delivery
 
     def build(attributes = {})
       super
-      driver = Delivery::Driver.find(params.driver_id)
-      shipment = Logistics::Shipment.find_by(id: driver.current_shipment_id)
 
-      if shipment
+      if (shipment = params.shipment)
         card(title: "Current Assignment", class: "mb-3") do
           dl(class: "row mb-0", style: "font-size:0.875rem") do
             dt("Shipment", class: "col-sm-3 text-muted")
@@ -31,7 +32,7 @@ module Delivery
             end
             dt("Order", class: "col-sm-3 text-muted")
             dd(class: "col-sm-9") do
-              tooltip(src: "/shipments/#{shipment.id}/summary") do
+              tooltip(content: Logistics::ShipmentSummary, with: { shipment_id: shipment.id }) do
                 a shipment.order_id[..7], href: "/orders/#{shipment.order_id}", class: "mono"
               end
             end

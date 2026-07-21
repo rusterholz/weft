@@ -7,7 +7,6 @@ class DashboardPage < ApplicationPage
   self.page_path = "/"
 
   def build(attributes = {})
-    attributes[:current_path] = "/"
     super
 
     div(class: "page-header") { h1 "Dashboard" }

@@ -158,6 +158,89 @@ RSpec.describe Weft::Registry do
     end
   end
 
+  describe "dependent-receives lint" do
+    before { allow(Weft.logger).to receive(:warn) }
+
+    it "warns for a routable component whose hand-off has no wire dual" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "LintedPanel"
+        param :status
+        receives :order
+      end
+      registry.register(klass)
+
+      registry.lookup("/_components/linted_panel")
+
+      expect(Weft.logger).to have_received(:warn).with(/LintedPanel.*:order.*dependent!/m)
+    end
+
+    it "stays quiet for a defaulted hand-off — declaring a default opts into standalone degradation" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "SoftLintPanel"
+        param :status
+        receives :label, default: nil
+      end
+      registry.register(klass)
+
+      registry.lookup("/_components/soft_lint_panel")
+
+      expect(Weft.logger).not_to have_received(:warn)
+    end
+
+    it "stays quiet when the hand-off has a derives dual" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "DerivesDualedPanel"
+        param :status
+        receives :order
+        derives(:order) { |_p| nil }
+      end
+      registry.register(klass)
+
+      registry.lookup("/_components/derives_dualed_panel")
+
+      expect(Weft.logger).not_to have_received(:warn)
+    end
+
+    it "stays quiet when the hand-off has a wire dual" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "DualedPanel"
+        param :status
+        receives :status
+      end
+      registry.register(klass)
+
+      registry.lookup("/_components/dualed_panel")
+
+      expect(Weft.logger).not_to have_received(:warn)
+    end
+
+    it "stays quiet for a dependent! class" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "MarkedPanel"
+        param :status
+        receives :order
+        dependent!
+      end
+      registry.register(klass)
+
+      registry.lookup("/_components/marked_panel")
+
+      expect(Weft.logger).not_to have_received(:warn)
+    end
+
+    it "stays quiet for a component that is not routable to begin with" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "QuietSlip"
+        receives :order
+      end
+      registry.register(klass)
+
+      registry.lookup("/_components/quiet_slip")
+
+      expect(Weft.logger).not_to have_received(:warn)
+    end
+  end
+
   describe "stale (redefined) class handling" do
     it "drops a superseded class so only the live definition routes (no false collision)" do
       stub_const("ReloadPanel", Class.new(Weft::Component) { param :x })

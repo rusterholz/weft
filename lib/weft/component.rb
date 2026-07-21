@@ -112,15 +112,17 @@ module Weft
     recovers from: StandardError, with: :error_component
 
     # Params resolve at construction, not build: the context (which carries
-    # the wire source) is the constructor's one argument, and resolving here
-    # makes `params` available even before `super` in user build bodies —
-    # the "compute chrome from params, then super" pattern needs that.
+    # the wire source and any staged hand-off) is the constructor's one
+    # argument, and resolving here makes `params` available even before
+    # `super` in user build bodies — the "compute chrome from params, then
+    # super" pattern needs that.
     def initialize(*)
       super
-      @params = resolved_wire_params
+      @params = assembled_params
     end
 
     def build(attributes = {})
+      apply_received_fallback(attributes) unless arbre_context.respond_to?(:take_received!)
       warn_declared_chrome_collisions(attributes)
       super
       self.id = weft_id
@@ -136,13 +138,13 @@ module Weft
     #   weft_url(status: nil, page: 1)    # => "/_components/orders_panel?page=1"
     def weft_url(**overrides)
       path = self.class.resolved_component_path
-      query = @params.to_h.merge(overrides).compact
+      query = serializable_params.merge(overrides).compact
       query.empty? ? path : "#{path}?#{URI.encode_www_form(query)}"
     end
 
-    # Convention-based DOM ID: dasherized class name + primary param value.
+    # Convention-based DOM ID: dasherized class name + primary wire-param value.
     def weft_id
-      self.class.weft_id_for(@params ? @params.to_h : {})
+      self.class.weft_id_for(serializable_params)
     end
 
     private
@@ -175,10 +177,10 @@ module Weft
       set_attribute "hx-swap", "innerHTML"
     end
 
-    # URL to this component's SSE stream endpoint with current params.
+    # URL to this component's SSE stream endpoint with current wire params.
     def stream_url
       path = "#{self.class.resolved_component_path}/#{Weft.configuration.stream_suffix}"
-      query = @params.to_h.compact
+      query = serializable_params.compact
       query.empty? ? path : "#{path}?#{URI.encode_www_form(query)}"
     end
   end

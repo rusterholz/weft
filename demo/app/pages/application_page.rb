@@ -31,13 +31,15 @@ class ApplicationPage < DropshipUI::Page
   ].freeze
 
   def build(attributes = {})
-    @current_path = attributes.delete(:current_path) || "/"
     super
     render_navbar
     @main = div(class: "container-fluid px-4")
   end
 
   private
+
+  # Subclasses override to mark their navbar section active.
+  def current_path = "/"
 
   def render_navbar
     nav(class: "navbar navbar-expand-sm bg-white") do
@@ -55,7 +57,7 @@ class ApplicationPage < DropshipUI::Page
     ul(class: "navbar-nav ms-4 gap-1") do
       NAVIGABLE_PAGES.each do |path, label|
         li(class: "nav-item") do
-          css = @current_path == path ? "nav-link active" : "nav-link"
+          css = current_path == path ? "nav-link active" : "nav-link"
           a label, class: css, href: path
         end
       end

@@ -4,8 +4,9 @@ module Oms
   class OrderTable < Weft::Component
     builder_method :order_table
 
+    receives :orders, default: []
+
     def build(attributes = {})
-      @orders = attributes.delete(:orders) || []
       super
       add_class "table table-data mb-0"
 
@@ -16,7 +17,7 @@ module Oms
         end
       end
       tbody do
-        @orders.each { |o| order_row(order: o) }
+        params.orders.each { |o| order_row(order: o) }
       end
     end
 

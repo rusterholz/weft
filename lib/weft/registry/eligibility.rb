@@ -29,6 +29,11 @@ module Weft
         @routable_explicit = false
       end
 
+      # Same switch as {abstract!}, named for the other reason to flip it:
+      # "I rely on state I can only receive, not reconstruct — my parent must
+      # hand it to me every time, so serving me standalone makes no sense."
+      alias dependent! abstract!
+
       # Force this class to be routable, even if its declared state would
       # otherwise make it non-routable. Does not percolate to subclasses.
       def routable!

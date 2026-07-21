@@ -12,10 +12,28 @@ module Weft
     module Interception
       def insert_tag(klass, *args, &)
         h = args.last
-        if h.is_a?(Hash) && arbre_context.is_a?(Weft::Context) && arbre_context.weft_kwarg?(h)
-          args[-1] = arbre_context.expand_weft_attrs(h, for_class: klass)
+        if h.is_a?(Hash) && arbre_context.is_a?(Weft::Context)
+          h = stage_received_kwargs(klass, h)
+          h = arbre_context.expand_weft_attrs(h, for_class: klass) if arbre_context.weft_kwarg?(h)
+          args[-1] = h
         end
         super
+      end
+
+      private
+
+      # Kwargs naming a target's declared `receives` keys are hand-offs, not
+      # chrome: pull them out before Arbre sees them and stage them on the
+      # context register for the instance about to be constructed.
+      def stage_received_kwargs(klass, attrs)
+        return attrs unless klass.respond_to?(:received_params)
+
+        keys = klass.received_params.keys & attrs.keys
+        return attrs if keys.empty?
+
+        attrs = attrs.dup
+        arbre_context.stage_received(klass, keys.to_h { |k| [k, attrs.delete(k)] })
+        attrs
       end
     end
   end

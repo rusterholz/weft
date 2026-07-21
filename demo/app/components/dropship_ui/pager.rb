@@ -17,33 +17,34 @@ module DropshipUI
   class Pager < Weft::Component
     builder_method :pager
 
+    receives :page_num, default: 1
+    receives :per_page, default: 25
+    receives :total, default: 0
+    receives :target_class
+    receives :target_id
+    receives :target_page_class
+    receives :extra_params, default: {}
+
     def build(attributes = {})
-      @page_num = attributes.delete(:page_num) || 1
-      @per_page = attributes.delete(:per_page) || 25
-      @total = attributes.delete(:total) || 0
-      @target_class = attributes.delete(:target_class)
-      @target_id = attributes.delete(:target_id)
-      @target_page_class = attributes.delete(:target_page_class)
-      @extra_params = attributes.delete(:extra_params) || {}
       super
 
-      return if @total.zero?
+      return if params.total.zero?
 
       add_class "d-flex justify-content-between align-items-center mt-2"
       set_attribute :style, "font-size:0.8rem"
 
-      total_pages = [(@total.to_f / @per_page).ceil, 1].max
-      offset_start = ((@page_num - 1) * @per_page) + 1
-      offset_end = [@page_num * @per_page, @total].min
+      total_pages = [(params.total.to_f / params.per_page).ceil, 1].max
+      offset_start = ((params.page_num - 1) * params.per_page) + 1
+      offset_end = [params.page_num * params.per_page, params.total].min
 
-      div(class: "text-muted") { text_node "#{offset_start}–#{offset_end} of #{@total}" }
+      div(class: "text-muted") { text_node "#{offset_start}–#{offset_end} of #{params.total}" }
 
       div(class: "btn-group") do
-        page_button("← Prev", target_page: @page_num - 1, disabled: @page_num <= 1)
+        page_button("← Prev", target_page: params.page_num - 1, disabled: params.page_num <= 1)
         span(class: "btn btn-sm btn-outline-secondary disabled", style: "pointer-events:none") do
-          text_node "Page #{@page_num} of #{total_pages}"
+          text_node "Page #{params.page_num} of #{total_pages}"
         end
-        page_button("Next →", target_page: @page_num + 1, disabled: @page_num >= total_pages)
+        page_button("Next →", target_page: params.page_num + 1, disabled: params.page_num >= total_pages)
       end
     end
 
@@ -55,20 +56,20 @@ module DropshipUI
         span(label, class: "#{classes} disabled", style: "pointer-events:none")
       else
         button label,
-               paginate: @target_class,
-               with: @extra_params.merge(page: target_page),
-               target: "##{@target_id}",
+               paginate: params.target_class,
+               with: params.extra_params.merge(page: target_page),
+               target: "##{params.target_id}",
                push_url: build_push_url(target_page),
                class: classes
       end
     end
 
     def build_push_url(target_page)
-      base = @target_page_class.resolve_page_path
-      params = @extra_params.merge(page: target_page)
-      params.delete(:page) if target_page <= 1
-      params = params.reject { |_, v| v.nil? || v == "" }
-      params.empty? ? base : "#{base}?#{URI.encode_www_form(params)}"
+      base = params.target_page_class.resolve_page_path
+      query = params.extra_params.merge(page: target_page)
+      query.delete(:page) if target_page <= 1
+      query = query.reject { |_, v| v.nil? || v == "" }
+      query.empty? ? base : "#{base}?#{URI.encode_www_form(query)}"
     end
   end
 end

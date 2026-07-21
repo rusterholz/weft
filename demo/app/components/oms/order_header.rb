@@ -6,6 +6,8 @@ module Oms
 
     param :order_id
 
+    derives(:order) { |p| Oms::Order.find(p.order_id) }
+
     performs :advance do |params|
       order = Oms::Order.find(params.order_id)
       case order.status
@@ -23,15 +25,13 @@ module Oms
       super
       add_class "page-header d-flex justify-content-between align-items-center"
 
-      order = Oms::Order.find(params.order_id)
-
       h1 do
         text_node "Order "
-        span(order.id[..7], class: "mono")
+        span(params.order.id[..7], class: "mono")
         text_node " "
-        status_badge order.status
+        status_badge params.order.status
       end
-      return if order.status == "fulfilled"
+      return if params.order.status == "fulfilled"
 
       button "Force Advance", class: "btn btn-sm btn-outline-secondary",
                               action: :advance
