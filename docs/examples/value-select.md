@@ -50,7 +50,7 @@ class CarsPage < Weft::Page
     div do
       label "Model "
       span id: "models" do
-        model_select(make: "audi")
+        model_select
       end
     end
   end

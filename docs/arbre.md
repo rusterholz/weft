@@ -268,22 +268,23 @@ RSpec.describe AttendeeList do
 end
 ```
 
-`Component.render(**attrs)` is the gem-provided entry point and covers most component testing. When you want the element tree rather than the string — asserting on classes, structure, or specific descendants — build a context and search it:
+`Component.render` is the gem-provided entry point and covers most component testing — its keyword arguments are exactly the wire params a request would carry. When you want the element tree rather than the string — asserting on classes, structure, or specific descendants — build a `Weft::Context` and search it. Its `wire_params:` argument stands in for the request, so the component's declared params resolve just as they would over the wire:
 
 ```ruby
-ctx = Arbre::Context.new do
-  attendee_list(event_id: "trivia-night")
+ctx = Weft::Context.new({}, nil, wire_params: { "event_id" => "trivia-night" }) do
+  attendee_list
 end
 list = ctx.children.first
 expect(list.class_list).to include("roster")
 expect(ctx.find_by_tag("li").length).to eq(2)
 ```
 
-Three Arbre-specific notes for test code:
+A value the component `receives` is handed the way it is in production — as a builder kwarg, `attendee_list(roster: some_roster)` — since a declared `receives` key consumes the kwarg rather than letting it fall through to an HTML attribute. Capture that value into a local first: the block runs *inside* the context, so a bare `let` name isn't in scope there.
+
+Two Arbre-specific notes for test code:
 
 - **Give test component classes real names.** `builder_method` resolves its class by name at call time, so an anonymous class (`Class.new(Weft::Component)`) with a stubbed `name` raises `NameError` the first time its builder is invoked — and under Arbre 1.x, even `insert_tag` with a truly anonymous class crashes. Define named classes (a `TestCard = Class.new(...)` constant works) rather than fighting it.
-- **Pass data via assigns, not local-variable capture,** when a context block needs outside data: `Arbre::Context.new(event: event) { ... }` makes `event` resolve through Arbre's lookup chain — the same resolution production code uses — where a captured local would quietly bypass it.
-- **The helpers slot** (`Arbre::Context.new(assigns, helpers)`) makes any object's methods callable inside the block. Weft renders components without helpers, so tests should too, unless you're testing raw Arbre code that expects them.
+- **`assigns` and `helpers` are Arbre's channels, not Weft's.** `Weft::Context.new(assigns, helpers, wire_params:)` still carries Arbre's two data slots — `assigns` (resolved through Arbre's lookup chain) and `helpers` (an object whose methods become callable bare in the block). Weft components read `params` and use neither; reach for these only when a block holds raw Arbre code that expects them.
 
 ## Arbre 1.x vs 2.x
 
