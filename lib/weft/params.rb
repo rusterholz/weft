@@ -101,7 +101,7 @@ module Weft
 
       @forcing << key
       begin
-        @data[key] = Weft::DSL::VOID.instance_exec(self, &thunk.block)
+        @data[key] = Weft::DSL::Sandbox.run(self, &thunk.block)
       ensure
         @forcing.pop
       end

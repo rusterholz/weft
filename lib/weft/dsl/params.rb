@@ -2,14 +2,6 @@
 
 module Weft
   module DSL
-    # Pinned `self` for verb blocks: a frozen blank Object, so blocks are
-    # `(params) -> value` pure functions — Kernel stays reachable (raise,
-    # format, Integer()), but touching component state fails fast
-    # (NoMethodError on a bare method call, FrozenError on an ivar write).
-    # Portable by construction: a block that cannot reach local state can
-    # run in any process.
-    VOID = Object.new.freeze
-
     # Mixin for classes that declare consumed inputs — the doors into `params`.
     # Provides the `param` (wire), `receives` (caller hand-off), and `derives`
     # (lazy server-side derivation) class DSL and the `params` instance reader.

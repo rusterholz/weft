@@ -160,7 +160,7 @@ module Weft
       def invoke_recovery_block(entry, resolved_params, error)
         return {} unless entry[:block]
 
-        result = entry[:block].call(Weft::Params.new(resolved_params), error)
+        result = Weft::DSL::Sandbox.run(Weft::Params.new(resolved_params), error, &entry[:block])
         result.is_a?(Hash) ? result : {}
       end
 

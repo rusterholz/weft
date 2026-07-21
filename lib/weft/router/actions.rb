@@ -42,7 +42,7 @@ module Weft
 
       def handle_action(action, component_class)
         resolved_params = Weft::Resolver.resolve(component_class, filtered_params)
-        returned = action.callable&.call(Weft::Params.new(resolved_params))
+        returned = Weft::DSL::Sandbox.run(Weft::Params.new(resolved_params), &action.callable) if action.callable
         return handle_redirect(returned) if returned.is_a?(Weft::Redirect)
 
         render_action_response(action, component_class, resolved_params, returned)
