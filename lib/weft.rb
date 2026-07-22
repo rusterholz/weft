@@ -8,6 +8,7 @@ require "active_support/core_ext/string/inflections"
 require "arbre"
 
 require "weft/error"
+require "weft/context/traversal"
 require "weft/params"
 require "weft/dsl/params"
 require "weft/dsl/sandbox"

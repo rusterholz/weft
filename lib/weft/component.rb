@@ -18,6 +18,7 @@ module Weft
     include Weft::DSL::Updates
     include Weft::DSL::Actions
     include Weft::DSL::Containers
+    include Weft::Context::Traversal
 
     class << self
       # Class-level path override (string or proc). Inherited by subclasses.

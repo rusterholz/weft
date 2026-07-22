@@ -31,13 +31,14 @@ module Oms
       card(title: "#{filter_label} Orders (#{total})") do
         order_table orders: records
       end
-      pager(
-        page_num: page_num, per_page: PER_PAGE, total: total,
-        target_class: self.class, target_id: weft_id,
-        target_page_class: OrdersPage,
-        extra_params: { status: params.status }
-      )
+      pager(page_num: page_num, per_page: PER_PAGE, total: total,
+            extra_params: { status: params.status })
     end
+
+    # The page this panel lives on — read by the embedded pager to build
+    # push_url, which must survive the panel being re-rendered standalone on
+    # pagination (no page in the tree then to introspect).
+    def page_class = OrdersPage
 
     private
 

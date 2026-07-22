@@ -57,6 +57,12 @@ module Weft
   # assets bundle named at `register_stylesheet`).
   InvalidUsage = Class.new(Error)
 
+  # Raised by the bang forms of the render-tree lookup (`closest!` / `enclosing!`)
+  # when no node matches the requested criteria — the component expected an
+  # ancestor that isn't there (it should usually be `dependent!` and rendered
+  # only inside that ancestor).
+  AncestorNotFound = Class.new(InvalidUsage)
+
   # Raised by the `adds_children_to :@ivar` macro when build returns without
   # ever assigning the named ivar and then a child is added — almost always
   # means the developer declared the macro but forgot the matching assignment.

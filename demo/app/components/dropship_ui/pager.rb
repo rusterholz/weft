@@ -3,26 +3,25 @@
 module DropshipUI
   # Pagination widget for any panel that lists pageable records.
   # Renders offset text ("26–50 of 120") plus Prev / Page N of M / Next
-  # buttons. The buttons use the demo's `:paginate` preset (registered
-  # in config/presets.rb), which expands to htmx attrs that load the
-  # caller's target_class into the target_id selector.
+  # buttons. The buttons use the demo's `:paginate` preset (registered in
+  # config/presets.rb), which expands to htmx attrs that reload the enclosing
+  # panel. The pager reaches that panel via `enclosing` — the call site passes
+  # only data, no targeting:
   #
-  # Usage from a paneled component:
-  #   pager(
-  #     page_num: page_num, per_page: PER_PAGE, total: total,
-  #     target_class: self.class, target_id: weft_id,
-  #     target_page_class: OrdersPage,           # for push_url derivation
-  #     extra_params: { status: params.status }   # preserved across pages
-  #   )
+  #   pager(page_num: page_num, per_page: PER_PAGE, total: total,
+  #         extra_params: { status: params.status })
+  #
+  # The panel must expose `page_class` (the Weft::Page it lives on) so push_url
+  # resolves even when the panel is re-rendered standalone — a pagination fetch
+  # reloads the panel alone, with no page in the render tree to introspect.
   class Pager < Weft::Component
     builder_method :pager
+
+    dependent! # always rendered inside a paginated panel; reaches it via `enclosing`
 
     receives :page_num, default: 1
     receives :per_page, default: 25
     receives :total, default: 0
-    receives :target_class
-    receives :target_id
-    receives :target_page_class
     receives :extra_params, default: {}
 
     def build(attributes = {})
@@ -56,20 +55,25 @@ module DropshipUI
         span(label, class: "#{classes} disabled", style: "pointer-events:none")
       else
         button label,
-               paginate: params.target_class,
+               paginate: target_panel.class,
                with: params.extra_params.merge(page: target_page),
-               target: "##{params.target_id}",
+               target: "##{target_panel.weft_id}",
                push_url: build_push_url(target_page),
                class: classes
       end
     end
 
     def build_push_url(target_page)
-      base = params.target_page_class.resolve_page_path
+      base = target_panel.page_class.resolve_page_path
       query = params.extra_params.merge(page: target_page)
       query.delete(:page) if target_page <= 1
       query = query.reject { |_, v| v.nil? || v == "" }
       query.empty? ? base : "#{base}?#{URI.encode_www_form(query)}"
     end
+
+    # The panel this pager renders inside — its route and DOM id are the swap
+    # target, and its declared page_class drives push_url. Reached, not hand-fed;
+    # required (this pager is dependent!), so enclosing! raises if it's missing.
+    def target_panel = @target_panel ||= enclosing!(Weft::Component)
   end
 end
