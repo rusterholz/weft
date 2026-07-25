@@ -11,7 +11,13 @@ module Logistics
 
     param :order_id
 
-    derives(:shipments) { |p| Logistics::Shipment.for_order(p.order_id).includes(:warehouse) }
+    # The outage check makes this the demo's push-recovery exercise: while
+    # the drill is active, every push fails and the stream walks the recovers
+    # chain (gem default → app ErrorComponent) instead of updating.
+    derives(:shipments) do |p|
+      Logistics::ShipmentFeedOutage.check!
+      Logistics::Shipment.for_order(p.order_id).includes(:warehouse)
+    end
     derives(:title) { |p| "Shipments (#{p.shipments.size})" }
 
     pushes every: 5

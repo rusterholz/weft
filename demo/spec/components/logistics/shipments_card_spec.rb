@@ -14,7 +14,18 @@ RSpec.describe Logistics::ShipmentsCard, type: :component do
     expect(html).to include('hx-ext="sse"')
     expect(html).to include("sse-connect=\"/_components/logistics/shipments_card/_stream?order_id=#{o.id}\"")
     expect(html).to include("sse-swap=\"logistics-shipments-card-#{o.id}\"")
+    expect(html).to include('sse-close="weft:close"')
     expect(html).to include('hx-swap="innerHTML"')
+  end
+
+  it "raises FeedUnavailable while the outage drill is active" do
+    o = order
+    Logistics::ShipmentFeedOutage.toggle!
+
+    expect { render_weft_html(wire: { "order_id" => o.id }) { shipments_card } }.
+      to raise_error(Logistics::ShipmentFeedOutage::FeedUnavailable)
+  ensure
+    Logistics::ShipmentFeedOutage.toggle! if Logistics::ShipmentFeedOutage.active?
   end
 
   it "renders shipments inside a content card" do

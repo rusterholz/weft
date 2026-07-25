@@ -33,4 +33,25 @@ RSpec.describe ErrorComponent, type: :component do
 
     expect(html).not_to include("Retry")
   end
+
+  it "renders the retrying live-updates state while push attempts remain" do
+    html = render_error(exception: RuntimeError.new("feed down"),
+                        attempts_remaining: 2, retry_url: "/x", status_code: 500)
+
+    expect(html).to match(/live updates interrupted/i)
+    expect(html).to include("Retrying")
+    expect(html).not_to include("Resume live updates")
+  end
+
+  it "renders the stopped state with a resume button via the :reopen_stream preset" do
+    html = render_error(attempts_remaining: 0,
+                        retry_url: "/_components/logistics/shipments_card?order_id=5",
+                        status_code: 500)
+
+    expect(html).to match(/live updates stopped/i)
+    expect(html).to include("Resume live updates")
+    expect(html).to include('hx-get="/_components/logistics/shipments_card?order_id=5"')
+    expect(html).to include('hx-target="closest [sse-swap]"')
+    expect(html).to include('hx-swap="outerHTML"')
+  end
 end

@@ -14,7 +14,10 @@ module Oms
       order_header
       render_details_card(order)
       render_line_items_card(order)
-      shipments_card if Logistics::Shipment.for_order(order.id).any?
+      return unless Logistics::Shipment.for_order(order.id).any?
+
+      shipments_card
+      outage_switch
     end
 
     private
