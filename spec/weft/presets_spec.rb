@@ -20,7 +20,7 @@ RSpec.describe Weft::Presets do
     it "includes all shipped presets" do
       expect(described_class.registered).to include(
         :tooltip, :inline_expand, :lazy, :modal,
-        :load_more, :infinite_scroll, :live_search, :tabs, :retry
+        :load_more, :infinite_scroll, :live_search, :tabs, :retry, :reopen_stream
       )
     end
   end
@@ -69,6 +69,11 @@ RSpec.describe Weft::Presets do
     it "retry has click trigger, outerHTML swap, and error-box target" do
       preset = described_class.lookup(:retry)
       expect(preset).to eq(trigger: :click, swap: :outer_html, target: "closest .weft-error")
+    end
+
+    it "reopen_stream has click trigger, outerHTML swap, and persistent-wrapper target" do
+      preset = described_class.lookup(:reopen_stream)
+      expect(preset).to eq(trigger: :click, swap: :outer_html, target: "closest [sse-swap]")
     end
   end
 

@@ -41,6 +41,41 @@ RSpec.describe "Weft::Defaults" do
       html = described_class.render(exception: nil, request_path: "/x", status_code: 500)
       expect(html).to match(/something went wrong/i)
     end
+
+    it "declares the push-context countdown param" do
+      expect(described_class.params.keys).to include(:attempts_remaining)
+    end
+
+    it "renders the retrying push state while attempts remain" do
+      Weft.configuration.verbose_error_pages = true
+      error = ArgumentError.new("bad arg")
+      html = described_class.render(exception: error, attempts_remaining: 2, retry_url: "/x")
+
+      expect(html).to match(/live updates interrupted/i)
+      expect(html).to include("ArgumentError")
+      expect(html).not_to include("Resume live updates")
+    end
+
+    it "renders the stopped push state with a reopen button at zero attempts remaining" do
+      Weft.configuration.verbose_error_pages = true
+      error = ArgumentError.new("bad arg")
+      html = described_class.render(exception: error, attempts_remaining: 0, retry_url: "/orders/live")
+
+      expect(html).to match(/live updates stopped/i)
+      expect(html).to include("Resume live updates")
+      expect(html).to include('hx-get="/orders/live"')
+      expect(html).to include('hx-target="closest [sse-swap]"')
+    end
+
+    it "keeps the visual box inside the frame content (the wrapper never ships in a push)" do
+      klass = described_class
+      ctx = Weft::Context.new({}, nil, wire_params: { exception: nil, attempts_remaining: 1 }) do
+        insert_tag klass
+      end
+      content = ctx.children.first.content
+
+      expect(content).to include("weft-error")
+    end
   end
 
   describe Weft::Defaults::ErrorPage do

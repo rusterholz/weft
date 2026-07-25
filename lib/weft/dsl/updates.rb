@@ -30,19 +30,23 @@ module Weft
 
         # Declare that this component pushes updates via SSE.
         #
-        #   pushes every: 5.seconds   # server pushes on interval
+        #   pushes every: 5.seconds               # server pushes on interval
+        #   pushes every: 5.seconds, attempts: 5  # custom failure budget
         #
-        # Generates hx-ext="sse", sse-connect, sse-swap on the wrapper element.
-        # The Router auto-generates a streaming endpoint at
+        # Generates hx-ext="sse", sse-connect, sse-swap, sse-close on the
+        # wrapper element. The Router auto-generates a streaming endpoint at
         # /component_path/_stream (the suffix is the stream_suffix config knob).
+        # `attempts:` overrides Weft.configuration.push_attempts — consecutive
+        # failed pushes tolerated before the Router closes the stream.
         #
         # Future: pushes on: "event-name" for event-driven server push (v1.0).
-        def pushes(every: nil)
+        def pushes(every: nil, attempts: nil)
           @push_config = {}
-          return unless every
-
-          ms = interval_in_ms(every, :pushes)
-          @push_config[:every] = (ms % 1000).zero? ? ms / 1000 : ms / 1000.0
+          if every
+            ms = interval_in_ms(every, :pushes)
+            @push_config[:every] = (ms % 1000).zero? ? ms / 1000 : ms / 1000.0
+          end
+          @push_config[:attempts] = validated_attempts(attempts) if attempts
         end
 
         # Push configuration (own or inherited). Returns nil if no pushes declared.
@@ -67,6 +71,18 @@ module Weft
 
         def own_refresh_triggers
           @own_refresh_triggers ||= []
+        end
+
+        # A budget below one failed push makes no sense — the stream would
+        # close before its first recovery frame; rather than raise
+        # mid-declaration, clamp and say so.
+        def validated_attempts(attempts)
+          return attempts if attempts.is_a?(Integer) && attempts >= 1
+
+          Weft.logger.warn(
+            "#{name} declares `pushes attempts: #{attempts.inspect}`, not a positive integer; using 1"
+          )
+          1
         end
 
         # htmx's smallest expressible interval is 1ms; rather than emit an

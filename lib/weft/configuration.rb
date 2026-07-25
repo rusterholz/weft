@@ -13,7 +13,7 @@ module Weft
     }.freeze
     private_constant :DEFAULT_COMPONENT_PATH, :VALID_HTMX_ERRORS, :VALID_INCLUDE_SSE_EXT, :LOG_LEVELS
 
-    attr_reader :component_path, :htmx_errors, :include_sse_ext, :log_level, :stream_suffix
+    attr_reader :component_path, :htmx_errors, :include_sse_ext, :log_level, :push_attempts, :stream_suffix
     attr_accessor :include_htmx, :auto_reload, :reload_paths, :verbose_error_pages, :router_logging
     attr_writer :error_component, :error_page, :not_found_page, :not_found_component
 
@@ -30,6 +30,7 @@ module Weft
       @verbose_error_pages = true
       @htmx_errors = :fragment
       @log_level = :info
+      @push_attempts = 3
       @stream_suffix = "_stream"
       @static_assets = {}
     end
@@ -68,6 +69,18 @@ module Weft
       end
 
       @log_level = value
+    end
+
+    # Consecutive failed pushes tolerated on an SSE stream before the Router
+    # closes it (the last failure's recovery frame renders with
+    # attempts_remaining 0, then the close event fires). Gem-wide default;
+    # override per component via `pushes every:, attempts:`.
+    def push_attempts=(value)
+      unless value.is_a?(Integer) && value >= 1
+        raise ArgumentError, "push_attempts must be an integer >= 1, got #{value.inspect}"
+      end
+
+      @push_attempts = value
     end
 
     # The path segment that marks a component's SSE stream endpoint. The leading

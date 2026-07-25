@@ -32,6 +32,19 @@ RSpec.describe Weft::Router do
     described_class.new(downstream_app)
   end
 
+  # Stands in for Sinatra's Stream in direct-drive streaming specs: collects
+  # frames, records the explicit close that stream_component must issue on
+  # final exits (with :keep_open, merely returning from the block does not end
+  # the response — observed live as the loop re-invoking and the countdown
+  # restarting).
+  def frame_sink
+    Class.new(Array) do
+      attr_reader :closed
+
+      def close = @closed = true
+    end.new
+  end
+
   describe "component partial routes" do
     it "renders a component at its derived path" do
       get "/_components/stat_card", status: "shipped", value: "42"
@@ -508,7 +521,7 @@ RSpec.describe Weft::Router do
       order = []
       allow(router).to receive(:content_type)
       allow(router).to receive(:headers)
-      allow(router).to receive(:stream).and_yield([])
+      allow(router).to receive(:stream).and_yield(frame_sink)
       allow(router).to receive(:sleep) { order << :sleep }
       allow(router).to receive(:push_component_event) do
         order << :push
@@ -518,6 +531,237 @@ RSpec.describe Weft::Router do
       router.send(:stream_component, pushing_class)
 
       expect(order).to eq(%i[push sleep push])
+    end
+  end
+
+  describe "stream_component failure handling" do
+    # Same direct-drive harness as above; failing builds exercise the recovers
+    # routing, the attempts countdown, and the sse-close shut-off.
+    let(:router) { described_class.new!(downstream_app) }
+
+    let(:notice_card_class) do
+      Class.new(Weft::Component) do
+        def self.name = "StreamNoticeCard"
+
+        def build(attributes = {})
+          super
+          span "temporarily unavailable"
+        end
+      end
+    end
+
+    let(:countdown_card_class) do
+      Class.new(Weft::Component) do
+        def self.name = "CountdownCard"
+        param :attempts_remaining
+
+        def build(attributes = {})
+          super
+          if params.attempts_remaining
+            span "remaining-#{params.attempts_remaining}"
+          else
+            span "http-recovery"
+          end
+        end
+      end
+    end
+    let(:flapping_class) do
+      Class.new(Weft::Component) do
+        def self.name = "FlappingCard"
+
+        class << self
+          attr_accessor :calls
+        end
+        @calls = 0
+        pushes every: 5, attempts: 2
+
+        def build(attributes = {})
+          super
+          self.class.calls += 1
+          raise "boom" unless self.class.calls == 2
+
+          span "back to normal"
+        end
+      end
+    end
+
+    before do
+      allow(router).to receive(:content_type)
+      allow(router).to receive(:headers)
+      allow(router).to receive_messages(filtered_params: {},
+                                        request: Struct.new(:path).new("/stream-test"))
+      allow(Weft.logger).to receive(:error)
+      # Runaway guard: a regression back to log-and-continue-forever plus a
+      # no-op sleep stub would spin the loop unboundedly — bail out via the
+      # connection-death path after a bounded number of cycles instead.
+      sleeps = 0
+      allow(router).to receive(:sleep) do
+        sleeps += 1
+        raise IOError if sleeps > 10
+      end
+    end
+
+    def failing_class(name = "FlakyCard", **push_kwargs)
+      Class.new(Weft::Component) do
+        define_singleton_method(:name) { name }
+        pushes(every: 5, **push_kwargs)
+
+        def build(attributes = {})
+          super
+          raise "boom"
+        end
+      end
+    end
+
+    it "routes a failing push through the recovers chain, shipping content-only under the original event id" do
+      component_class = failing_class(attempts: 1)
+      component_class.recovers(from: StandardError, with: notice_card_class)
+      out = frame_sink
+      allow(router).to receive(:stream).and_yield(out)
+
+      router.send(:stream_component, component_class)
+
+      expect(out.length).to eq(2)
+      expect(out[0]).to include("event: flaky-card")
+      expect(out[0]).to include("temporarily unavailable")
+      expect(out[0]).not_to include("stream-notice-card") # like-for-like: no recovery wrapper
+      expect(out[1]).to eq("event: weft:close\ndata: \n\n") # bare data line so EventSource dispatches
+    end
+
+    it "closes after the declared attempts budget of consecutive failures, and says so in the log" do
+      component_class = failing_class(attempts: 2)
+      component_class.recovers(from: StandardError, with: notice_card_class)
+      out = frame_sink
+      allow(router).to receive(:stream).and_yield(out)
+
+      router.send(:stream_component, component_class)
+
+      expect(out.length).to eq(3)
+      expect(out[0]).to include("event: flaky-card")
+      expect(out[1]).to include("event: flaky-card")
+      expect(out[2]).to include("event: weft:close")
+      expect(out.closed).to be(true)
+      expect(Weft.logger).to have_received(:error).
+        with(/closed after 2 consecutive failed pushes/)
+    end
+
+    it "keeps throttling failing pushes on the cadence interval" do
+      component_class = failing_class(attempts: 2)
+      component_class.recovers(from: StandardError, with: notice_card_class)
+      out = frame_sink
+      allow(router).to receive(:stream).and_yield(out)
+      allow(router).to receive(:sleep) do
+        out << :sleep
+        raise IOError if out.count(:sleep) > 10 # runaway guard, as in the before block
+      end
+
+      router.send(:stream_component, component_class)
+
+      expect(out.length).to eq(4)
+      expect(out[1]).to eq(:sleep) # between the two failure cycles; close follows in-cycle
+    end
+
+    it "resets the failure count on a successful push" do
+      component_class = flapping_class
+      out = frame_sink
+      allow(router).to receive(:stream).and_yield(out)
+
+      router.send(:stream_component, component_class)
+
+      # fail, success, fail, fail: the mid-stream success must restore the
+      # full budget, or the third cycle would already have closed the stream.
+      expect(out.length).to eq(5)
+      expect(out[1]).to include("back to normal")
+      expect(out[4]).to include("event: weft:close")
+    end
+
+    it "ships no recovery frame when the chain yields only Page targets, but still closes" do
+      original = Weft.configuration.error_component
+      Weft.configuration.error_component = Class.new(Weft::Page) { def self.name = "StreamPageOnly" }
+      component_class = failing_class(attempts: 1)
+      out = frame_sink
+      allow(router).to receive(:stream).and_yield(out)
+
+      router.send(:stream_component, component_class)
+
+      expect(out.length).to eq(1)
+      expect(out[0]).to include("event: weft:close")
+      expect(Weft.logger).to have_received(:error).with(/SSE push error/)
+    ensure
+      Weft.configuration.error_component = original
+    end
+
+    it "logs and skips the frame when the recovery render itself raises, still counting the failure" do
+      broken_recovery = Class.new(Weft::Component) do
+        def self.name = "BrokenRecoveryCard"
+
+        def build(attributes = {})
+          super
+          raise "recovery is broken too"
+        end
+      end
+      component_class = failing_class(attempts: 1)
+      component_class.recovers(from: StandardError, with: broken_recovery)
+      out = frame_sink
+      allow(router).to receive(:stream).and_yield(out)
+
+      router.send(:stream_component, component_class)
+
+      expect(out.length).to eq(1)
+      expect(out[0]).to include("event: weft:close")
+      expect(Weft.logger).to have_received(:error).with(/Push recovery render failed/)
+    end
+
+    it "falls back to the configured push_attempts when the declaration names none" do
+      original = Weft.configuration.push_attempts
+      Weft.configuration.push_attempts = 1
+      component_class = failing_class
+      component_class.recovers(from: StandardError, with: notice_card_class)
+      out = frame_sink
+      allow(router).to receive(:stream).and_yield(out)
+
+      router.send(:stream_component, component_class)
+
+      expect(out.length).to eq(2)
+      expect(out[1]).to include("event: weft:close")
+    ensure
+      Weft.configuration.push_attempts = original
+    end
+
+    it "injects the attempts_remaining countdown into recovery targets that declare it" do
+      component_class = failing_class(attempts: 2)
+      component_class.recovers(from: StandardError, with: countdown_card_class)
+      out = frame_sink
+      allow(router).to receive(:stream).and_yield(out)
+
+      router.send(:stream_component, component_class)
+
+      expect(out[0]).to include("remaining-1")
+      expect(out[1]).to include("remaining-0")
+    end
+
+    it "leaves attempts_remaining unset on HTTP-path recoveries" do
+      component_class = failing_class("HttpFlakyCard")
+      component_class.recovers(from: StandardError, with: countdown_card_class)
+
+      get "/_components/http_flaky_card"
+
+      expect(last_response.body).to include("http-recovery")
+    end
+
+    it "tears down cleanly when the client vanishes mid-recovery-write" do
+      component_class = failing_class(attempts: 3)
+      component_class.recovers(from: StandardError, with: notice_card_class)
+      dead_connection = Class.new do
+        attr_reader :closed
+
+        def <<(_frame) = raise Errno::EPIPE
+        def close = @closed = true
+      end.new
+      allow(router).to receive(:stream).and_yield(dead_connection)
+
+      expect { router.send(:stream_component, component_class) }.not_to raise_error
+      expect(dead_connection.closed).to be(true)
     end
   end
 

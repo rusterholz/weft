@@ -774,6 +774,20 @@ RSpec.describe Weft::Context do
       expect(html).to include('hx-target="closest .weft-error"')
       expect(html).to include('hx-trigger="click"')
     end
+
+    it "reopen_stream: click + outerHTML + closest [sse-swap], hx-get to the given URL" do
+      klass = component_class
+      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        insert_tag(klass) do
+          button "Resume live updates", reopen_stream: "/_components/order_header?order_id=1"
+        end
+      end.to_s
+
+      expect(html).to include('hx-get="/_components/order_header?order_id=1"')
+      expect(html).to include('hx-swap="outerHTML"')
+      expect(html).to include('hx-target="closest [sse-swap]"')
+      expect(html).to include('hx-trigger="click"')
+    end
   end
 
   describe "Component.render uses Weft::Context" do

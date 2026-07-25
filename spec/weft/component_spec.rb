@@ -1377,6 +1377,7 @@ RSpec.describe Weft::Component do
       expect(html).to include('hx-ext="sse"')
       expect(html).to include('sse-connect="/_components/push_card/_stream?order_id=42"')
       expect(html).to include('sse-swap="push-card-42"')
+      expect(html).to include('sse-close="weft:close"')
       expect(html).to include('hx-swap="innerHTML"')
     end
 
@@ -1407,6 +1408,7 @@ RSpec.describe Weft::Component do
       expect(html).not_to include("hx-ext")
       expect(html).not_to include("sse-connect")
       expect(html).not_to include("sse-swap")
+      expect(html).not_to include("sse-close")
     end
 
     it "inherits push config from parent classes" do
@@ -1460,6 +1462,60 @@ RSpec.describe Weft::Component do
       end
 
       expect(component_class.push_config).to eq(every: 15)
+    end
+
+    it "stores a declared attempts budget in push_config" do
+      component_class = Class.new(described_class) do
+        def self.name = "BudgetedTicker"
+        pushes every: 5, attempts: 5
+      end
+
+      expect(component_class.push_config).to eq(every: 5, attempts: 5)
+    end
+
+    it "omits :attempts from push_config when not declared (gem config governs)" do
+      component_class = Class.new(described_class) do
+        def self.name = "DefaultBudgetTicker"
+        pushes every: 5
+      end
+
+      expect(component_class.push_config).not_to have_key(:attempts)
+    end
+
+    it "inherits a declared attempts budget through push_config" do
+      parent = Class.new(described_class) do
+        def self.name = "BudgetedBase"
+        pushes every: 10, attempts: 2
+      end
+      child = Class.new(parent) do
+        def self.name = "BudgetedChild"
+      end
+
+      expect(child.push_config).to eq(every: 10, attempts: 2)
+    end
+
+    it "warns and clamps a non-positive attempts budget to 1" do
+      allow(Weft.logger).to receive(:warn)
+
+      component_class = Class.new(described_class) do
+        def self.name = "ZeroBudgetTicker"
+        pushes every: 5, attempts: 0
+      end
+
+      expect(component_class.push_config).to eq(every: 5, attempts: 1)
+      expect(Weft.logger).to have_received(:warn).with(/attempts/)
+    end
+
+    it "warns and clamps a non-integer attempts budget to 1" do
+      allow(Weft.logger).to receive(:warn)
+
+      component_class = Class.new(described_class) do
+        def self.name = "FractionalBudgetTicker"
+        pushes every: 5, attempts: 2.5
+      end
+
+      expect(component_class.push_config).to eq(every: 5, attempts: 1)
+      expect(Weft.logger).to have_received(:warn).with(/attempts/)
     end
 
     it "returns nil push_config when no pushes declared" do
@@ -2106,6 +2162,63 @@ RSpec.describe Weft::Component do
 
       entry = child.recovery_for(Weft::NotFound.new)
       expect(entry[:with]).to eq(:child_target)
+    end
+  end
+
+  describe ".component_recovery_for" do
+    it "returns the first matching entry when its target is a component" do
+      recovery_target = Class.new(described_class) { def self.name = "FallbackCard" }
+      component_class = Class.new(described_class) do
+        def self.name = "ComponentTargeted"
+      end
+      component_class.recovers(from: StandardError, with: recovery_target)
+
+      entry = component_class.component_recovery_for(StandardError.new)
+      expect(entry[:with]).to eq(recovery_target)
+    end
+
+    it "treats a with:-less entry (self target) as a component target" do
+      component_class = Class.new(described_class) do
+        def self.name = "SelfRecovering"
+      end
+      component_class.recovers(from: StandardError)
+
+      entry = component_class.component_recovery_for(StandardError.new)
+      expect(entry[:with]).to be_nil
+    end
+
+    it "skips a matching Page-target entry and falls through to the gem default" do
+      error_page = Class.new(Weft::Page) { def self.name = "StreamErrorPage" }
+      component_class = Class.new(described_class) do
+        def self.name = "PageTargeted"
+      end
+      component_class.recovers(from: StandardError, with: error_page)
+
+      entry = component_class.component_recovery_for(StandardError.new)
+      expect(entry[:with]).to eq(:error_component)
+    end
+
+    it "skips a matching Page-target entry in favor of a later component-target match" do
+      login_page = Class.new(Weft::Page) { def self.name = "StreamLoginPage" }
+      notice_card = Class.new(described_class) { def self.name = "NoticeCard" }
+      component_class = Class.new(described_class) do
+        def self.name = "MixedTargets"
+      end
+      component_class.recovers(from: Weft::HTTPError, with: login_page)
+      component_class.recovers(from: Weft::NotFound, with: notice_card)
+
+      entry = component_class.component_recovery_for(Weft::NotFound.new)
+      expect(entry[:with]).to eq(notice_card)
+    end
+
+    it "resolves Symbol targets during the walk, skipping those that name Pages" do
+      component_class = Class.new(described_class) do
+        def self.name = "SymbolPageTargeted"
+      end
+      component_class.recovers(from: StandardError, with: :error_page)
+
+      entry = component_class.component_recovery_for(StandardError.new)
+      expect(entry[:with]).to eq(:error_component)
     end
   end
 

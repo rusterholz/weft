@@ -9,6 +9,7 @@ Two layers cooperate to make this work. On the server, the Router catches errors
 - [The error classes](#the-error-classes)
 - [The `recovers` chain](#the-recovers-chain) — matching, targets, blocks, and [the built-in edges](#the-built-in-edges)
 - [What happens when something raises](#what-happens-when-something-raises)
+- [Error handling on live streams](#error-handling-on-live-streams)
 - [Auto-injected recovery params](#auto-injected-recovery-params)
 - [Presentation settings](#presentation-settings)
 
@@ -77,7 +78,7 @@ The symbols resolve through `Weft.configuration`, so [reassigning those knobs](c
 
 ## What happens when something raises
 
-**In component context** — a fragment render, an action, an SSE frame — the Router walks the failing component's chain and renders the matched target as a fragment, with the response status taken from the exception (`Weft::HTTPError#status`, else 500). On the client, the fragment swaps in where the component's response would have gone, so the error appears exactly where the problem is. If the matched target is a *page* class, the recovery becomes a redirect to that page instead (`HX-Redirect` for htmx requests, 302 otherwise) — the `with: LoginPage` pattern above.
+**In component context** — a fragment render or an action — the Router walks the failing component's chain and renders the matched target as a fragment, with the response status taken from the exception (`Weft::HTTPError#status`, else 500). On the client, the fragment swaps in where the component's response would have gone, so the error appears exactly where the problem is. If the matched target is a *page* class, the recovery becomes a redirect to that page instead (`HX-Redirect` for htmx requests, 302 otherwise) — the `with: LoginPage` pattern above.
 
 One wrinkle worth knowing: for actions with a destructive swap (`dismisses`, or any `performs` with `swap: :delete`), a successful response removes the element — which would make an error invisible. Weft overrides the swap on error responses (via `HX-Reswap`) so the error rendering replaces the component instead of vanishing with it.
 
@@ -85,11 +86,21 @@ One wrinkle worth knowing: for actions with a destructive swap (`dismisses`, or 
 
 **If the recovery itself raises** — a bug in your error component, say — Weft stops walking and emits a minimal hardcoded error rendering, logging the recovery failure and surfacing the *original* error. There is always a floor; error handling never recurses into itself.
 
-Errors during SSE pushes don't kill the stream: the frame is skipped, the error logged, and pushing resumes on the next interval.
+## Error handling on live streams
+
+A failing SSE push walks the same `recovers` chain as any other component-context failure, with three stream-shaped differences:
+
+- **Component targets only.** A stream can't redirect, so an entry whose target is a page class is skipped and the walk continues to the next match. The gem-default `StandardError` edge sits at the bottom of every chain, so a failing push always finds an error component to render (unless you've deliberately reconfigured that default away).
+- **Frames mirror normal pushes.** The recovery component's *content* is pushed under the failing component's event name and swaps into the persistent wrapper's interior, exactly like a healthy frame. The recovery component's own wrapper never ships — so on this path, put the error box and its styling on inner elements (the gem defaults do).
+- **Failure is budgeted.** Consecutive failed pushes count against an attempts budget — the [`push_attempts`](configuration.md#push_attempts) setting (default 3), or per component with `pushes every: ..., attempts: ...`. A successful push resets the count. When the budget runs out, Weft pushes the final recovery frame, then a close event that the wrapper's `sse-close` attribute tells htmx to honor: the browser closes the EventSource and does not reconnect. The stream ends server-side too; the rest of the page is untouched.
+
+The countdown is visible to your error components through the `:attempts_remaining` auto-injected param (below): it reaches 0 on the final frame — the moment to offer a resume affordance. The [`reopen_stream:` preset](dsl.md#presets) makes that a one-liner: `button "Resume live updates", reopen_stream: @params.retry_url` re-fetches the component whole, and the fresh render carries a fresh `sse-connect`, so the stream reopens with a full budget.
+
+If the recovery render itself raises, that frame is skipped (and the failure still counts) — streams share the no-recursion floor with every other error path.
 
 ## Auto-injected recovery params
 
-A recovery target usually wants context: what failed, where, with what status. The Router offers five values, injected **schema-gated**: each is passed only if the target *declares a param of that name*. Declaring the param is the opt-in; anything not declared is never injected, so nothing leaks into renders (or URLs) uninvited.
+A recovery target usually wants context: what failed, where, with what status. The Router offers six values, injected **schema-gated**: each is passed only if the target *declares a param of that name*. Declaring the param is the opt-in; anything not declared is never injected, so nothing leaks into renders (or URLs) uninvited.
 
 | Param | Value |
 | --- | --- |
@@ -98,6 +109,7 @@ A recovery target usually wants context: what failed, where, with what status. T
 | `:status_code` | The resolved HTTP status (the exception's, or 500). |
 | `:component_id` | The failing component's DOM id. |
 | `:retry_url` | A GET URL that re-renders the failing component with its current params. |
+| `:attempts_remaining` | On a live stream: failed pushes left before the stream closes. Absent elsewhere. |
 
 So a custom error component opts in by declaration:
 
@@ -120,9 +132,10 @@ end
 
 Notes on the individual values:
 
-- **These five names are reserved** on any class used as a recovery target. Declaring a param with one of these names *means* "inject the recovery value here" — so don't reuse them for your own data on error components, or on any component/page reachable through a `recovers` edge.
+- **These six names are reserved** on any class used as a recovery target. Declaring a param with one of these names *means* "inject the recovery value here" — so don't reuse them for your own data on error components, or on any component/page reachable through a `recovers` edge.
 - **`:component_id`** preserves DOM identity: render your error wrapper with it as the element id (the gem's defaults do) and the error lands under the failing component's original id — so multiple simultaneous failures each swap into their own slot rather than colliding.
-- **`:retry_url`** feeds the [`retry:` preset](dsl.md#presets): one button attribute, and the user can re-request the failed component in place. For a failed *action*, the URL renders the underlying component's view — a fresh look, not a replay of the failed action.
+- **`:retry_url`** feeds the [`retry:` preset](dsl.md#presets): one button attribute, and the user can re-request the failed component in place. For a failed *action*, the URL renders the underlying component's view — a fresh look, not a replay of the failed action. On a stream's final frame it feeds [`reopen_stream:`](dsl.md#presets) the same way.
+- **`:attempts_remaining`** is also the push-path context signal: non-nil only when rendering a recovery frame for a live stream. Its presence lets one error component serve both paths — the gem default renders its request shape when it's nil and its stream shape otherwise.
 - When a recovery resolves to a **redirect** (page target from component context), only `:request_path` and `:status_code` travel — the others have no meaning in a URL.
 - Keep the `weft-error` CSS class on custom error components: it's the DOM marker the `retry:` preset targets, and a useful styling hook besides.
 

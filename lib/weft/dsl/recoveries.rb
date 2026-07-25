@@ -53,6 +53,18 @@ module Weft
           recoveries.find { |entry| recovery_matches?(entry[:from], exception) }
         end
 
+        # Like recovery_for, but skips entries whose target resolves to a Page —
+        # for contexts that can only render component fragments (an SSE push
+        # can't redirect or full-page swap). The gem-default StandardError
+        # entry at the bottom of every component chain resolves to a component,
+        # so StandardError-family exceptions always find a match.
+        def component_recovery_for(exception)
+          recoveries.find do |entry|
+            recovery_matches?(entry[:from], exception) &&
+              !page_recovery_target?(resolve_recovery_target(entry))
+          end
+        end
+
         # Resolve the recovery entry's `with:` value to a concrete target class.
         # Symbol values look up `Weft.configuration.<sym>` (resolved at error-handling
         # time so config reassignment propagates). Nil falls back to self.
@@ -82,6 +94,10 @@ module Weft
 
         def recovery_status_of(exception)
           exception.is_a?(Weft::HTTPError) ? exception.status : 500
+        end
+
+        def page_recovery_target?(target)
+          target.is_a?(Class) && defined?(Weft::Page) && target <= Weft::Page
         end
       end
     end

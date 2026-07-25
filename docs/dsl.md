@@ -179,11 +179,14 @@ Intervals count in seconds — an integer, a float, or an ActiveSupport duration
 
 ```ruby
 pushes every: 5.seconds
+pushes every: 5.seconds, attempts: 5   # custom failure budget
 ```
 
 Where `refreshes` polls, `pushes` streams: the Router auto-generates an SSE endpoint for the component (at `<component path>/_stream` — see [Routing](routing.md)), and the component renders with the htmx SSE params to connect to it. On the declared interval — seconds, fractional or whole, with the same 1ms floor as `refreshes` — the server re-renders the component and pushes the result down the open connection.
 
 A new subscriber receives an immediate snapshot frame, then the regular cadence. Pushed frames swap into the component's *interior* (`innerHTML`) — the wrapper element holds the SSE connection, so it must persist across updates.
+
+A failing push walks the component's [`recovers` chain](error-handling.md#error-handling-on-live-streams) and delivers the recovery component's content as the frame, so a live card shows a visible error state instead of silently going stale. A stream that fails `attempts:` times in a row (default: the [`push_attempts`](configuration.md#push_attempts) setting, 3) pushes a final frame, tells the browser to stop reconnecting, and closes — a durably broken component costs a bounded number of attempts, and the `reopen_stream:` preset gives users a one-click way back in.
 
 Pages include the htmx SSE extension script automatically when any component declares `pushes` (the [`include_sse_ext`](configuration.md#include_sse_ext) setting).
 

@@ -24,6 +24,7 @@ Every setting, at a glance:
 | [`static_assets`](#static_assets) | none | Serve a directory of files at a URL prefix. |
 | [`component_path`](#component_path) | derives `/_components/<name>` | How a component class maps to its route. |
 | [`stream_suffix`](#stream_suffix) | `"_stream"` | Path segment for SSE stream endpoints. |
+| [`push_attempts`](#push_attempts) | `3` | Consecutive failed pushes before a stream closes. |
 | [`error_component`](#the-four-fallback-targets) | `Weft::Defaults::ErrorComponent` | Fragment rendered when a component fails. |
 | [`error_page`](#the-four-fallback-targets) | `Weft::Defaults::ErrorPage` | Document rendered when a page fails. |
 | [`not_found_component`](#the-four-fallback-targets) | `Weft::Defaults::NotFoundComponent` | Fragment rendered for a component-context 404. |
@@ -217,3 +218,9 @@ How errors present when the failing request came from htmx *and* the error fell 
 - `:redirect` — send the client to the error page instead (via an `HX-Redirect` header), abandoning the current page. Some apps prefer a full-page failure posture over patchwork error states.
 
 Two carve-outs to know about: explicit `recovers` targets you declare are never overridden — this setting only governs the gem-default fallthrough — and `Weft::NotFound` is exempt, so a missing record renders as an in-place not-found fragment even under `:redirect`.
+
+### `push_attempts`
+
+Default: `3`.
+
+How many consecutive failed pushes a live stream tolerates before giving up. Each failure delivers a recovery frame through the failing component's `recovers` chain; when the budget runs out, the stream pushes its final frame, instructs the browser not to reconnect, and closes. A successful push resets the count, and any component can override the gem-wide value with `pushes every: ..., attempts: ...`. Must be an integer of at least 1. See [Error handling on live streams](error-handling.md#error-handling-on-live-streams).
