@@ -167,7 +167,9 @@ module Weft
 
     # Apply SSE connection attributes for components declaring `pushes`.
     # Uses innerHTML swap — the wrapper element (holding the SSE connection)
-    # must persist across pushes.
+    # must persist across pushes. sse-close names the protocol event the
+    # Router emits when a stream exhausts its push attempts; on receiving it,
+    # htmx-ext-sse closes the EventSource instead of auto-reconnecting.
     def apply_push_attrs
       config = self.class.push_config
       return unless config&.key?(:every)
@@ -175,6 +177,7 @@ module Weft
       set_attribute "hx-ext", "sse"
       set_attribute "sse-connect", stream_url
       set_attribute "sse-swap", weft_id
+      set_attribute "sse-close", Weft::Router::Streaming::CLOSE_EVENT
       set_attribute "hx-swap", "innerHTML"
     end
 

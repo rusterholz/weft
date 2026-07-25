@@ -321,6 +321,37 @@ RSpec.describe Weft::Configuration do
     end
   end
 
+  describe "#push_attempts" do
+    it "defaults to 3" do
+      expect(config.push_attempts).to eq(3)
+    end
+
+    it "accepts a custom positive integer" do
+      config.push_attempts = 5
+      expect(config.push_attempts).to eq(5)
+    end
+
+    it "accepts 1 (close on the first failed push)" do
+      config.push_attempts = 1
+      expect(config.push_attempts).to eq(1)
+    end
+
+    it "rejects zero" do
+      expect { config.push_attempts = 0 }.
+        to raise_error(ArgumentError, /push_attempts/)
+    end
+
+    it "rejects a negative value" do
+      expect { config.push_attempts = -2 }.
+        to raise_error(ArgumentError, /push_attempts/)
+    end
+
+    it "rejects a non-integer value" do
+      expect { config.push_attempts = 2.5 }.
+        to raise_error(ArgumentError, /push_attempts/)
+    end
+  end
+
   describe "gem-level access via Weft.configure" do
     around do |example|
       original = Weft.configuration

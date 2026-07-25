@@ -53,3 +53,10 @@ Weft::Presets.register :tabs,            trigger: :click, swap: :fill
 # the enclosing .weft-error box replaces the whole error display with the fresh
 # component. Callers override target: for a differently-classed container.
 Weft::Presets.register :retry,           trigger: :click, swap: :outer_html, target: "closest .weft-error"
+
+# Reopen_stream is retry's sibling for closed SSE streams (same URL value,
+# usually :retry_url). Targeting the enclosing sse-swap wrapper — the element
+# left behind after the Router closes a stream — means the fresh render
+# replaces it wholesale, and its new sse-connect attribute makes htmx open a
+# fresh EventSource: live updates resume with a full attempts budget.
+Weft::Presets.register :reopen_stream,   trigger: :click, swap: :outer_html, target: "closest [sse-swap]"

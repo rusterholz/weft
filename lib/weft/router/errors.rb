@@ -9,7 +9,8 @@ module Weft
     # for unmatched errors and recovery handlers that themselves raise.
     #
     # Also owns the schema-gated auto-injection of recovery params
-    # (:exception, :request_path, :status_code, :component_id, :retry_url).
+    # (:exception, :request_path, :status_code, :component_id, :retry_url,
+    # :attempts_remaining).
     #
     # Depends on Router internals: `headers`, `status`, `request`,
     # `redirect`, `htmx_request?`.
@@ -19,12 +20,17 @@ module Weft
       # params (:exception, :component_id, :retry_url) are not redirect-safe
       # — no element to preserve identity of, Exception objects aren't
       # URL-encodable, and the destination Page rebuilds its own URL.
+      # :attempts_remaining is populated only on the SSE push path (nil, and
+      # therefore skipped, on HTTP recoveries) — its presence tells a recovery
+      # component it is rendering inside a live stream, counting down to the
+      # close; 0 marks the final frame.
       AUTO_INJECTED_PARAMS = [
-        { key: :exception,    redirect_safe: false },
-        { key: :request_path, redirect_safe: true },
-        { key: :status_code,  redirect_safe: true },
-        { key: :component_id, redirect_safe: false },
-        { key: :retry_url,    redirect_safe: false }
+        { key: :exception,          redirect_safe: false },
+        { key: :request_path,       redirect_safe: true },
+        { key: :status_code,        redirect_safe: true },
+        { key: :component_id,       redirect_safe: false },
+        { key: :retry_url,          redirect_safe: false },
+        { key: :attempts_remaining, redirect_safe: false }
       ].freeze
       private_constant :AUTO_INJECTED_PARAMS
 
@@ -181,6 +187,31 @@ module Weft
         end
       end
 
+      # Fragment-only sibling of render_recovery for SSE push failures. Walks
+      # the chain via component_recovery_for (a stream swap can't take a Page),
+      # and returns the recovery target's children-only HTML — the client swap
+      # is innerHTML into the original component's persistent wrapper, so the
+      # frame ships content, not wrapper (like-for-like with a normal push).
+      # No status (headers are long flushed on a live stream), no oob includes
+      # (their params presume the successful build that didn't happen), and no
+      # htmx_errors redirect knob (an HTTP-path concern). Returns nil when the
+      # chain yields nothing; the caller owns rescue and logging.
+      def render_push_recovery(component_class, resolved_params, error, attempts_remaining:)
+        entry = component_class.component_recovery_for(error)
+        return nil unless entry
+
+        merged = resolved_params.merge(invoke_recovery_block(entry, resolved_params, error))
+        target = component_class.resolve_recovery_target(entry)
+        component_ctx = {
+          originating_id: component_class.weft_id_for(resolved_params),
+          retry_url: compute_retry_url(component_class, resolved_params),
+          attempts_remaining: attempts_remaining
+        }
+        injected = inject_auto_params(target, merged, error,
+                                      on_redirect: false, component_ctx: component_ctx)
+        build_component_with_wire(target, injected).content
+      end
+
       def render_recovery_component(target, merged_params, error, component_ctx:)
         injected = inject_auto_params(target, merged_params, error,
                                       on_redirect: false, component_ctx: component_ctx)
@@ -216,7 +247,8 @@ module Weft
           request_path: request.path,
           status_code: recovery_status(error),
           component_id: component_ctx[:originating_id],
-          retry_url: component_ctx[:retry_url]
+          retry_url: component_ctx[:retry_url],
+          attempts_remaining: component_ctx[:attempts_remaining]
         }
       end
 
