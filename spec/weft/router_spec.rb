@@ -516,6 +516,13 @@ RSpec.describe Weft::Router do
       end
     end
 
+    let(:patient_class) do
+      Class.new(Weft::Component) do
+        def self.name = "PatientPushCard"
+        pushes every: 5, immediate: false
+      end
+    end
+
     it "pushes the first frame immediately, then sleeps before subsequent frames" do
       router = described_class.new!(downstream_app)
       order = []
@@ -531,6 +538,23 @@ RSpec.describe Weft::Router do
       router.send(:stream_component, pushing_class)
 
       expect(order).to eq(%i[push sleep push])
+    end
+
+    it "sleeps before the first frame when the component declares immediate: false" do
+      router = described_class.new!(downstream_app)
+      order = []
+      allow(router).to receive(:content_type)
+      allow(router).to receive(:headers)
+      allow(router).to receive(:stream).and_yield(frame_sink)
+      allow(router).to receive(:sleep) { order << :sleep }
+      allow(router).to receive(:push_component_event) do
+        order << :push
+        raise IOError if order.count(:push) >= 2
+      end
+
+      router.send(:stream_component, patient_class)
+
+      expect(order).to eq(%i[sleep push sleep push])
     end
   end
 

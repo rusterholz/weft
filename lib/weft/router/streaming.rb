@@ -50,13 +50,15 @@ module Weft
       end
 
       # New subscribers get an immediate state snapshot, then the regular
-      # cadence — sleep only kicks in from the second frame onward. The flag
-      # flips before the push (not after a *successful* one) so a persistently
-      # failing push still throttles on the interval instead of busy-looping.
+      # cadence — sleep only kicks in from the second frame onward — unless
+      # the component declared `immediate: false`, which pre-arms the sleep.
+      # The flag flips before the push (not after a *successful* one) so a
+      # persistently failing push still throttles on the interval instead of
+      # busy-looping.
       def run_push_loop(out, klass)
         interval = klass.push_config[:every]
         attempts = klass.push_config[:attempts] || Weft.configuration.push_attempts
-        after_first = false
+        after_first = !klass.push_config.fetch(:immediate, true)
         failures = 0
         loop do
           sleep interval if after_first

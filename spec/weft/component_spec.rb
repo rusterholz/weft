@@ -1473,6 +1473,15 @@ RSpec.describe Weft::Component do
       expect(component_class.push_config).to eq(every: 5, attempts: 5)
     end
 
+    it "stores a declared immediate: false in push_config" do
+      component_class = Class.new(described_class) do
+        def self.name = "PatientTicker"
+        pushes every: 5, immediate: false
+      end
+
+      expect(component_class.push_config).to eq(every: 5, immediate: false)
+    end
+
     it "omits :attempts from push_config when not declared (gem config governs)" do
       component_class = Class.new(described_class) do
         def self.name = "DefaultBudgetTicker"
