@@ -35,4 +35,11 @@ RSpec.describe Oms::OrderDetailPage, type: :component do
     expect(html).to include("widget")
     expect(html).to match(/<td[^>]*>3</)
   end
+
+  it "raises ActiveRecord::RecordNotFound for a missing order" do
+    klass = described_class
+    expect do
+      render_weft_html(wire: { "order_id" => "missing" }) { insert_tag(klass) }
+    end.to raise_error(ActiveRecord::RecordNotFound)
+  end
 end

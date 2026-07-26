@@ -11,6 +11,14 @@ RSpec.describe ApplicationPage, type: :component do
     expect(described_class).not_to be_routable
   end
 
+  it "maps ActiveRecord::RecordNotFound to the branded NotFoundPage as a 404" do
+    entry = described_class.recovery_for(ActiveRecord::RecordNotFound.new("nope"))
+    # A Class target (not the gem-default's Symbol knob indirection) proves the
+    # explicit declaration; status: supplies the wire semantics AR's error lacks.
+    expect(entry[:with]).to eq(NotFoundPage)
+    expect(entry[:status]).to eq(404)
+  end
+
   it "inherits the company default title from DropshipUI::Page" do
     html = render_arbre_html { application_page }
     expect(html).to include("<title>Dropship Co.</title>")
