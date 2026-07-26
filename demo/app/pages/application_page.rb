@@ -10,6 +10,13 @@ class ApplicationPage < DropshipUI::Page
   builder_method :application_page
   adds_children_to :@main
 
+  # Map the app's own error vocabulary: a missing record is a branded 404
+  # (status: supplies the wire semantics AR's error doesn't carry). Declared
+  # in the class body so every Zeitwerk reload re-applies it — a boot-time
+  # declaration would evaporate with the first reload's fresh constants.
+  # Zeitwerk resolves the NotFoundPage forward reference on demand.
+  recovers from: ActiveRecord::RecordNotFound, with: NotFoundPage, status: 404
+
   # Navbar chrome lives at the app layer (the navbar itself is rendered by
   # ApplicationPage). Tokens like --ds-mono / --ds-border come from the
   # design-system stylesheet registered on DropshipUI::Page.

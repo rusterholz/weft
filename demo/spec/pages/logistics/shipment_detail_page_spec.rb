@@ -17,6 +17,13 @@ RSpec.describe Logistics::ShipmentDetailPage, type: :component do
     expect(described_class).to be_routable
   end
 
+  it "raises ActiveRecord::RecordNotFound for a missing shipment" do
+    klass = described_class
+    expect do
+      render_weft_html(wire: { "shipment_id" => "missing" }) { insert_tag(klass) }
+    end.to raise_error(ActiveRecord::RecordNotFound)
+  end
+
   def rendered
     klass = described_class
     id = shipment.id

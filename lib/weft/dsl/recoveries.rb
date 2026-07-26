@@ -20,17 +20,22 @@ module Weft
         #   end
         #
         #   recovers from: Weft::Unauthorized, with: LoginPage
+        #   recovers from: ActiveRecord::RecordNotFound, with: NotFoundPage, status: 404
         #
         # `from:` accepts a Class (subclass-inclusive), Integer (matched against
         # HTTPError#status), Range, or Array of any of the above.
         # `with:` accepts a Class (Page or Component) or Symbol (resolved against
         # Weft.configuration at error-handling time). Default: self.
+        # `status:` declares what the error means on the wire — recoveries from
+        # errors that aren't Weft::HTTPErrors report 500 without it. Must be an
+        # HTTP error status (400..599); raises Weft::InvalidUsage otherwise.
         # The optional block receives `|params, error|` and returns a hash of
         # additional params that merge with the original on the recovery edge.
         # Symmetric with performs/transfers contracts (params first; error is the
         # recovery-specific extra). The block never returns HTML.
-        def recovers(from:, with: nil, &block)
-          own_recoveries << { from: from, with: with, block: block }
+        def recovers(from:, with: nil, status: nil, &block)
+          validate_recovery_status!(status)
+          own_recoveries << { from: from, with: with, status: status, block: block }
         end
 
         # All declared recovery entries (own + inherited), in resolution order.
@@ -80,6 +85,15 @@ module Weft
 
         def own_recoveries
           @own_recoveries ||= []
+        end
+
+        # Declarations raise (a bad status is a coding bug, visible at load);
+        # only error semantics are assignable — a recovery can't claim success.
+        def validate_recovery_status!(status)
+          return if status.nil? || (status.is_a?(Integer) && (400..599).cover?(status))
+
+          raise Weft::InvalidUsage,
+                "recovers status: must be an HTTP error status (400..599); got #{status.inspect}"
         end
 
         def recovery_matches?(from_clause, exception)

@@ -30,23 +30,30 @@ module Weft
 
         # Declare that this component pushes updates via SSE.
         #
-        #   pushes every: 5.seconds               # server pushes on interval
-        #   pushes every: 5.seconds, attempts: 5  # custom failure budget
+        #   pushes every: 5.seconds                  # server pushes on interval
+        #   pushes every: 5.seconds, attempts: 5     # custom failure budget
+        #   pushes every: 5.seconds, immediate: false # wait a full interval first
         #
         # Generates hx-ext="sse", sse-connect, sse-swap, sse-close on the
         # wrapper element. The Router auto-generates a streaming endpoint at
         # /component_path/_stream (the suffix is the stream_suffix config knob).
         # `attempts:` overrides Weft.configuration.push_attempts — consecutive
         # failed pushes tolerated before the Router closes the stream.
+        # `immediate:` defaults to true (new subscribers get a state snapshot
+        # right away); `immediate: false` opts back into polling-cadence
+        # semantics — first frame after one interval — for components whose
+        # current state would mislead a fresh subscriber.
         #
         # Future: pushes on: "event-name" for event-driven server push (v1.0).
-        def pushes(every: nil, attempts: nil)
+        def pushes(every: nil, attempts: nil, immediate: nil)
           @push_config = {}
           if every
             ms = interval_in_ms(every, :pushes)
             @push_config[:every] = (ms % 1000).zero? ? ms / 1000 : ms / 1000.0
           end
           @push_config[:attempts] = validated_attempts(attempts) if attempts
+          # nil-guarded, not truthiness: `immediate: false` must persist.
+          @push_config[:immediate] = immediate unless immediate.nil?
         end
 
         # Push configuration (own or inherited). Returns nil if no pushes declared.

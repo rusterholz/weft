@@ -516,6 +516,13 @@ RSpec.describe Weft::Router do
       end
     end
 
+    let(:patient_class) do
+      Class.new(Weft::Component) do
+        def self.name = "PatientPushCard"
+        pushes every: 5, immediate: false
+      end
+    end
+
     it "pushes the first frame immediately, then sleeps before subsequent frames" do
       router = described_class.new!(downstream_app)
       order = []
@@ -531,6 +538,23 @@ RSpec.describe Weft::Router do
       router.send(:stream_component, pushing_class)
 
       expect(order).to eq(%i[push sleep push])
+    end
+
+    it "sleeps before the first frame when the component declares immediate: false" do
+      router = described_class.new!(downstream_app)
+      order = []
+      allow(router).to receive(:content_type)
+      allow(router).to receive(:headers)
+      allow(router).to receive(:stream).and_yield(frame_sink)
+      allow(router).to receive(:sleep) { order << :sleep }
+      allow(router).to receive(:push_component_event) do
+        order << :push
+        raise IOError if order.count(:push) >= 2
+      end
+
+      router.send(:stream_component, patient_class)
+
+      expect(order).to eq(%i[sleep push sleep push])
     end
   end
 
@@ -1156,6 +1180,142 @@ RSpec.describe Weft::Router do
       get "/_components/unhandled_http_error", id: "1"
 
       expect(last_response.status).to eq(403)
+    end
+
+    it "reports a declared status: override for a non-HTTPError" do
+      Class.new(Weft::Component) do
+        def self.name = "MappedErrorCard"
+        param :id
+        param :error_message
+
+        recovers(from: KeyError, status: 404) { |_params, error| { error_message: error.message } }
+
+        def build(attributes = {})
+          super
+          raise KeyError, "no such thing" unless params.error_message
+
+          div { text_node "recovered: #{params.error_message}" }
+        end
+      end
+
+      get "/_components/mapped_error_card", id: "1"
+
+      expect(last_response.status).to eq(404)
+      expect(last_response.body).to include("recovered: no such thing")
+    end
+
+    it "carries the override into a Page-context recovery and its :status_code param" do # rubocop:disable RSpec/ExampleLength
+      target = Class.new(Weft::Page) do
+        def self.name = "MappedLostPage"
+        self.page_path = "/mapped-lost"
+        param :status_code
+
+        def build(attributes = {})
+          super
+          div(class: "mapped-404") { text_node "code-#{params.status_code}" }
+        end
+      end
+      Class.new(Weft::Page) do
+        def self.name = "KeyMissingPage"
+        self.page_path = "/key-missing"
+
+        recovers(from: KeyError, with: target, status: 404)
+
+        def build(attributes = {})
+          super
+          raise KeyError, "gone"
+        end
+      end
+
+      get "/key-missing"
+
+      expect(last_response.status).to eq(404)
+      expect(last_response.body).to include("code-404")
+    end
+  end
+
+  # A normally-returned 404 body must leave the building untouched: Sinatra
+  # runs error_block!(response.status) after every dispatch, so any error(404)
+  # registration would replace custom recovery bodies with the default chain's
+  # output. These pin the no-clobber contract for every 404-producing path.
+  describe "custom NotFound recoveries" do
+    let!(:branded_lost_page) do
+      Class.new(Weft::Page) do
+        def self.name = "BrandedLostPage"
+        self.page_path = "/branded-lost"
+        param :request_path
+
+        def build(attributes = {})
+          super
+          div(class: "branded-404") { text_node "Branded: #{params.request_path}" }
+        end
+      end
+    end
+
+    let!(:missing_record_page) do # rubocop:disable RSpec/LetSetup
+      target = branded_lost_page
+      Class.new(Weft::Page) do
+        def self.name = "MissingRecordPage"
+        self.page_path = "/missing-record"
+
+        recovers(from: Weft::NotFound, with: target)
+
+        def build(attributes = {})
+          super
+          raise Weft::NotFound, "no such record"
+        end
+      end
+    end
+
+    it "honors a Page's own recovers from: Weft::NotFound declaration (traditional, full document)" do
+      get "/missing-record"
+
+      expect(last_response.status).to eq(404)
+      expect(last_response.body).to include("branded-404")
+    end
+
+    it "honors the declaration for htmx requests (body fragment)" do
+      get "/missing-record", {}, "HTTP_HX_REQUEST" => "true"
+
+      expect(last_response.status).to eq(404)
+      expect(last_response.body).to include("branded-404")
+      expect(last_response.body).not_to include("<html")
+    end
+
+    it "keeps a component's own 404 recovery fragment instead of swapping in a page document" do
+      Class.new(Weft::Component) do
+        def self.name = "MissingThingCard"
+        param :id
+        param :error_message
+
+        recovers(from: Weft::NotFound) { |_params, error| { error_message: error.message } }
+
+        def build(attributes = {})
+          super
+          raise Weft::NotFound, "no such thing" unless params.error_message
+
+          div(class: "custom-404") { text_node "Gone: #{params.error_message}" }
+        end
+      end
+
+      get "/_components/missing_thing_card", id: "1"
+
+      expect(last_response.status).to eq(404)
+      expect(last_response.body).to include("custom-404")
+      expect(last_response.body).not_to include("<html")
+    end
+
+    context "when a downstream app answers with its own 404" do
+      let(:downstream_app) do
+        ->(_env) { [404, { "content-type" => "text/plain" }, ["downstream 404 body"]] }
+      end
+
+      it "passes the downstream body through untouched (middleware mode)" do
+        get "/not-a-weft-path"
+
+        expect(last_response.status).to eq(404)
+        expect(last_response.body).to eq("downstream 404 body")
+      end
     end
   end
 
