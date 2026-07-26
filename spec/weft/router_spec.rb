@@ -1159,6 +1159,91 @@ RSpec.describe Weft::Router do
     end
   end
 
+  # A normally-returned 404 body must leave the building untouched: Sinatra
+  # runs error_block!(response.status) after every dispatch, so any error(404)
+  # registration would replace custom recovery bodies with the default chain's
+  # output. These pin the no-clobber contract for every 404-producing path.
+  describe "custom NotFound recoveries" do
+    let!(:branded_lost_page) do
+      Class.new(Weft::Page) do
+        def self.name = "BrandedLostPage"
+        self.page_path = "/branded-lost"
+        param :request_path
+
+        def build(attributes = {})
+          super
+          div(class: "branded-404") { text_node "Branded: #{params.request_path}" }
+        end
+      end
+    end
+
+    let!(:missing_record_page) do # rubocop:disable RSpec/LetSetup
+      target = branded_lost_page
+      Class.new(Weft::Page) do
+        def self.name = "MissingRecordPage"
+        self.page_path = "/missing-record"
+
+        recovers(from: Weft::NotFound, with: target)
+
+        def build(attributes = {})
+          super
+          raise Weft::NotFound, "no such record"
+        end
+      end
+    end
+
+    it "honors a Page's own recovers from: Weft::NotFound declaration (traditional, full document)" do
+      get "/missing-record"
+
+      expect(last_response.status).to eq(404)
+      expect(last_response.body).to include("branded-404")
+    end
+
+    it "honors the declaration for htmx requests (body fragment)" do
+      get "/missing-record", {}, "HTTP_HX_REQUEST" => "true"
+
+      expect(last_response.status).to eq(404)
+      expect(last_response.body).to include("branded-404")
+      expect(last_response.body).not_to include("<html")
+    end
+
+    it "keeps a component's own 404 recovery fragment instead of swapping in a page document" do
+      Class.new(Weft::Component) do
+        def self.name = "MissingThingCard"
+        param :id
+        param :error_message
+
+        recovers(from: Weft::NotFound) { |_params, error| { error_message: error.message } }
+
+        def build(attributes = {})
+          super
+          raise Weft::NotFound, "no such thing" unless params.error_message
+
+          div(class: "custom-404") { text_node "Gone: #{params.error_message}" }
+        end
+      end
+
+      get "/_components/missing_thing_card", id: "1"
+
+      expect(last_response.status).to eq(404)
+      expect(last_response.body).to include("custom-404")
+      expect(last_response.body).not_to include("<html")
+    end
+
+    context "when a downstream app answers with its own 404" do
+      let(:downstream_app) do
+        ->(_env) { [404, { "content-type" => "text/plain" }, ["downstream 404 body"]] }
+      end
+
+      it "passes the downstream body through untouched (middleware mode)" do
+        get "/not-a-weft-path"
+
+        expect(last_response.status).to eq(404)
+        expect(last_response.body).to eq("downstream 404 body")
+      end
+    end
+  end
+
   describe "recovers auto-injected attributes (schema-gated)" do
     it "injects :exception when the target declares it" do
       Class.new(Weft::Component) do

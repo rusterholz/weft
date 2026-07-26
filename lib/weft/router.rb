@@ -63,11 +63,20 @@ module Weft
       end
     end
 
-    # In standalone mode (no downstream Rack app), Sinatra's not_found
-    # block fires when no route matched. Walk the Weft::Page recovers chain
-    # (default → Weft::Defaults::NotFoundPage). In middleware mode, `pass`
-    # falls through to the downstream app — this block doesn't fire.
-    not_found do
+    # Both error registrations are exception-keyed, never status-keyed: an
+    # error(404)/not_found handler fires on response *status* after every
+    # dispatch — custom recovery bodies return normally, no exception
+    # recorded — and would overwrite them with the default chain's output.
+    # Exception keys only fire when Sinatra itself raises.
+
+    # Routing miss in standalone mode: Sinatra raises Sinatra::NotFound
+    # after the final `pass` (middleware mode forwards downstream instead).
+    # Translate and walk the default Weft::Page chain. The exact-class key
+    # is load-bearing: Sinatra dispatches exact keys across all superclasses
+    # before walking the exception hierarchy, and Sinatra::Base registers
+    # its own development-mode `error NotFound` ("doesn't know this ditty")
+    # that must be shadowed here — StandardError below wouldn't be reached.
+    error Sinatra::NotFound do
       content_type :html
       handle_page_chain_failure(Weft::NotFound.new(request.path),
                                 originating_page_class: nil)
