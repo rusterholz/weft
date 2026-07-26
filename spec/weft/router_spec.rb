@@ -1181,6 +1181,57 @@ RSpec.describe Weft::Router do
 
       expect(last_response.status).to eq(403)
     end
+
+    it "reports a declared status: override for a non-HTTPError" do
+      Class.new(Weft::Component) do
+        def self.name = "MappedErrorCard"
+        param :id
+        param :error_message
+
+        recovers(from: KeyError, status: 404) { |_params, error| { error_message: error.message } }
+
+        def build(attributes = {})
+          super
+          raise KeyError, "no such thing" unless params.error_message
+
+          div { text_node "recovered: #{params.error_message}" }
+        end
+      end
+
+      get "/_components/mapped_error_card", id: "1"
+
+      expect(last_response.status).to eq(404)
+      expect(last_response.body).to include("recovered: no such thing")
+    end
+
+    it "carries the override into a Page-context recovery and its :status_code param" do # rubocop:disable RSpec/ExampleLength
+      target = Class.new(Weft::Page) do
+        def self.name = "MappedLostPage"
+        self.page_path = "/mapped-lost"
+        param :status_code
+
+        def build(attributes = {})
+          super
+          div(class: "mapped-404") { text_node "code-#{params.status_code}" }
+        end
+      end
+      Class.new(Weft::Page) do
+        def self.name = "KeyMissingPage"
+        self.page_path = "/key-missing"
+
+        recovers(from: KeyError, with: target, status: 404)
+
+        def build(attributes = {})
+          super
+          raise KeyError, "gone"
+        end
+      end
+
+      get "/key-missing"
+
+      expect(last_response.status).to eq(404)
+      expect(last_response.body).to include("code-404")
+    end
   end
 
   # A normally-returned 404 body must leave the building untouched: Sinatra

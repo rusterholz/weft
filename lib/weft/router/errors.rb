@@ -52,9 +52,10 @@ module Weft
         merged_params = recovery_merged_params(entry, originating_params, error)
 
         if page_target?(target)
-          dispatch_page_recovery(target, merged_params, error)
+          dispatch_page_recovery(target, merged_params, error, entry)
         else
-          render_recovery_component(target, merged_params, error, component_ctx: {})
+          render_recovery_component(target, merged_params, error,
+                                    component_ctx: { status: recovery_status(error, entry) })
         end
       end
 
@@ -65,10 +66,12 @@ module Weft
 
       # Render or redirect for a Page recovery target. htmx requests get the
       # Page's body content as a fragment; traditional requests get the full
-      # document. Status comes from the exception.
-      def dispatch_page_recovery(page_class, merged_params, error)
-        injected = inject_auto_params(page_class, merged_params, error, on_redirect: false)
-        status recovery_status(error)
+      # document. Status comes from the exception, or the entry's override.
+      def dispatch_page_recovery(page_class, merged_params, error, entry = nil)
+        wire_status = recovery_status(error, entry)
+        injected = inject_auto_params(page_class, merged_params, error,
+                                      on_redirect: false, component_ctx: { status: wire_status })
+        status wire_status
         htmx_request? ? page_body_html(page_class, injected) : page_class.render(**injected)
       end
 
@@ -144,11 +147,12 @@ module Weft
         target = component_class.resolve_recovery_target(entry)
         component_ctx = {
           originating_id: component_class.weft_id_for(resolved_params),
-          retry_url: compute_retry_url(component_class, resolved_params)
+          retry_url: compute_retry_url(component_class, resolved_params),
+          status: recovery_status(error, entry)
         }
 
         if page_target?(target)
-          redirect_to_recovery_page(target, merged_params, error)
+          redirect_to_recovery_page(target, merged_params, error, component_ctx)
         else
           render_recovery_component(target, merged_params, error, component_ctx: component_ctx)
         end
@@ -174,8 +178,9 @@ module Weft
         target.is_a?(Class) && defined?(Weft::Page) && target <= Weft::Page
       end
 
-      def redirect_to_recovery_page(target, merged_params, error)
-        params_for_url = inject_auto_params(target, merged_params, error, on_redirect: true)
+      def redirect_to_recovery_page(target, merged_params, error, component_ctx = {})
+        params_for_url = inject_auto_params(target, merged_params, error,
+                                            on_redirect: true, component_ctx: component_ctx)
         url = target.redirect_url(params_for_url)
 
         if request.env["HTTP_HX_REQUEST"]
@@ -205,7 +210,8 @@ module Weft
         component_ctx = {
           originating_id: component_class.weft_id_for(resolved_params),
           retry_url: compute_retry_url(component_class, resolved_params),
-          attempts_remaining: attempts_remaining
+          attempts_remaining: attempts_remaining,
+          status: recovery_status(error, entry)
         }
         injected = inject_auto_params(target, merged, error,
                                       on_redirect: false, component_ctx: component_ctx)
@@ -215,7 +221,7 @@ module Weft
       def render_recovery_component(target, merged_params, error, component_ctx:)
         injected = inject_auto_params(target, merged_params, error,
                                       on_redirect: false, component_ctx: component_ctx)
-        status recovery_status(error)
+        status component_ctx.fetch(:status) { recovery_status(error) }
         # The target projects its own schema from the pseudo-wire kwargs, so
         # the failing component's params (which may share no schema with the
         # target) can't leak. Declared auto-injected params survive: their
@@ -245,15 +251,17 @@ module Weft
         {
           exception: error,
           request_path: request.path,
-          status_code: recovery_status(error),
+          status_code: component_ctx[:status] || recovery_status(error),
           component_id: component_ctx[:originating_id],
           retry_url: component_ctx[:retry_url],
           attempts_remaining: component_ctx[:attempts_remaining]
         }
       end
 
-      def recovery_status(error)
-        error.is_a?(Weft::HTTPError) ? error.status : 500
+      # The matched entry's status: override wins; otherwise the error's own
+      # semantics (HTTPError carries a status, anything else reports 500).
+      def recovery_status(error, entry = nil)
+        entry&.[](:status) || (error.is_a?(Weft::HTTPError) ? error.status : 500)
       end
 
       def render_generic_error(component_class, resolved_params, error)

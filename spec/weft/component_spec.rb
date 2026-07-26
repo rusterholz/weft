@@ -1927,7 +1927,7 @@ RSpec.describe Weft::Component do
       component_class.recovers(from: Weft::Unprocessable, &handler)
 
       expect(component_class.recoveries.first).to eq(
-        from: Weft::Unprocessable, with: nil, block: handler
+        from: Weft::Unprocessable, with: nil, status: nil, block: handler
       )
     end
 
@@ -1941,8 +1941,35 @@ RSpec.describe Weft::Component do
       component_class.recovers(from: Weft::Unprocessable, with: target)
 
       expect(component_class.recoveries.first).to eq(
-        from: Weft::Unprocessable, with: target, block: nil
+        from: Weft::Unprocessable, with: target, status: nil, block: nil
       )
+    end
+
+    it "stores a declared status: override" do
+      component_class = Class.new(described_class) do
+        def self.name = "Recoverable"
+      end
+      component_class.recovers(from: KeyError, with: :error_component, status: 404)
+
+      expect(component_class.recoveries.first[:status]).to eq(404)
+    end
+
+    it "raises InvalidUsage for a status: outside the HTTP error range" do
+      component_class = Class.new(described_class) do
+        def self.name = "Recoverable"
+      end
+
+      expect { component_class.recovers(from: KeyError, status: 200) }.
+        to raise_error(Weft::InvalidUsage, /status/)
+    end
+
+    it "raises InvalidUsage for a non-integer status:" do
+      component_class = Class.new(described_class) do
+        def self.name = "Recoverable"
+      end
+
+      expect { component_class.recovers(from: KeyError, status: "404") }.
+        to raise_error(Weft::InvalidUsage, /status/)
     end
 
     it "accepts a Symbol with: for configuration-time resolution" do
@@ -2018,7 +2045,7 @@ RSpec.describe Weft::Component do
       end
 
       gem_default = component_class.recoveries.last
-      expect(gem_default).to eq(from: StandardError, with: :error_component, block: nil)
+      expect(gem_default).to eq(from: StandardError, with: :error_component, status: nil, block: nil)
     end
 
     it "inherits a gem-default Weft::NotFound entry targeting :not_found_component, ahead of the StandardError entry" do
@@ -2028,11 +2055,11 @@ RSpec.describe Weft::Component do
 
       entries = component_class.recoveries
       not_found_entry = entries.find { |e| e[:from] == Weft::NotFound }
-      expect(not_found_entry).to eq(from: Weft::NotFound, with: :not_found_component, block: nil)
+      expect(not_found_entry).to eq(from: Weft::NotFound, with: :not_found_component, status: nil, block: nil)
       # Ordered before the StandardError gem-default so a component-context
       # NotFound resolves to the 404 body, not the generic error component.
       expect(entries.index(not_found_entry)).to be < entries.index(entries.last)
-      expect(entries.last).to eq(from: StandardError, with: :error_component, block: nil)
+      expect(entries.last).to eq(from: StandardError, with: :error_component, status: nil, block: nil)
     end
   end
 
