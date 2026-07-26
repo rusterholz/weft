@@ -27,7 +27,7 @@ Weft ships a small semantic hierarchy rooted at `Weft::Error`:
 | `Weft::Unprocessable` | 422 | The request was understood but can't be acted on — validation failures, mostly. |
 | `Weft::InternalError` | 500 | An explicit "we broke" signal. |
 
-Raise these from your `build` methods and action callables to communicate outcomes with the right status semantics: `raise Weft::NotFound` when a record lookup comes up empty, `raise Weft::Unprocessable` when validation fails. Errors that aren't `Weft::HTTPError`s — an unrescued `ActiveRecord::RecordNotFound`, a `NoMethodError` — are treated as status 500.
+Raise these from your `build` methods and action callables to communicate outcomes with the right status semantics: `raise Weft::NotFound` when a record lookup comes up empty, `raise Weft::Unprocessable` when validation fails. They're a convenience, not a requirement — your code can keep raising its own vocabulary (`ActiveRecord::RecordNotFound`, a domain error) and let a `recovers` edge [declare what it means](#the-recovers-chain) with `status:`. An error that's neither a `Weft::HTTPError` nor mapped by such an edge is treated as status 500.
 
 A separate branch of the family reports *your* mistakes to you, raised at definition or configuration time rather than during request handling: `Weft::InvalidConfiguration` (a bad value inside `Weft.configure`), `Weft::InvalidDefinition` (a bad class-body declaration, including route collisions), and `Weft::InvalidUsage` (a bad call at render time). These are meant to fail loudly during development, not to be recovery targets.
 
@@ -41,6 +41,7 @@ class OrderEditor < Weft::Component
     { error_message: error.message }
   end
   recovers from: Weft::Unauthorized, with: LoginPage
+  recovers from: ActiveRecord::RecordNotFound, with: NotFoundCard, status: 404
 end
 ```
 
@@ -55,6 +56,8 @@ Each declaration is an edge: *when this kind of error escapes me, render that in
 - an **Array** of any of the above — matches if any element does.
 
 **`with:`** names the recovery target — what renders in place of the failure. It accepts a component or page class, or a symbol naming a [configuration knob](configuration.md#the-four-fallback-targets) (`with: :error_component`), resolved at error-handling time so reconfiguration propagates. Omitted, it defaults to the declaring class itself — "on this error, re-render me" — which pairs naturally with a block that adjusts params.
+
+**`status:`** declares what a matched error *means* on the wire. Weft's own error classes carry their status with them, but your app's errors don't need translating into Weft's — recover from them directly and let the edge supply the semantics, as the `ActiveRecord::RecordNotFound` edge above does: the response status and the auto-injected `:status_code` param both follow it, so the branded rendering is a genuine 404. Without it, a recovered non-`Weft::HTTPError` reports as 500. Only error statuses (400–599) are assignable; an invalid value raises `Weft::InvalidUsage` at declaration time.
 
 **The block**, if given, receives `(params, error)` — the same resolved params an action callable sees, plus the exception — and returns a hash merged into the params the recovery target renders with (returned keys win). It's for *carrying information onto the error rendering*, like the validation messages above; it never returns HTML.
 
@@ -145,5 +148,3 @@ Two configuration settings shape how the built-in fallbacks present; both are co
 
 - [`verbose_error_pages`](configuration.md#verbose_error_pages) — whether the gem defaults show exception class/message and the failing path (turn off in production).
 - [`htmx_errors`](configuration.md#htmx_errors) — whether htmx-request errors falling through to the gem defaults render in place (`:fragment`) or navigate to the error page (`:redirect`). Your own `recovers` edges are never affected, and 404s always render in place.
-
-> **v0.1 limitation:** custom `recovers from: Weft::NotFound` declarations are not yet reliably honored — the gem-default not-found rendering can take over the response. To customize not-found presentation in v0.1, assign the [`not_found_page` / `not_found_component` knobs](configuration.md#the-four-fallback-targets), which are fully supported. First-class custom `NotFound` recoveries land in v0.2.
