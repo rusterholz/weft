@@ -34,7 +34,8 @@ class ApplicationPage < DropshipUI::Page
     ["/", "Dashboard"],
     ["/orders", "Orders"],
     ["/shipments", "Shipments"],
-    ["/drivers", "Drivers"]
+    ["/drivers", "Drivers"],
+    ["/drills", "Error Drills"]
   ].freeze
 
   def build(attributes = {})

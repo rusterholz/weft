@@ -29,10 +29,10 @@ RSpec.describe ApplicationPage, type: :component do
     expect(html).to include("htmx-ext-sse")
   end
 
-  it "renders the navbar with all four navigable sections" do
+  it "renders the navbar with all five navigable sections" do
     html = render_arbre_html { application_page }
     expect(html).to include('class="navbar-brand"')
-    %w[Dashboard Orders Shipments Drivers].each do |label|
+    ["Dashboard", "Orders", "Shipments", "Drivers", "Error Drills"].each do |label|
       expect(html).to include(label)
     end
   end
