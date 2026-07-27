@@ -2,19 +2,23 @@
 
 require "logger"
 
+require "active_support/core_ext/string/inflections"
+
 module Weft
   class Configuration
     DEFAULT_COMPONENT_PATH = ->(klass) { "/_components/#{klass.name.to_s.delete_suffix('Component').underscore}" }
     VALID_HTMX_ERRORS = %i[fragment redirect].freeze
     VALID_INCLUDE_SSE_EXT = [:auto, true, false].freeze
+    CLASS_KNOBS = %i[error_component error_page not_found_page not_found_component].freeze
     LOG_LEVELS = {
       debug: Logger::DEBUG, info: Logger::INFO, warn: Logger::WARN,
       error: Logger::ERROR, fatal: Logger::FATAL, unknown: Logger::UNKNOWN
     }.freeze
-    private_constant :DEFAULT_COMPONENT_PATH, :VALID_HTMX_ERRORS, :VALID_INCLUDE_SSE_EXT, :LOG_LEVELS
+    private_constant :DEFAULT_COMPONENT_PATH, :VALID_HTMX_ERRORS, :VALID_INCLUDE_SSE_EXT,
+                     :CLASS_KNOBS, :LOG_LEVELS
 
     attr_reader :component_path, :htmx_errors, :include_sse_ext, :log_level, :push_attempts, :stream_suffix
-    attr_accessor :include_htmx, :auto_reload, :reload_paths, :verbose_error_pages, :router_logging
+    attr_accessor :include_htmx, :verbose_error_pages, :router_logging
     attr_writer :error_component, :error_page, :not_found_page, :not_found_component
 
     # @api private
@@ -24,8 +28,6 @@ module Weft
       @component_path = DEFAULT_COMPONENT_PATH
       @include_htmx = true
       @include_sse_ext = :auto
-      @auto_reload = false
-      @reload_paths = []
       @router_logging = false
       @verbose_error_pages = true
       @htmx_errors = :fragment
@@ -145,6 +147,23 @@ module Weft
 
     def not_found_component
       @not_found_component ||= Weft::Defaults::NotFoundComponent
+    end
+
+    # Re-resolve the class-valued knobs after a code reload. A knob assigned at
+    # boot holds that moment's class object; a reloader that redefines the
+    # constant would otherwise leave the knob serving the stale definition until
+    # restart. The configure_autoloading reload hook calls this after each
+    # reload; hand-rolled reloaders should call it from their own hook. A knob
+    # whose constant no longer resolves (mid-unload, or the class was deleted)
+    # keeps its last-known class.
+    def refresh_stale_classes!
+      CLASS_KNOBS.each do |knob|
+        klass = instance_variable_get(:"@#{knob}")
+        next unless klass.is_a?(Class) && klass.name
+
+        current = klass.name.safe_constantize
+        instance_variable_set(:"@#{knob}", current) if current.is_a?(Class) && !current.equal?(klass)
+      end
     end
 
     private

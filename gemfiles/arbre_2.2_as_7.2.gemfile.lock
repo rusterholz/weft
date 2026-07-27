@@ -5,7 +5,7 @@ PATH
       activesupport (>= 6.1)
       arbre (>= 1.7)
       sinatra (>= 3.0)
-      sinatra-contrib (>= 3.0)
+      zeitwerk (>= 2.6)
 
 GEM
   remote: https://rubygems.org/
@@ -54,7 +54,6 @@ GEM
     logger (1.7.0)
     method_source (1.1.0)
     minitest (5.27.0)
-    multi_json (1.19.1)
     mustermann (3.1.0)
     openssl (4.0.1)
     parallel (1.28.0)
@@ -129,12 +128,6 @@ GEM
       rack-protection (= 4.2.1)
       rack-session (>= 2.0.0, < 3)
       tilt (~> 2.0)
-    sinatra-contrib (4.2.1)
-      multi_json (>= 0.0.2)
-      mustermann (~> 3.0)
-      rack-protection (= 4.2.1)
-      sinatra (= 4.2.1)
-      tilt (~> 2.0)
     thor (1.5.0)
     tilt (2.7.0)
     tzinfo (2.0.6)
@@ -146,6 +139,7 @@ GEM
       addressable (>= 2.8.0)
       crack (>= 0.3.2)
       hashdiff (>= 0.4.0, < 2.0.0)
+    zeitwerk (2.8.2)
 
 PLATFORMS
   arm64-darwin

@@ -241,19 +241,80 @@ RSpec.describe Weft::Registry do
     end
   end
 
-  describe "stale (redefined) class handling" do
-    it "drops a superseded class so only the live definition routes (no false collision)" do
+  describe "#evict" do
+    it "removes a registered component so its route no longer serves" do
+      registry.register(component_class)
+      expect(registry.lookup("/_components/stat_card")).to eq(component_class)
+
+      registry.evict(component_class)
+
+      expect(registry.lookup("/_components/stat_card")).to be_nil
+    end
+
+    it "removes a registered page so its pattern no longer matches" do
+      page = Class.new(Weft::Page) do
+        def self.name = "EvictedPage"
+        self.page_path = "/evicted"
+      end
+      registry.register_page(page)
+      expect(registry.match_page("/evicted")).to eq([page, {}])
+
+      registry.evict(page)
+
+      expect(registry.match_page("/evicted")).to be_nil
+    end
+
+    it "returns true when a class was evicted and false otherwise" do
+      registry.register(component_class)
+
+      expect(registry.evict(component_class)).to be(true)
+      expect(registry.evict(component_class)).to be(false)
+      expect(registry.evict(Class.new)).to be(false)
+    end
+
+    it "lets a fresh same-path class register and route cleanly after eviction (the reload cycle)" do
       stub_const("ReloadPanel", Class.new(Weft::Component) { param :x })
-      registry.register(ReloadPanel)
       original = ReloadPanel
-      # Simulate a code-reloader redefining the constant: a new class object
-      # takes over the name; the old object lingers in the registry.
+      registry.register(original)
+
+      # The reload cycle: the reloader evicts the outgoing class as it unloads
+      # the constant, then the fresh definition registers on load.
+      registry.evict(original)
       stub_const("ReloadPanel", Class.new(Weft::Component) { param :x })
       registry.register(ReloadPanel)
 
       expect { registry.lookup("/_components/reload_panel") }.not_to raise_error
       expect(registry.lookup("/_components/reload_panel")).to eq(ReloadPanel)
       expect(registry.components).not_to include(original)
+    end
+
+    it "resets the SSE memo so an evicted pusher no longer forces the extension" do
+      pusher = Class.new(Weft::Component) do
+        def self.name = "TickerCard"
+        param :x
+        pushes every: 5
+      end
+      registry.register(pusher)
+      expect(registry.any_sse_components?).to be(true)
+
+      registry.evict(pusher)
+
+      expect(registry.any_sse_components?).to be(false)
+    end
+  end
+
+  describe "reload without eviction" do
+    it "surfaces as a route collision whose message points at eviction" do
+      stub_const("ReloadPanel", Class.new(Weft::Component) { param :x })
+      registry.register(ReloadPanel)
+      # A code-reloader redefined the constant without evicting: the old class
+      # object lingers in the registry beside its same-path successor.
+      stub_const("ReloadPanel", Class.new(Weft::Component) { param :x })
+      registry.register(ReloadPanel)
+
+      expect { registry.lookup("/_components/reload_panel") }.to raise_error(
+        Weft::InvalidDefinition, /code reloading.*Weft\.registry\.evict/m
+      )
     end
   end
 

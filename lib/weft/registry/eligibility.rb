@@ -39,25 +39,6 @@ module Weft
       def routable!
         @routable_explicit = true
       end
-
-      # Whether this class object has been superseded — its fully-qualified name
-      # now resolves to a *different* class. This is the code-reload case: a
-      # reloader (e.g. Zeitwerk in development) redefines the constant, binding a
-      # new class object to the name while the old one lingers in the registry.
-      # The registry drops superseded classes so only the current definition
-      # routes (otherwise the two would look like a route collision).
-      #
-      # Classes whose name does not resolve to a constant — anonymous classes,
-      # or test doubles that stub +.name+ — are never stale. Override for
-      # bespoke liveness semantics.
-      #
-      # @note Uses ActiveSupport's +safe_constantize+, which walks the namespace.
-      #   The registry calls this only at route-resolution time (memoized), so
-      #   the cost is paid once per registry generation, not per request.
-      def stale?
-        current = name&.safe_constantize
-        !current.nil? && !equal?(current)
-      end
     end
   end
 end
