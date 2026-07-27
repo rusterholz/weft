@@ -66,35 +66,6 @@ RSpec.describe Weft::Configuration do
     end
   end
 
-  describe "#auto_reload" do
-    it "defaults to false" do
-      expect(config.auto_reload).to be(false)
-    end
-
-    it "is assignable to true" do
-      config.auto_reload = true
-      expect(config.auto_reload).to be(true)
-    end
-
-    it "is assignable back to false" do
-      config.auto_reload = true
-      config.auto_reload = false
-      expect(config.auto_reload).to be(false)
-    end
-  end
-
-  describe "#reload_paths" do
-    it "defaults to an empty array" do
-      expect(config.reload_paths).to eq([])
-    end
-
-    it "accepts a list of glob patterns" do
-      paths = ["app/**/*.rb", "config/*.rb"]
-      config.reload_paths = paths
-      expect(config.reload_paths).to eq(paths)
-    end
-  end
-
   describe "#router_logging" do
     it "defaults to false" do
       expect(config.router_logging).to be(false)
@@ -180,6 +151,71 @@ RSpec.describe Weft::Configuration do
         expect { config.htmx_errors = :something_else }.
           to raise_error(ArgumentError, /must be :fragment or :redirect/)
       end
+    end
+  end
+
+  describe "#refresh_stale_classes!" do
+    it "rebinds a class knob whose constant now names a different class" do
+      stub_const("BrandedErrorPage", Class.new(Weft::Page))
+      config.error_page = BrandedErrorPage
+      # A reloader redefined the constant: the knob still holds the old object.
+      stub_const("BrandedErrorPage", Class.new(Weft::Page))
+
+      config.refresh_stale_classes!
+
+      expect(config.error_page).to equal(BrandedErrorPage)
+    end
+
+    it "covers all four class knobs" do
+      %i[error_component error_page not_found_page not_found_component].each do |knob|
+        stub_const("Branded#{knob.to_s.camelize}", Class.new)
+        config.public_send(:"#{knob}=", Object.const_get(:"Branded#{knob.to_s.camelize}"))
+      end
+      originals = %i[error_component error_page not_found_page not_found_component].
+                  to_h { |knob| [knob, config.public_send(knob)] }
+      originals.each_key { |knob| stub_const("Branded#{knob.to_s.camelize}", Class.new) }
+
+      config.refresh_stale_classes!
+
+      originals.each do |knob, original|
+        expect(config.public_send(knob)).not_to equal(original)
+        expect(config.public_send(knob)).to equal(Object.const_get(:"Branded#{knob.to_s.camelize}"))
+      end
+    end
+
+    it "leaves a knob alone while its constant still names the same class" do
+      stub_const("BrandedErrorPage", Class.new(Weft::Page))
+      config.error_page = BrandedErrorPage
+
+      config.refresh_stale_classes!
+
+      expect(config.error_page).to equal(BrandedErrorPage)
+    end
+
+    it "leaves an anonymous-class knob untouched" do
+      klass = Class.new
+      config.error_component = klass
+
+      config.refresh_stale_classes!
+
+      expect(config.error_component).to equal(klass)
+    end
+
+    it "leaves unset knobs on their lazy gem defaults" do
+      config.refresh_stale_classes!
+
+      expect(config.not_found_page).to equal(Weft::Defaults::NotFoundPage)
+    end
+
+    it "keeps the last-known class when the constant no longer resolves" do
+      stub_const("BrandedErrorPage", Class.new(Weft::Page))
+      config.error_page = BrandedErrorPage
+      original = BrandedErrorPage
+      hide_const("BrandedErrorPage")
+
+      config.refresh_stale_classes!
+
+      expect(config.error_page).to equal(original)
     end
   end
 
@@ -371,76 +407,6 @@ RSpec.describe Weft::Configuration do
       Weft.configure { |c| c.component_path = custom }
 
       expect(Weft.configuration.component_path).to eq(custom)
-    end
-  end
-
-  describe "auto_reload apply step in Weft.configure" do
-    around do |example|
-      original_config = Weft.configuration
-      original_applied = Weft.instance_variable_get(:@auto_reload_applied)
-      Weft.instance_variable_set(:@configuration, described_class.new)
-      Weft.instance_variable_set(:@auto_reload_applied, nil)
-      example.run
-      Weft.instance_variable_set(:@configuration, original_config)
-      Weft.instance_variable_set(:@auto_reload_applied, original_applied)
-    end
-
-    it "registers Sinatra::Reloader on Weft::Router when auto_reload is true" do
-      allow(Weft::Router).to receive(:register)
-
-      Weft.configure { |c| c.auto_reload = true }
-
-      expect(Weft::Router).to have_received(:register).with(Sinatra::Reloader).once
-    end
-
-    it "does not register when auto_reload stays false" do
-      allow(Weft::Router).to receive(:register)
-
-      Weft.configure { |c| c.auto_reload = false }
-
-      expect(Weft::Router).not_to have_received(:register)
-    end
-
-    it "is idempotent: repeated configure calls register only once" do
-      allow(Weft::Router).to receive(:register)
-
-      Weft.configure { |c| c.auto_reload = true }
-      Weft.configure { |c| c.auto_reload = true }
-      Weft.configure { |c| c.auto_reload = true }
-
-      expect(Weft::Router).to have_received(:register).with(Sinatra::Reloader).once
-    end
-
-    it "does not unregister when toggled back to false after first apply" do
-      allow(Weft::Router).to receive(:register)
-
-      Weft.configure { |c| c.auto_reload = true }
-      Weft.configure { |c| c.auto_reload = false }
-
-      expect(Weft::Router).to have_received(:register).with(Sinatra::Reloader).once
-    end
-
-    it "passes configured reload_paths through to Weft::Router.also_reload" do
-      allow(Weft::Router).to receive(:register)
-      allow(Weft::Router).to receive(:also_reload)
-
-      Weft.configure do |c|
-        c.auto_reload = true
-        c.reload_paths = ["app/**/*.rb", "config/**/*.rb"]
-      end
-
-      expect(Weft::Router).to have_received(:also_reload).with("app/**/*.rb")
-      expect(Weft::Router).to have_received(:also_reload).with("config/**/*.rb")
-    end
-
-    it "does not call also_reload when auto_reload is false" do
-      allow(Weft::Router).to receive(:also_reload)
-
-      Weft.configure do |c|
-        c.reload_paths = ["app/**/*.rb"]
-      end
-
-      expect(Weft::Router).not_to have_received(:also_reload)
     end
   end
 

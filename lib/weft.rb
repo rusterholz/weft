@@ -7,6 +7,7 @@ require "active_support/core_ext/integer/time"
 require "active_support/core_ext/string/inflections"
 require "arbre"
 
+require "weft/autoloading"
 require "weft/error"
 require "weft/context/traversal"
 require "weft/params"
@@ -49,13 +50,30 @@ module Weft
       @configuration ||= Configuration.new
     end
 
-    def registry
-      @registry ||= Registry.new
-    end
-
     def configure
       yield configuration
       apply_configuration
+    end
+
+    # Set up Zeitwerk-managed autoloading (and, optionally, dev-mode reloading)
+    # for the application's own code. The imperative older sibling of
+    # {configure}: call it FIRST in your boot file — it builds the loader and
+    # eager-loads everything on the spot, so constants from these paths are
+    # resolvable by the time a configure block references them.
+    #
+    #   Weft.configure_autoloading(
+    #     paths: [File.join(APP_ROOT, "app", "components"),
+    #             File.join(APP_ROOT, "app", "pages")],
+    #     inflections: { "dropship_ui" => "DropshipUI" },
+    #     reload: ENV["APP_ENV"] == "development"
+    #   )
+    #
+    # With reload: true, code changes take effect without restarting: constants
+    # reload on every request, unloaded classes are evicted from the registry
+    # the moment Zeitwerk removes them, and class-valued configuration knobs
+    # rebind to their fresh definitions. Returns the Zeitwerk::Loader.
+    def configure_autoloading(paths:, inflections: {}, reload: false)
+      Autoloading.setup(paths: paths, inflections: inflections, reload: reload)
     end
 
     # Convenience wrapper for Weft::Redirect.to.
@@ -83,15 +101,7 @@ module Weft
     def apply_configuration
       logger.level = configuration.resolved_log_level
       Router.set(:logging, configuration.router_logging)
-      enable_auto_reload! if configuration.auto_reload && !@auto_reload_applied
       apply_static_assets!
-    end
-
-    def enable_auto_reload!
-      require "sinatra/reloader"
-      Router.register(Sinatra::Reloader)
-      configuration.reload_paths.each { |path| Router.also_reload(path) }
-      @auto_reload_applied = true
     end
 
     def apply_static_assets!

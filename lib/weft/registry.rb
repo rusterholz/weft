@@ -1,6 +1,16 @@
 # frozen_string_literal: true
 
 module Weft
+  class << self
+    # The process-wide registry. Defined here rather than in the gem root
+    # because registration happens at class-definition time (the `inherited`
+    # hooks on Component and Page call this), so any file that defines a
+    # subclass needs the accessor resolvable at load.
+    def registry
+      @registry ||= Registry.new
+    end
+  end
+
   # Stores registered Weft::Component and Weft::Page classes for the Router
   # to consume at request time.
   #
@@ -45,16 +55,29 @@ module Weft
       @routes_validated = false
     end
 
-    # Empty the registry. Provided as an explicit reset hook for app-level
-    # reload integrations and for tests; ordinary reloading is handled
-    # automatically (superseded classes are pruned — see stale-class handling
-    # in validate_routes!).
+    # Empty the registry. The evict-everything reset for hand-rolled reload
+    # integrations and for tests; per-class eviction is #evict.
     def clear
       @components.clear
       @pages.clear
       @path_index = nil
       @sse_present = nil
       @routes_validated = false
+    end
+
+    # Remove one class from the registry, invalidating route lookup so a fresh
+    # same-path registration serves cleanly. This is the reload-eviction
+    # primitive: Weft.configure_autoloading wires it to Zeitwerk's on_unload
+    # callback, and hand-rolled reloaders should call it (or #clear) as classes
+    # unload. Safe to call with any object — non-registered classes (models,
+    # service objects) fall through untouched. Returns true if evicted.
+    def evict(klass) # rubocop:disable Naming/PredicateMethod -- a command with a did-evict status return
+      return false unless @components.delete?(klass) || @pages.delete?(klass)
+
+      @path_index = nil
+      @sse_present = nil
+      @routes_validated = false
+      true
     end
 
     def pages
@@ -116,16 +139,6 @@ module Weft
       page_class.page_path || page_class.send(:default_page_path)
     end
 
-    # Drop classes whose constant has been redefined out from under them (the
-    # code-reload case — see Weft::Registry::Eligibility#stale?). Without this, a
-    # reloaded class and its stale predecessor resolve to the same path and look
-    # like a route collision. Runs once per registry generation via
-    # validate_routes!; @path_index is rebuilt only if a component was removed.
-    def prune_stale!
-      @path_index = nil if @components.reject!(&:stale?)
-      @pages.reject!(&:stale?)
-    end
-
     # Build the effective-route table across every routable component (its base
     # path plus its reserved stream-suffix tail) and routable page (its resolved
     # pattern), and raise Weft::InvalidDefinition on any duplicate — component vs
@@ -136,7 +149,6 @@ module Weft
     def validate_routes!
       return if @routes_validated
 
-      prune_stale!
       seen = {}
       routable_components.each do |klass|
         warn_dependent_receives!(klass)
@@ -186,10 +198,19 @@ module Weft
             "a route must be a non-empty string beginning with \"/\"."
     end
 
+    # Two same-named class objects at one route is the signature of code
+    # reloading without eviction — say so, rather than suggesting a rename.
     def collision_message(path, existing, incoming)
-      "Route collision on #{path.inspect}: #{route_label(*existing)} and " \
-        "#{route_label(*incoming)} resolve to the same route. Rename one class, " \
-        "set an explicit component_path/page_path, or mark one abstract! if it should not route."
+      if existing[0].name == incoming[0].name
+        "Route collision on #{path.inspect}: two class objects named #{existing[0].name} " \
+          "are registered — usually a code reloading setup that never evicts. Evict classes " \
+          "as they unload (Weft.registry.evict, e.g. from a Zeitwerk on_unload callback), " \
+          "or reset with Weft.registry.clear before each reload."
+      else
+        "Route collision on #{path.inspect}: #{route_label(*existing)} and " \
+          "#{route_label(*incoming)} resolve to the same route. Rename one class, " \
+          "set an explicit component_path/page_path, or mark one abstract! if it should not route."
+      end
     end
 
     def route_label(klass, kind)

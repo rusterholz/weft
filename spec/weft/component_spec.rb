@@ -1000,27 +1000,6 @@ RSpec.describe Weft::Component do
     end
   end
 
-  describe ".stale?" do
-    it "is not stale for an anonymous/stubbed class whose name does not resolve" do
-      component_class = Class.new(described_class) { def self.name = "GhostCard" }
-      expect(component_class.stale?).to be(false)
-    end
-
-    it "is not stale for a class whose constant resolves to itself" do
-      stub_const("LiveCard", Class.new(described_class))
-      expect(LiveCard.stale?).to be(false)
-    end
-
-    it "is stale once its constant is reassigned to a different class (reload)" do
-      stub_const("ReloadCard", Class.new(described_class))
-      original = ReloadCard
-      stub_const("ReloadCard", Class.new(described_class))
-
-      expect(original.stale?).to be(true)
-      expect(ReloadCard.stale?).to be(false)
-    end
-  end
-
   describe ".routable?" do
     it "is routable when attributes are declared" do
       component_class = Class.new(described_class) do

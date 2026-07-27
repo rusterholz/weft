@@ -114,16 +114,17 @@ run MyApp
 
 ### Configuration
 
-`Weft.configure` exposes gem-level settings — the two you'll want on day one are the development reloader flags:
+The call you'll want on day one is `Weft.configure_autoloading` — it puts Zeitwerk in charge of loading your app's directories, and with `reload: true` your edits (new files and deletions included) apply without restarting the server:
 
 ```ruby
-Weft.configure do |c|
-  c.auto_reload = (ENV.fetch("RACK_ENV", "production") == "development")
-  c.reload_paths = [File.expand_path("app/**/*.rb", __dir__)]
-end
+Weft.configure_autoloading(
+  paths: [File.expand_path("app/components", __dir__),
+          File.expand_path("app/pages", __dir__)],
+  reload: ENV.fetch("RACK_ENV", "production") == "development"
+)
 ```
 
-Everything else — static asset bundles, error presentation, routing overrides, logging — is in [the configuration reference](docs/configuration.md).
+Gem-level settings live on its sibling, `Weft.configure` — static asset bundles, error presentation, routing overrides, logging — all in [the configuration reference](docs/configuration.md).
 
 ### Customizing error and not-found pages
 

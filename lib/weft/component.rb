@@ -1,7 +1,22 @@
 # frozen_string_literal: true
 
+require "arbre"
 require "uri"
+
+require "weft/context"
 require "weft/context/interception"
+require "weft/context/traversal"
+require "weft/dsl/actions"
+require "weft/dsl/containers"
+require "weft/dsl/inclusions"
+require "weft/dsl/params"
+require "weft/dsl/recoveries"
+require "weft/dsl/triggers"
+require "weft/dsl/updates"
+require "weft/error"
+require "weft/registry"
+require "weft/registry/eligibility"
+require "weft/router/streaming"
 
 module Weft
   # Base class for all Weft components. Extends Arbre::Component with:

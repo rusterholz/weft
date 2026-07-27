@@ -38,5 +38,5 @@ Gem::Specification.new do |spec|
   spec.add_dependency "activesupport", ">= 6.1"
   spec.add_dependency "arbre", ">= 1.7"
   spec.add_dependency "sinatra", ">= 3.0"
-  spec.add_dependency "sinatra-contrib", ">= 3.0"
+  spec.add_dependency "zeitwerk", ">= 2.6"
 end

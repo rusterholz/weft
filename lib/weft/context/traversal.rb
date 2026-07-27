@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "arbre"
+
 module Weft
   class Context < Arbre::Context
     # Render-tree navigation for components and pages: reach an ancestor — or

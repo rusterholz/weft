@@ -5,7 +5,7 @@ PATH
       activesupport (>= 6.1)
       arbre (>= 1.7)
       sinatra (>= 3.0)
-      sinatra-contrib (>= 3.0)
+      zeitwerk (>= 2.6)
 
 GEM
   remote: https://rubygems.org/
@@ -50,7 +50,6 @@ GEM
     minitest (6.0.3)
       drb (~> 2.0)
       prism (~> 1.5)
-    multi_json (1.19.1)
     mustermann (3.0.4)
       ruby2_keywords (~> 0.0.1)
     nio4r (2.7.5)
@@ -119,12 +118,6 @@ GEM
       rack-protection (= 4.2.1)
       rack-session (>= 2.0.0, < 3)
       tilt (~> 2.0)
-    sinatra-contrib (4.2.1)
-      multi_json (>= 0.0.2)
-      mustermann (~> 3.0)
-      rack-protection (= 4.2.1)
-      sinatra (= 4.2.1)
-      tilt (~> 2.0)
     sqlite3 (2.9.2-aarch64-linux-gnu)
     sqlite3 (2.9.2-aarch64-linux-musl)
     sqlite3 (2.9.2-arm-linux-gnu)
@@ -170,10 +163,8 @@ DEPENDENCIES
   rubocop-rake
   rubocop-rspec
   sinatra (~> 4.1)
-  sinatra-contrib (~> 4.1)
   sqlite3 (~> 2.6)
   weft!
-  zeitwerk (~> 2.7)
 
 BUNDLED WITH
    2.7.2

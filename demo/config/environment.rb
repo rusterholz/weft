@@ -2,7 +2,6 @@
 
 require "bundler/setup"
 require "active_record"
-require "zeitwerk"
 require "yaml"
 require "logger"
 
@@ -20,42 +19,24 @@ end
 
 require "weft"
 
-# Zeitwerk handles constant autoloading for app/components, app/pages,
-# app/models, and app/services. One loader, one mental model — no
-# explicit require chains, no Dir.glob ordering. Cross-namespace
+# Weft's gem-managed Zeitwerk loader owns constant autoloading for the app
+# dirs — no explicit require chains, no Dir.glob ordering; cross-namespace
 # references (e.g. Logistics::ShipmentsCard's `includes Oms::OrderHeader`)
-# resolve lazily on first use, so load order is no longer a concern.
-loader = Zeitwerk::Loader.new
-loader.push_dir(File.join(APP_ROOT, "app", "components"))
-loader.push_dir(File.join(APP_ROOT, "app", "pages"))
-loader.push_dir(File.join(APP_ROOT, "app", "models"))
-loader.push_dir(File.join(APP_ROOT, "app", "services"))
-
-# Acronym: dropship_ui/ → DropshipUI:: (not DropshipUi).
-loader.inflector.inflect("dropship_ui" => "DropshipUI")
-
-loader.enable_reloading if APP_ENV == "development"
-loader.setup
-# Eager-load every app class at boot. The Weft::Registry populates via
-# the `inherited` hook on Component/Page, and the Router consults the
-# Registry at request time — so the classes must be loaded before any
-# request lands. (With lazy autoload alone, the first request would
-# hit an empty Registry.)
-loader.eager_load
-
-if APP_ENV == "development"
-  # Pure-Zeitwerk reload on every dev request. The gem's registry prunes
-  # superseded classes automatically — it drops any registered class whose
-  # constant has been redefined — so reloading stays consistent (collision
-  # detection doesn't trip on a reloaded class) and the registry doesn't
-  # accumulate stale entries. A more efficient unload-hook integration (evict
-  # on Zeitwerk's on_unload, no per-request scan) is planned for the v0.2
-  # gem-side Zeitwerk integration.
-  Weft::Router.before { loader.reload && loader.eager_load }
-end
+# resolve lazily on first use. It eager-loads on the spot (Weft routes from
+# its Registry, populated as classes load), which is why this call precedes
+# everything below that references app constants. With reload: true,
+# constants reload every dev request; the gem evicts unloaded classes from
+# its registry and rebinds class-valued config knobs — so Weft declarations
+# belong in class bodies, never in run-once boot files like this one.
+Weft.configure_autoloading(
+  paths: %w[components pages models services].map { |dir| File.join(APP_ROOT, "app", dir) },
+  # Acronym: dropship_ui/ → DropshipUI:: (not DropshipUi).
+  inflections: { "dropship_ui" => "DropshipUI" },
+  reload: APP_ENV == "development"
+)
 
 # Demo-defined Weft preset registrations. Not autoloaded — pure
-# side-effect code that runs once at boot.
+# side-effect code that runs once at boot (and never re-runs on reload).
 require File.join(__dir__, "presets")
 
 # Wire branded error/not-found pages. The gem-default recovers entries on
