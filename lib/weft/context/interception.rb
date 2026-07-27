@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "arbre"
+
 module Weft
   class Context < Arbre::Context
     # Mixin for Arbre elements that need to forward Weft kwargs

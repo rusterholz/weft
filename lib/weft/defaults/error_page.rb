@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "weft/page"
+
 module Weft
   module Defaults
     # Gem-default full-document page rendered for traditional (non-htmx)

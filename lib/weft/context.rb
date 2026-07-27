@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "arbre"
+
 require "weft/context/interception"
 
 module Weft

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "weft/component"
+
 module Weft
   module Defaults
     # Gem-default component rendered when an action or partial-render fails

@@ -1,6 +1,17 @@
 # frozen_string_literal: true
 
+require "arbre"
 require "uri"
+
+require "weft/context"
+require "weft/context/interception"
+require "weft/context/traversal"
+require "weft/dsl/containers"
+require "weft/dsl/params"
+require "weft/dsl/recoveries"
+require "weft/error"
+require "weft/registry"
+require "weft/registry/eligibility"
 
 module Weft
   # Document shell component. Renders the full HTML skeleton (doctype,
