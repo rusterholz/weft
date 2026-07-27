@@ -9,14 +9,37 @@ Weft.configure do |c|
 end
 ```
 
-Call `Weft.configure` from your boot file (typically `config/environment.rb`), after `require "weft"` and before the first request. Settings are validated as they're assigned, so a typo'd value raises immediately at boot rather than misbehaving later. After the block runs, Weft applies any side effects the new settings imply (mounting static asset routes, enabling the reloader, setting the logger level). Calling `Weft.configure` more than once is fine — each call re-applies these side effects idempotently.
+Call `Weft.configure` from your boot file (typically `config/environment.rb`), after `require "weft"` and before the first request. Settings are validated as they're assigned, so a typo'd value raises immediately at boot rather than misbehaving later. After the block runs, Weft applies any side effects the new settings imply (mounting static asset routes, setting the logger level). Calling `Weft.configure` more than once is fine — each call re-applies these side effects idempotently.
+
+## Autoloading (`Weft.configure_autoloading`)
+
+`Weft.configure` has an older sibling for the one thing that can't wait for a configure block: loading your code. `Weft.configure_autoloading` puts [Zeitwerk](https://github.com/fxn/zeitwerk) in charge of your application directories — one call, in your boot file, **before** `Weft.configure`:
+
+```ruby
+Weft.configure_autoloading(
+  paths: [File.join(APP_ROOT, "app", "components"),
+          File.join(APP_ROOT, "app", "pages"),
+          File.join(APP_ROOT, "app", "models")],
+  inflections: { "dropship_ui" => "DropshipUI" },
+  reload: ENV.fetch("RACK_ENV", "production") == "development"
+)
+```
+
+- **`paths:`** — the directories Zeitwerk manages. Files follow Zeitwerk's conventions: one constant per file, named for it (`order_card.rb` ↔ `OrderCard`, `oms/order_header.rb` ↔ `Oms::OrderHeader`). Everything is eager-loaded on the spot — Weft routes from its registry, which populates as classes load, so your components and pages must exist before the first request.
+- **`inflections:`** — acronym and irregular-name mappings, passed straight to Zeitwerk's inflector (file basename → constant name).
+- **`reload:`** — when `true`, code changes take effect without restarting the server: constants reload on every request, classes are evicted from Weft's registry the moment Zeitwerk unloads them (so a deleted file's route disappears too, instead of lingering), and the class-valued settings below rebind to their fresh definitions after each reload. Leave it `false` (the default) in production — constants load once and nothing ever unloads.
+
+Call order is the reason this isn't a `configure` setting: the call loads your code *immediately*, so by the time a `Weft.configure` block references one of your classes (`c.error_page = ErrorPage`), the constant resolves. Autoload first, configure second.
+
+Two things to know when reloading is on:
+
+- **Weft declarations belong in class bodies.** Boot files run once; class bodies re-run on every reload. A `SomePage.recovers ...` call in `environment.rb` evaporates at the first reload — the same declaration inside the class body is re-applied every time.
+- **Bring-your-own-loader works too.** If you manage Zeitwerk (or any reloader) yourself, keep Weft's registry in sync by evicting classes as they unload — `loader.on_unload { |_cpath, klass, _path| Weft.registry.evict(klass) }` — or reset wholesale with `Weft.registry.clear` before each reload; then call `Weft.configuration.refresh_stale_classes!` after reloading so class-valued settings rebind. (See [Routing](routing.md) for the registry's side of this.)
 
 Every setting, at a glance:
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
-| [`auto_reload`](#auto_reload) | `false` | Enable code reloading on the Router during development. |
-| [`reload_paths`](#reload_paths) | `[]` | Files the reloader should watch, as glob patterns. |
 | [`router_logging`](#router_logging) | `false` | Request logging on the Router. |
 | [`log_level`](#log_level) | `:info` | Severity threshold for `Weft.logger`. |
 | [`include_htmx`](#include_htmx) | `true` | Pages include the htmx script automatically. |
@@ -33,38 +56,6 @@ Every setting, at a glance:
 | [`htmx_errors`](#htmx_errors) | `:fragment` | How htmx requests present fallback errors. |
 
 ## Development
-
-### `auto_reload`
-
-Default: `false`.
-
-When `true`, Weft registers `Sinatra::Reloader` on `Weft::Router`, so code changes are picked up without restarting the server. Off by default; flip it on however you detect development mode:
-
-```ruby
-Weft.configure do |c|
-  c.auto_reload = (ENV.fetch("RACK_ENV", "production") == "development")
-  c.reload_paths = [File.expand_path("app/**/*.rb", __dir__)]
-end
-```
-
-The reloader is registered once, the first time a `Weft.configure` call sees `auto_reload` set to `true` — it can't be unregistered afterward, and `reload_paths` entries added in later `configure` calls won't be picked up. Set both together, as above.
-
-`auto_reload` suits apps that don't already have a reloading story. If your app manages its own constant loading with Zeitwerk, you may prefer to drive reloading yourself (`loader.reload` in a `Weft::Router.before` block) and leave this off. Either way, Weft's registry tolerates reloading: when a class is redefined, the stale registration is pruned automatically (see [Routing](routing.md)).
-
-### `reload_paths`
-
-Default: `[]`.
-
-Glob patterns added to the reloader's watch list. Without this, `Sinatra::Reloader` only watches files where Weft defines its own routes — meaning edits to *your* components and pages would go unnoticed. Point it at your application code:
-
-```ruby
-c.reload_paths = [
-  File.expand_path("app/**/*.rb", __dir__),
-  File.expand_path("config/**/*.rb", __dir__)
-]
-```
-
-Only meaningful alongside `auto_reload = true`, and must be set in the same `configure` call (or an earlier one).
 
 ### `router_logging`
 

@@ -68,23 +68,16 @@ require "weft"
 
 APP_ROOT = File.expand_path("..", __dir__)
 
-# Load the application: data first, then components, then pages
-# (pages compose components). Within each directory, files load
-# alphabetically.
-%w[data components pages].each do |dir|
-  Dir[File.join(APP_ROOT, "app", dir, "*.rb")].sort.each { |file| require file }
-end
-
-Weft.configure do |c|
-  c.auto_reload = true
-  c.reload_paths = [File.join(APP_ROOT, "app", "**", "*.rb")]
-end
+Weft.configure_autoloading(
+  paths: %w[data components pages].map { |dir| File.join(APP_ROOT, "app", dir) },
+  reload: true
+)
 ```
 
 Two things to notice:
 
-- **Loading is just `require`.** Weft discovers your pages and components the moment their classes are defined — there's nothing to register. The directory ordering matters a little: if a component references another class *in its class body* (you'll see `includes AttendeeList` later), the referenced file has to load first. Our data → components → pages ordering plus alphabetical luck covers this tutorial; a growing app eventually wants a real autoloader like Zeitwerk.
-- **Turn on `auto_reload` before your first run.** In a moment you'll be editing files and refreshing the browser; with these two settings, your edits apply without restarting the server. (In a real app you'd gate this on an environment check — see [Configuration](configuration.md#auto_reload).)
+- **Loading is managed for you.** `configure_autoloading` puts [Zeitwerk](https://github.com/fxn/zeitwerk) in charge of the `app` directories: each file defines the constant its name implies (`event_store.rb` ↔ `EventStore`), references between files resolve on demand, and load order is never your problem. Weft discovers your pages and components the moment their classes load — there's nothing to register.
+- **`reload: true` is the development loop.** In a moment you'll be editing files and refreshing the browser; with it, your edits apply without restarting the server. (In a real app you'd gate it on an environment check — see [Configuration](configuration.md#autoloading-weftconfigure_autoloading).)
 
 ## 3. Your first page
 
@@ -124,7 +117,7 @@ Nobody told Weft about that URL. The route came from the class name: `EventsPage
 Two more things worth ten seconds each while the server is up:
 
 - Visit [http://localhost:9292/](http://localhost:9292/) — a styled "Not found" page, for free. Weft ships default error and not-found handling out of the box ([Error handling](error-handling.md)).
-- Edit the `para` text and refresh — the change appears without a restart. That's `auto_reload` earning its keep.
+- Edit the `para` text and refresh — the change appears without a restart. That's `reload: true` earning its keep.
 
 ## 4. Some data
 
@@ -175,9 +168,9 @@ end
 
 (`text_node` inserts plain text next to other elements — handy when a line mixes a link and loose text.)
 
-**Restart the server for this one.** `auto_reload` re-runs files it already knows about, but `event_store.rb` is a *new* file — the loader glob ran at boot, before it existed. If you refresh without restarting, you'll get Weft's error page with `uninitialized constant EventsPage::EventStore`, which is your cue. New file → restart; edits to existing files → just refresh.
+**No restart needed — not even for a new file.** `event_store.rb` didn't exist when the server booted, but the loader discovers it on your next refresh, and `EventsPage`'s `EventStore` reference resolves on demand.
 
-After the restart, `/events` lists both events as links. They 404 — let's fix that.
+Refresh `/events`: both events appear as links. They 404 — let's fix that.
 
 ## 5. The event page
 

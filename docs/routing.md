@@ -126,6 +126,6 @@ The same validation rejects malformed paths (anything that isn't a string beginn
 
 ## Code reloading
 
-Development-mode reloaders redefine constants, which would strand the *old* class object in Weft's registry — and a stale twin at the same path would read as a route collision. Weft prunes superseded registrations automatically: at route-resolution time it drops any registered class whose name no longer resolves to that same class object. The sweep is memoized per registry generation, so production pays it once, ever.
+Development-mode reloaders redefine constants, which would strand the *old* class object in Weft's registry — a stale twin at the same path that reads as a route collision, or worse, a deleted class whose route keeps serving. The registry's answer is eviction: `Weft.registry.evict(klass)` removes a class and re-arms route validation, so the fresh definition (or nothing, if the file is gone) takes over cleanly.
 
-This works with any reloading setup — [`auto_reload`](configuration.md#auto_reload), or your own Zeitwerk `reload` hook. `Weft.registry.clear` is the explicit full-reset primitive if your integration wants to rebuild registration from scratch.
+With [`Weft.configure_autoloading`](configuration.md#autoloading-weftconfigure_autoloading) and `reload: true`, this is wired for you — Zeitwerk announces each constant it unloads and Weft evicts it on the spot. If you drive your own reloader, call `evict` from its unload hook, or use `Weft.registry.clear` to rebuild registration from scratch on each reload. A collision error naming two classes with the same name is the tell that a reload happened without eviction.
