@@ -6,8 +6,8 @@
 class NotFoundPage < ApplicationPage
   self.page_path = "/not_found"
 
-  param :request_path
-  param :status_code
+  param :request_path, type: :string
+  param :status_code, type: :integer
 
   def build(attributes = {})
     attributes[:title] ||= "Not found"

@@ -6,7 +6,7 @@ module Oms
   class OrderInlineDetail < Weft::Component
     builder_method :order_inline_detail
 
-    param :order_id
+    param :order_id, type: :string
 
     derives(:order) { |p| Oms::Order.includes(:line_items).find(p.order_id) }
     derives(:shipments) { |p| Logistics::Shipment.for_order(p.order.id).includes(:warehouse) }

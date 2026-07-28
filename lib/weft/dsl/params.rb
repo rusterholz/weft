@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require "weft/error"
+require "weft/resolver"
+
 module Weft
   module DSL
     # Mixin for classes that declare consumed inputs — the doors into `params`.
@@ -12,11 +15,17 @@ module Weft
       end
 
       module ClassMethods
-        # Declare a wire param. Accepts optional default: and type: kwargs.
+        # Declare a wire param. `default:` fills the key when no source
+        # supplies it; `type:` coerces the wire's string into the declared
+        # type (see Resolver::TYPES). The two are orthogonal — an untyped
+        # param accepts any value uncoerced — but a non-nil default must
+        # already be an instance of the declared type.
+        #   param :page, type: :integer
         #   param :status, default: "active", type: :string
-        def param(name, default: nil, **options)
+        def param(name, default: nil, type: nil)
+          validate_type!(name, type, default) unless type.nil?
           meta = { default: default }
-          meta[:type] = options[:type] if options.key?(:type)
+          meta[:type] = type unless type.nil?
           own_params[name] = meta
         end
 
@@ -95,6 +104,20 @@ module Weft
         end
 
         private
+
+        def validate_type!(name, type, default)
+          entry = Weft::Resolver::TYPES[type]
+          unless entry
+            raise Weft::InvalidDefinition,
+                  "param #{name.inspect} declares unknown type #{type.inspect} — declarable " \
+                  "types are #{Weft::Resolver::TYPES.keys.map(&:inspect).join(', ')}"
+          end
+          return if default.nil? || entry[:classes].any? { |klass| default.is_a?(klass) }
+
+          raise Weft::InvalidDefinition,
+                "param #{name.inspect} declares type #{type.inspect} but its default " \
+                "#{default.inspect} is #{default.class} — make them agree, or drop one"
+        end
 
         def own_params
           @own_params ||= {}

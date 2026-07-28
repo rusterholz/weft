@@ -25,12 +25,12 @@ module Weft
       # duplicate IDs when several siblings fail in the same window.
       # :retry_url is the failing component's GET URL with current params.
       # :attempts_remaining is the push-path countdown (nil on HTTP paths).
-      param :component_id
+      param :component_id, type: :string
       param :exception
-      param :request_path
-      param :status_code
-      param :retry_url
-      param :attempts_remaining
+      param :request_path, type: :string
+      param :status_code, type: :integer
+      param :retry_url, type: :string
+      param :attempts_remaining, type: :integer
 
       STYLE = "padding:1rem; border:1px solid #fca5a5; border-radius:6px; " \
               "background:#fef2f2; color:#991b1b; font-size:0.875rem"

@@ -6,7 +6,7 @@ module Delivery
 
     PER_PAGE = 25
 
-    param :page, default: 1
+    param :page, default: 1, type: :integer
 
     def build(attributes = {})
       super

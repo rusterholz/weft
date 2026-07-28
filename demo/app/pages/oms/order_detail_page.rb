@@ -4,7 +4,7 @@ module Oms
   class OrderDetailPage < ::ApplicationPage
     self.page_path = "/orders/:order_id"
 
-    param :order_id
+    param :order_id, type: :string
 
     def build(attributes = {})
       order = Oms::Order.includes(:line_items).find(params.order_id)

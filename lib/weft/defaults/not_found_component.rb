@@ -13,9 +13,9 @@ module Weft
       # Opt into the :component_id auto-injected param for parity with
       # ErrorComponent — preserves DOM identity when a component-context
       # NotFound recovers through this.
-      param :component_id
-      param :request_path
-      param :status_code
+      param :component_id, type: :string
+      param :request_path, type: :string
+      param :status_code, type: :integer
 
       STYLE = "padding:1rem; border:1px solid #cbd5e1; border-radius:6px; " \
               "background:#f8fafc; color:#0f172a; font-size:0.875rem"

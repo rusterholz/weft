@@ -6,7 +6,7 @@ The whole model in one breath: **a request's params flow in and down the render 
 
 ## A request comes in
 
-Every render starts with a request, and a request carries **wire params**: the query string, the path segments, and any form body, all as strings. Weft routes the request to a page (or a standalone component), which resolves its declared `param`s from those wire values — coercing each to the type its default implies, and filling in defaults where the request said nothing.
+Every render starts with a request, and a request carries **wire params**: the query string, the path segments, and any form body, all as strings. Weft routes the request to a page (or a standalone component), which resolves its declared `param`s from those wire values — coercing each into its declared `type:`, and filling in defaults where the request said nothing.
 
 ```ruby
 class OrderPage < Weft::Page

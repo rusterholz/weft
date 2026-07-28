@@ -31,6 +31,24 @@ RSpec.describe Weft::Component do
       expect(component_class.params[:page]).to eq(default: 1, type: :integer)
     end
 
+    it "coerces a typed param's wire value by declared type, end to end" do
+      component_class = Class.new(described_class) do
+        def self.name = "TypedWireCard"
+        param :page, type: :integer
+
+        def build(attributes = {})
+          super
+          text_node params.page.class.name
+        end
+      end
+
+      html = Weft::Context.new({}, nil, wire_params: { "page" => "2" }) do
+        insert_tag(component_class)
+      end.to_s
+
+      expect(html).to include("Integer")
+    end
+
     it "accumulates multiple attributes in declaration order" do
       component_class = Class.new(described_class) do
         def self.name = "TestCard"

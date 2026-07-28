@@ -9,8 +9,8 @@ class ErrorPage < ApplicationPage
   # Page-level auto-injected param schema. The Router's schema-gated
   # injection uses these to know what to populate before rendering.
   param :exception
-  param :request_path
-  param :status_code
+  param :request_path, type: :string
+  param :status_code, type: :integer
 
   def build(attributes = {})
     attributes[:title] ||= "Error"
