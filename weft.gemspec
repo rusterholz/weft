@@ -37,6 +37,7 @@ Gem::Specification.new do |spec|
   # Runtime dependencies
   spec.add_dependency "activesupport", ">= 6.1"
   spec.add_dependency "arbre", ">= 1.7"
+  spec.add_dependency "bigdecimal" # default gem through Ruby 3.3, bundled from 3.4 — must be declared
   spec.add_dependency "sinatra", ">= 3.0"
   spec.add_dependency "zeitwerk", ">= 2.6"
 end

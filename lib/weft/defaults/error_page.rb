@@ -11,8 +11,8 @@ module Weft
       self.page_path = "/_weft/error"
 
       param :exception
-      param :request_path
-      param :status_code
+      param :request_path, type: :string
+      param :status_code, type: :integer
 
       def build(attributes = {})
         attributes[:title] ||= "Error"

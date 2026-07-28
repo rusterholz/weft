@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "arbre"
+require "bigdecimal"
 
 RSpec.describe Weft::DSL::Params do
   # Test the mixin on a plain class (not Component/Page) to isolate it.
@@ -29,6 +30,68 @@ RSpec.describe Weft::DSL::Params do
       end
 
       expect(klass.params[:page]).to eq(default: 1, type: :integer)
+    end
+
+    it "accepts all five declarable types" do
+      klass = Class.new(base_class) do
+        def self.name = "AllTypesTest"
+        param :label, type: :string
+        param :page, type: :integer
+        param :rate, type: :float
+        param :active, type: :boolean
+        param :price, type: :decimal
+      end
+
+      expect(klass.params.values.map { |meta| meta[:type] }).
+        to eq(%i[string integer float boolean decimal])
+    end
+
+    it "raises InvalidDefinition on an unknown type" do
+      expect do
+        Class.new(base_class) do
+          def self.name = "UnknownTypeTest"
+          param :page, type: :number
+        end
+      end.to raise_error(Weft::InvalidDefinition,
+                         /:page.*unknown type :number.*:string, :integer, :float, :boolean, :decimal/m)
+    end
+
+    it "raises InvalidDefinition when a non-nil default does not match the declared type" do
+      expect do
+        Class.new(base_class) do
+          def self.name = "MismatchedDefaultTest"
+          param :page, default: "1", type: :integer
+        end
+      end.to raise_error(Weft::InvalidDefinition, /:page.*:integer.*"1".*String/m)
+    end
+
+    it "accepts a default that matches the declared type" do
+      klass = Class.new(base_class) do
+        def self.name = "MatchingDefaultTest"
+        param :price, default: BigDecimal("9.99"), type: :decimal
+        param :active, default: false, type: :boolean
+      end
+
+      expect(klass.params[:price]).to eq(default: BigDecimal("9.99"), type: :decimal)
+      expect(klass.params[:active]).to eq(default: false, type: :boolean)
+    end
+
+    it "does not accept an Integer default for :float — strict, not numeric-family" do
+      expect do
+        Class.new(base_class) do
+          def self.name = "StrictFloatTest"
+          param :rate, default: 1, type: :float
+        end
+      end.to raise_error(Weft::InvalidDefinition, /:rate.*:float.*Integer/m)
+    end
+
+    it "rejects unknown declaration kwargs" do
+      expect do
+        Class.new(base_class) do
+          def self.name = "UnknownKwargTest"
+          param :page, typo: :integer
+        end
+      end.to raise_error(ArgumentError)
     end
   end
 
