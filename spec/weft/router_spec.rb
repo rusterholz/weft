@@ -779,8 +779,14 @@ RSpec.describe Weft::Router do
       dead_connection = Class.new do
         attr_reader :closed
 
-        def <<(_frame) = raise Errno::EPIPE
-        def close = @closed = true
+        # Expanded defs: CodeQL's Ruby extractor chokes on the endless forms.
+        def <<(_frame)
+          raise Errno::EPIPE
+        end
+
+        def close
+          @closed = true
+        end
       end.new
       allow(router).to receive(:stream).and_yield(dead_connection)
 
