@@ -4,6 +4,7 @@ PATH
     weft (0.1.0)
       activesupport (>= 6.1)
       arbre (>= 1.7)
+      bigdecimal
       sinatra (>= 3.0)
       zeitwerk (>= 2.6)
 

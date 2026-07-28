@@ -4,7 +4,7 @@ module Delivery
   class DriverHistorySection < Weft::Component
     builder_method :driver_history_section
 
-    param :driver_id
+    param :driver_id, type: :string
 
     derives(:driver) { |p| Delivery::Driver.find(p.driver_id) }
     derives(:completed) do |p|

@@ -4,7 +4,7 @@ module Delivery
   class DriversPage < ::ApplicationPage
     self.page_path = "/drivers"
 
-    param :page
+    param :page, type: :integer
 
     def build(attributes = {})
       attributes[:title] ||= "Drivers"

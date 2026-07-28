@@ -4,8 +4,8 @@ module Oms
   class OrdersPage < ::ApplicationPage
     self.page_path = "/orders"
 
-    param :status
-    param :page
+    param :status, type: :string
+    param :page, type: :integer
 
     def build(attributes = {})
       attributes[:title] ||= "Orders"

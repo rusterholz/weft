@@ -9,16 +9,16 @@ module Oms
   class OrderForm < Weft::Component
     builder_method :order_form
 
-    param :customer_name
-    param :address_line_1 # rubocop:disable Naming/VariableNumber
-    param :city
-    param :state
-    param :zip
-    # Complex param types (Hash, Array) get first-class support in
-    # v1.x. For v0.x the Resolver passes hashes through unchanged so
-    # nested form fields like items[widget]=2 land here as a hash.
+    param :customer_name, type: :string
+    param :address_line_1, type: :string # rubocop:disable Naming/VariableNumber
+    param :city, type: :string
+    param :state, type: :string
+    param :zip, type: :string
+    # Deliberately untyped: an untyped param accepts any value uncoerced,
+    # so nested form fields like items[widget]=2 land here as the hash
+    # Sinatra hands back. First-class Hash/Array types can come later.
     param :items
-    param :error_message
+    param :error_message, type: :string
 
     performs :create do |params|
       items = (params.items || {}).select { |_, qty| qty.to_i.positive? }

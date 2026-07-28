@@ -8,7 +8,7 @@ module Oms
   class OrderStatusCard < DropshipUI::StatCard
     builder_method :order_status_card
 
-    param :status
+    param :status, type: :string
     receives :status
 
     derives(:label) { |p| p.status.to_s.capitalize }

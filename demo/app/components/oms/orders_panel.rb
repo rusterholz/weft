@@ -7,8 +7,8 @@ module Oms
     PER_PAGE = 25
     FILTER_STATUSES = %w[submitted processing shipped fulfilled].freeze
 
-    param :status
-    param :page, default: 1
+    param :status, type: :string
+    param :page, default: 1, type: :integer
 
     # Filter actions — each overrides the status attr and resets to page 1.
     # This is "performs as navigation": no side effects, just state transformation.

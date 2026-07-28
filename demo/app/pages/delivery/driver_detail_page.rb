@@ -4,7 +4,7 @@ module Delivery
   class DriverDetailPage < ::ApplicationPage
     self.page_path = "/drivers/:driver_id"
 
-    param :driver_id
+    param :driver_id, type: :string
 
     def build(attributes = {})
       driver = Delivery::Driver.find(params.driver_id)

@@ -9,7 +9,7 @@ module Logistics
   class ShipmentsCard < DropshipUI::Card
     builder_method :shipments_card
 
-    param :order_id
+    param :order_id, type: :string
 
     # The outage check makes this the demo's push-recovery exercise: while
     # the drill is active, every push fails and the stream walks the recovers

@@ -4,7 +4,7 @@ module Oms
   class OrderHeader < Weft::Component
     builder_method :order_header
 
-    param :order_id
+    param :order_id, type: :string
 
     derives(:order) { |p| Oms::Order.find(p.order_id) }
 

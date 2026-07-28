@@ -4,7 +4,7 @@ module Logistics
   class ShipmentsPage < ::ApplicationPage
     self.page_path = "/shipments"
 
-    param :page
+    param :page, type: :integer
 
     def build(attributes = {})
       attributes[:title] ||= "Shipments"
