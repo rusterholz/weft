@@ -9,15 +9,18 @@ module Weft
   # also calls this directly for error-path bookkeeping. Future home of
   # the reification step (wire primitives → rich objects).
   class Resolver
-    # The declarable wire types, each mapped to the classes a declared
-    # default may already be an instance of (declaration-side validation
-    # lives in DSL::Params; the coercions live below).
+    # The declarable wire types, each self-describing: how to coerce a
+    # present wire value (permissive Ruby — never raises on malformed
+    # input), and the classes a declared default may already be an
+    # instance of (declaration-side validation lives in DSL::Params).
+    # Self-description is the seam a future registration API extends.
     TYPES = {
-      string: [String],
-      integer: [Integer],
-      float: [Float],
-      boolean: [TrueClass, FalseClass],
-      decimal: [BigDecimal]
+      string: { coerce: :to_s.to_proc, classes: [String] },
+      integer: { coerce: :to_i.to_proc, classes: [Integer] },
+      float: { coerce: :to_f.to_proc, classes: [Float] },
+      boolean: { coerce: ->(v) { [true, "true", "1"].include?(v) },
+                 classes: [TrueClass, FalseClass] },
+      decimal: { coerce: :to_d.to_proc, classes: [BigDecimal] }
     }.freeze
 
     class << self
@@ -47,25 +50,11 @@ module Weft
         params[key]
       end
 
-      # A declared type: coerces the wire's string; untyped params accept any
-      # value as-is. Coercion is permissive Ruby (to_i/to_f/to_d/to_s), never
-      # raising on malformed wire input.
+      # A declared type: coerces via its TYPES entry; untyped params accept
+      # any value as-is.
       def coerce(value, type)
-        case type
-        when :string then value.to_s
-        when :integer then value.to_i
-        when :float then value.to_f
-        when :decimal then value.to_d
-        when :boolean then coerce_boolean(value)
-        else value
-        end
-      end
-
-      def coerce_boolean(value) # rubocop:disable Naming/PredicateMethod
-        case value
-        when true, "true", "1" then true
-        else false
-        end
+        entry = TYPES[type]
+        entry ? entry[:coerce].call(value) : value
       end
     end
   end

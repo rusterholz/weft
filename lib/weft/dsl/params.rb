@@ -106,13 +106,13 @@ module Weft
         private
 
         def validate_type!(name, type, default)
-          classes = Weft::Resolver::TYPES[type]
-          unless classes
+          entry = Weft::Resolver::TYPES[type]
+          unless entry
             raise Weft::InvalidDefinition,
                   "param #{name.inspect} declares unknown type #{type.inspect} — declarable " \
                   "types are #{Weft::Resolver::TYPES.keys.map(&:inspect).join(', ')}"
           end
-          return if default.nil? || classes.any? { |klass| default.is_a?(klass) }
+          return if default.nil? || entry[:classes].any? { |klass| default.is_a?(klass) }
 
           raise Weft::InvalidDefinition,
                 "param #{name.inspect} declares type #{type.inspect} but its default " \
