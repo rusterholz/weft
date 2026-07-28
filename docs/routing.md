@@ -42,7 +42,7 @@ The path derives from the class name: strip a trailing `Component` if present, s
 
 The suffix-stripping means `OrdersPanel` and `OrdersPanelComponent` are the same route — pick whichever naming style your app prefers, consistently. The `/_components/` prefix keeps the fragment namespace visibly separate from your page URLs; the leading underscore marks it as infrastructure.
 
-Params arrive as query parameters (`/_components/orders_panel?status=shipped&page=2`) and resolve through the component's declared schema — undeclared parameters are ignored, and declared ones are type-coerced from their defaults (see [Params](dsl.md#params)).
+Params arrive as query parameters (`/_components/orders_panel?status=shipped&page=2`) and resolve through the component's declared schema — undeclared parameters are ignored, and declared ones are coerced per their declared `type:` (see [Params](dsl.md#params)).
 
 To change the path for one class, set `component_path` on it — a string, or a proc receiving the class:
 

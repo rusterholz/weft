@@ -14,7 +14,7 @@ class ContactRows < Weft::Component
 
   PER_PAGE = 10
 
-  param :page, default: 1
+  param :page, default: 1, type: :integer
 
   def tag_name
     "tbody"
@@ -65,7 +65,7 @@ end
 
 **The chain stops itself.** The sentinel wiring is only rendered while `more_pages?` holds. The final batch is just rows — nothing left to trigger, nothing fetched past the end of the data.
 
-**`page` travels as wire state.** `param :page, default: 1` makes each batch independently addressable (`/_components/contact_rows?page=3`) and coerces the URL string to an Integer, since the default is one. The `ContactDirectory` wrapper, by contrast, declares nothing — it's plain composition and renders only as part of a page.
+**`page` travels as wire state.** `param :page, default: 1, type: :integer` makes each batch independently addressable (`/_components/contact_rows?page=3`), coercing the URL string to an Integer on the way in. The `ContactDirectory` wrapper, by contrast, declares nothing — it's plain composition and renders only as part of a page.
 
 ## On the wire
 

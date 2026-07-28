@@ -52,12 +52,22 @@ Whichever door a value comes through, you read it the same way — `params.name`
 
 ```ruby
 param :status, default: "active"
-param :page, default: 1
+param :page, default: 1, type: :integer
 ```
 
 Params are a component's *wire state* — the values that identify what this particular instance shows, small enough to travel in a URL. They come from the request: query, path, and body values. When the component renders inside a page, it reads the same wire params the page does (see [Inheritance and the render tree](#inheritance-and-the-render-tree)); when it renders over the wire — a refresh, an action, an SSE push — they come from that request's parameters.
 
-Wire values arrive as strings, so Weft coerces them based on each param's default: an `Integer` default coerces with `to_i`, a `Float` with `to_f`, and a `true`/`false` default maps `"true"` and `"1"` to `true` (anything else to `false`). Params with other defaults (strings, `nil`) pass through untouched. A `type:` kwarg is accepted on `param` but reserved for future use — today, the default *is* the type declaration.
+Wire values arrive as strings, so a param that means something else declares its `type:`, and Weft coerces the wire value on the way in:
+
+```ruby
+param :page, type: :integer     # "2"     → 2
+param :rate, type: :float       # "3.14"  → 3.14
+param :price, type: :decimal    # "19.99" → BigDecimal("19.99") — full precision, right for money
+param :active, type: :boolean   # "true" and "1" → true; anything else → false
+param :zip, type: :string       # looks numeric, isn't — leading zeros survive
+```
+
+An untyped param accepts whatever arrives, uncoerced — right for values that are already strings, and for rich shapes like the nested hash browsers submit for `items[widget]=2`. Declare `type: :boolean` on every flag param: without it, a wire `"false"` is just a truthy string. `default:` is independent of `type:` — the default fills the key when no source supplies a value, is never itself coerced, and must already be an instance of the declared type. Weft checks declarations on the spot: an unknown type or a disagreeing default raises `Weft::InvalidDefinition` at class-load time, not mid-request.
 
 Inside the component, `params` returns the resolved values with method-style access:
 

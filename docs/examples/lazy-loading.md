@@ -14,7 +14,7 @@ QUARTERLY_REVENUE = {
 class RevenueTable < Weft::Component
   builder_method :revenue_table
 
-  param :year, default: 2025
+  param :year, default: 2025, type: :integer
 
   def build(attributes = {})
     super
@@ -32,7 +32,7 @@ end
 class AnnualReport < Weft::Component
   builder_method :annual_report
 
-  param :year, default: 2025
+  param :year, default: 2025, type: :integer
 
   def build(attributes = {})
     super
