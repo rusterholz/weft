@@ -4,7 +4,7 @@ source "https://rubygems.org"
 
 gem "activerecord", "~> 8.0", require: "active_record"
 gem "arbre", "~> 2.2"
-gem "clockwork", "~> 3.0"
+gem "clockwork", "~> 4.0"
 gem "puma", "~> 6.0"
 gem "rackup", "~> 2.2"
 gem "rake", "~> 13.0"
