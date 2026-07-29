@@ -20,7 +20,8 @@ module Logistics
         span("Outage active", class: "badge-status badge-busy", style: "margin-right:0.5rem")
         button "End outage", class: "btn btn-sm btn-outline-secondary", action: :toggle
       else
-        button "Simulate shipments outage", class: "btn btn-sm btn-outline-secondary", action: :toggle
+        button "Simulate shipments outage", class: "btn btn-sm btn-outline-secondary", action: :toggle,
+                                            confirm: "Break the live shipments feed for every viewer?"
       end
     end
   end

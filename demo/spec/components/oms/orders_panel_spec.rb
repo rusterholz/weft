@@ -8,12 +8,13 @@ RSpec.describe Oms::OrdersPanel, type: :component do
     Oms::Order.create!(customer_name: "Bob", lat: 0.0, lon: 0.0, status: "shipped")
   end
 
-  it "renders filter buttons with performs actions" do
+  it "renders filter buttons as navigate re-fetches of the panel" do
     html = render_weft_html { orders_panel }
     expect(html).to include("All")
     expect(html).to include("Submitted")
-    expect(html).to include('hx-get="/_components/oms/orders_panel/submitted"')
-    expect(html).to include('hx-get="/_components/oms/orders_panel/all"')
+    expect(html).to include('hx-get="/_components/oms/orders_panel?status=submitted&amp;page=1"')
+    # "All" drops the status param entirely
+    expect(html).to include('hx-get="/_components/oms/orders_panel?page=1"')
   end
 
   it "marks the active filter" do

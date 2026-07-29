@@ -16,6 +16,13 @@ RSpec.describe Logistics::OutageSwitch, type: :component do
     expect(html).to include('hx-post="/_components/logistics/outage_switch/toggle"')
   end
 
+  it "asks for confirmation before breaking the feed, but not before restoring it" do
+    expect(render_switch).to include('hx-confirm="Break the live shipments feed for every viewer?"')
+
+    Logistics::ShipmentFeedOutage.toggle!
+    expect(render_switch).not_to include("hx-confirm")
+  end
+
   it "shows the active badge and end control during an outage" do
     Logistics::ShipmentFeedOutage.toggle!
 

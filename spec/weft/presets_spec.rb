@@ -87,6 +87,45 @@ RSpec.describe Weft::Presets do
     end
   end
 
+  describe "registration name guards" do
+    it "raises on a name that is Weft's own element-kwarg vocabulary" do
+      expect { described_class.register :swap, trigger: :click, swap: :fill }.
+        to raise_error(Weft::InvalidDefinition, /swap/)
+    end
+
+    it "reserves :prompt ahead of its arrival" do
+      expect { described_class.register :prompt, trigger: :click, swap: :fill }.
+        to raise_error(Weft::InvalidDefinition, /prompt/)
+    end
+
+    it "warns on a name that shadows an HTML attribute" do
+      allow(Weft.logger).to receive(:warn)
+      described_class.register :title, trigger: :hover, swap: :fill
+
+      expect(Weft.logger).to have_received(:warn).with(/title/)
+    ensure
+      described_class.send(:registry).delete(:title)
+    end
+
+    it "registers HTML-shadowing names despite the warning" do
+      allow(Weft.logger).to receive(:warn)
+      described_class.register :title, trigger: :hover, swap: :fill
+
+      expect(described_class.lookup(:title)).to eq(trigger: :hover, swap: :fill)
+    ensure
+      described_class.send(:registry).delete(:title)
+    end
+
+    it "neither warns nor raises on ordinary names" do
+      allow(Weft.logger).to receive(:warn)
+      described_class.register :test_ordinary, trigger: :click, swap: :fill
+
+      expect(Weft.logger).not_to have_received(:warn)
+    ensure
+      described_class.send(:registry).delete(:test_ordinary)
+    end
+  end
+
   describe "Weft.preset delegation" do
     it "delegates to Weft::Presets.lookup" do
       expect(Weft.preset(:tooltip)).to eq(trigger: :hover, swap: :fill)

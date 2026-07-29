@@ -10,13 +10,6 @@ module Oms
     param :status, type: :string
     param :page, default: 1, type: :integer
 
-    # Filter actions — each overrides the status attr and resets to page 1.
-    # This is "performs as navigation": no side effects, just state transformation.
-    FILTER_STATUSES.each do |s|
-      performs(s.to_sym, method: :get) { { status: s, page: 1 } }
-    end
-    performs(:all, method: :get) { { status: nil, page: 1 } }
-
     def build(attributes = {})
       super
 
@@ -42,20 +35,23 @@ module Oms
 
     private
 
+    # Filters are pure wire-state navigation — no side effects, so no
+    # performs: each button re-fetches this panel with the status overridden
+    # and the page reset (status: nil drops the param entirely for "All").
     def render_filters
       div(class: "btn-group mb-3", role: "group") do
-        render_filter_button("All", action_name: :all, active: params.status.nil?)
+        render_filter_button("All", active: params.status.nil?)
         FILTER_STATUSES.each do |s|
-          render_filter_button(s.capitalize, action_name: s.to_sym, status_value: s,
-                                             active: params.status == s)
+          render_filter_button(s.capitalize, status_value: s, active: params.status == s)
         end
       end
     end
 
-    def render_filter_button(label, action_name:, active:, status_value: nil)
+    def render_filter_button(label, active:, status_value: nil)
       btn_class = "btn btn-sm #{active ? 'btn-primary' : 'btn-outline-secondary'}"
       push_url = status_value ? "/orders?status=#{status_value}" : "/orders"
-      button label, action: action_name, class: btn_class, push_url: push_url
+      button label, navigate: { status: status_value, page: 1 },
+                    class: btn_class, push_url: push_url
     end
   end
 end
