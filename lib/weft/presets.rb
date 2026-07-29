@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "weft/error"
+
 module Weft
   # Registry for named interaction presets. Each preset is a bundle of
   # trigger/swap/target defaults that Context expands via loads:.
@@ -7,11 +9,29 @@ module Weft
   # Shipped presets are registered at the bottom of this file. Users will be
   # able to register custom presets in v1.x via the same API.
   module Presets
+    # Weft's own element-kwarg vocabulary (keep in sync with
+    # Context::Expansion's grammar; :prompt reserved ahead of its arrival).
+    # A preset by one of these names would shadow the expansion grammar.
+    RESERVED_KWARGS = %i[action navigate loads trigger push_url swap target with confirm prompt].freeze
+
+    # HTML attribute names a preset would shadow: a registered preset claims
+    # its kwarg whenever the value is a Class or String, so `title: "..."`
+    # would stop rendering the HTML attribute. Global attributes plus the
+    # commonly-passed per-element ones.
+    HTML_ATTRIBUTE_NAMES = %i[
+      accesskey autocapitalize autofocus class contenteditable dir draggable enterkeyhint
+      hidden id inert inputmode lang nonce popover role slot spellcheck style tabindex
+      title translate
+      href src alt name value type placeholder disabled readonly required checked selected
+      multiple method rel download media width height
+    ].freeze
+
     class << self
       # Register a named interaction preset.
       #
       #   Weft::Presets.register :tooltip, trigger: :hover, swap: :fill
       def register(name, **defaults)
+        validate_name!(name)
         registry[name] = defaults
       end
 
@@ -26,6 +46,18 @@ module Weft
       end
 
       private
+
+      def validate_name!(name)
+        if RESERVED_KWARGS.include?(name)
+          raise Weft::InvalidDefinition,
+                "cannot register preset #{name.inspect} — it is Weft's own element-kwarg vocabulary"
+        end
+        return unless HTML_ATTRIBUTE_NAMES.include?(name)
+
+        Weft.logger.warn "preset #{name.inspect} shadows the HTML attribute of the same name — " \
+                         "elements passing a Class or String value for #{name}: will expand as this " \
+                         "preset instead of rendering the attribute"
+      end
 
       def registry
         @registry ||= {}

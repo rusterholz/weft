@@ -241,6 +241,171 @@ RSpec.describe Weft::Context do
     end
   end
 
+  describe "target:/swap: call-site overrides on action:" do
+    it "overrides the action's hx-target with a call-site target:" do
+      klass = component_class
+      html = described_class.new({}, nil, wire_params: { "order_id" => 42 }) do
+        insert_tag(klass) do
+          button "Advance", action: :advance, target: "#detail-pane"
+        end
+      end.to_s
+
+      expect(html).to include('hx-target="#detail-pane"')
+      expect(html).not_to include('hx-target="#order-header-42"')
+    end
+
+    it "overrides the action's hx-swap with a call-site swap:" do
+      klass = component_class
+      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        insert_tag(klass) do
+          button "Advance", action: :advance, swap: :fill
+        end
+      end.to_s
+
+      expect(html).to include('hx-swap="innerHTML"')
+    end
+
+    it "resolves a :self target override to this" do
+      klass = component_class
+      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        insert_tag(klass) do
+          button "Advance", action: :advance, target: :self
+        end
+      end.to_s
+
+      expect(html).to include('hx-target="this"')
+    end
+
+    it "does not leak target: or swap: as literal HTML attributes" do
+      klass = component_class
+      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        insert_tag(klass) do
+          button "Advance", action: :advance, target: "#pane", swap: :fill
+        end
+      end.to_s
+
+      expect(html).not_to include(' target="#pane"')
+      expect(html).not_to include(' swap="fill"')
+    end
+
+    it "applies overrides on form elements after the form augmentation" do
+      klass = component_class
+      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        insert_tag(klass) do
+          form(action: :advance, target: "#result", swap: :fill) do
+            input type: "submit", value: "Submit"
+          end
+        end
+      end.to_s
+
+      expect(html).to include('hx-target="#result"')
+      expect(html).to include('hx-swap="innerHTML"')
+      expect(html).to include('action="/_components/order_header/advance"')
+      expect(html).not_to include(' target="#result"')
+    end
+  end
+
+  describe "target:/swap: call-site overrides on navigate:" do
+    it "overrides the generated hx-target and hx-swap" do
+      klass = component_class
+      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        insert_tag(klass) do
+          button "Next", navigate: { order_id: 2 }, target: "#list", swap: :append
+        end
+      end.to_s
+
+      expect(html).to include('hx-target="#list"')
+      expect(html).to include('hx-swap="beforeend"')
+      expect(html).not_to include(' target="#list"')
+      expect(html).not_to include(' swap="beforeend"')
+    end
+  end
+
+  describe "confirm: kwarg" do
+    it "maps to hx-confirm alongside action: without leaking chrome" do
+      klass = component_class
+      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        insert_tag(klass) do
+          button "Delete", action: :advance, confirm: "Are you sure?"
+        end
+      end.to_s
+
+      expect(html).to include('hx-confirm="Are you sure?"')
+      expect(html).not_to include(" confirm=")
+      expect(html).to include("hx-post=")
+    end
+
+    it "maps to hx-confirm standalone, for container-level inheritance" do
+      klass = component_class
+      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        insert_tag(klass) do
+          div confirm: "Really?" do
+            button "Advance", action: :advance
+          end
+        end
+      end.to_s
+
+      expect(html).to include('<div hx-confirm="Really?"')
+    end
+
+    it "maps to hx-confirm alongside a preset" do
+      target = Class.new(Weft::Component) do
+        def self.name = "ConfirmTarget"
+        param :id
+      end
+      klass = component_class
+      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        insert_tag(klass) do
+          button "Open", modal: target, with: { id: "1" }, target: "#modal", confirm: "Open it?"
+        end
+      end.to_s
+
+      expect(html).to include('hx-confirm="Open it?"')
+      expect(html).to include("hx-get=")
+    end
+  end
+
+  describe "standalone swap:/target: without an interaction kwarg" do
+    it "passes a standalone target: through as HTML chrome untouched" do
+      klass = component_class
+      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        insert_tag(klass) do
+          a "Docs", href: "/docs", target: "_blank"
+        end
+      end.to_s
+
+      expect(html).to include('target="_blank"')
+      expect(html).not_to include("hx-target")
+    end
+
+    it "passes a standalone swap: through as chrome after warning" do
+      allow(Weft.logger).to receive(:warn)
+      klass = component_class
+      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        insert_tag(klass) do
+          div swap: :fill
+        end
+      end.to_s
+
+      expect(html).to include('swap="fill"')
+      expect(html).not_to include("hx-swap")
+      expect(Weft.logger).to have_received(:warn).with(/swap/)
+    end
+
+    it "warns only once per component class for standalone swap:" do
+      allow(Weft.logger).to receive(:warn)
+      klass = component_class
+      described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        insert_tag(klass) do
+          div swap: :fill
+          div swap: :append
+        end
+      end.to_s
+
+      expect(Weft.logger).to have_received(:warn).once
+    end
+  end
+
   describe "find_action_context (innermost component wins)" do
     it "finds the action on the innermost enclosing component" do # rubocop:disable RSpec/ExampleLength
       inner_class = Class.new(Weft::Component) do
@@ -454,7 +619,7 @@ RSpec.describe Weft::Context do
             button "Load", loads: target, target: "#tip"
           end
         end.to_s
-      end.to raise_error(ArgumentError, /swap/)
+      end.to raise_error(Weft::InvalidUsage, /swap/)
     end
 
     it "raises when target: is missing" do
@@ -466,7 +631,7 @@ RSpec.describe Weft::Context do
             button "Load", loads: target, swap: :fill
           end
         end.to_s
-      end.to raise_error(ArgumentError, /target/)
+      end.to raise_error(Weft::InvalidUsage, /target/)
     end
   end
 
@@ -598,7 +763,7 @@ RSpec.describe Weft::Context do
             button "Nope", test_short: target, with: { item_id: "1" }
           end
         end.to_s
-      end.to raise_error(ArgumentError, /target/)
+      end.to raise_error(Weft::InvalidUsage, /target/)
     end
 
     it "passes through unregistered kwargs without expansion" do
@@ -787,6 +952,129 @@ RSpec.describe Weft::Context do
       expect(html).to include('hx-swap="outerHTML"')
       expect(html).to include('hx-target="closest [sse-swap]"')
       expect(html).to include('hx-trigger="click"')
+    end
+  end
+
+  describe "loud failures for unresolvable Weft kwargs" do
+    it "raises on an action: Symbol no enclosing component declares" do
+      klass = component_class
+      expect do
+        described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+          insert_tag(klass) do
+            button "Advance", action: :advnace
+          end
+        end.to_s
+      end.to raise_error(Weft::InvalidUsage, /advnace/)
+    end
+
+    it "raises on a non-Hash navigate: value" do
+      klass = component_class
+      expect do
+        described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+          insert_tag(klass) do
+            button "Next", navigate: "/orders"
+          end
+        end.to_s
+      end.to raise_error(Weft::InvalidUsage, /navigate/)
+    end
+
+    it "raises on navigate: outside any component" do
+      expect do
+        described_class.new({}, nil, wire_params: {}) do
+          button "Next", navigate: { page: 2 }
+        end.to_s
+      end.to raise_error(Weft::InvalidUsage, /component/)
+    end
+
+    it "raises on a navigate: key that is not a wire param of the navigated component" do
+      klass = component_class
+      expect do
+        described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+          insert_tag(klass) do
+            button "Next", navigate: { page: 2 }
+          end
+        end.to_s
+      end.to raise_error(Weft::InvalidUsage, /page.*wire param/m)
+    end
+
+    it "accepts navigate: keys declared as params on a class ancestor" do
+      sub = Class.new(component_class) do
+        def self.name = "SubHeader"
+      end
+      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        insert_tag(sub) do
+          button "Next", navigate: { order_id: 2 }
+        end
+      end.to_s
+
+      expect(html).to include("hx-get=")
+    end
+
+    it "accepts nil values on declared navigate: keys (the drop-a-param idiom)" do
+      klass = component_class
+      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        insert_tag(klass) do
+          button "Reset", navigate: { order_id: nil }
+        end
+      end.to_s
+
+      expect(html).to include('hx-get="/_components/order_header"')
+    end
+
+    it "raises on with: without loads: or a preset alongside" do
+      klass = component_class
+      expect do
+        described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+          insert_tag(klass) do
+            button "Advance", action: :advance, with: { order_id: 2 }
+          end
+        end.to_s
+      end.to raise_error(Weft::InvalidUsage, /with/)
+    end
+
+    it "raises on a standalone with:" do
+      klass = component_class
+      expect do
+        described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+          insert_tag(klass) do
+            div with: { order_id: 2 }
+          end
+        end.to_s
+      end.to raise_error(Weft::InvalidUsage, /with/)
+    end
+
+    it "raises on a non-Class loads: value" do
+      klass = component_class
+      expect do
+        described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+          insert_tag(klass) do
+            button "Load", loads: "ShipmentSummary", swap: :fill, target: :self
+          end
+        end.to_s
+      end.to raise_error(Weft::InvalidUsage, /loads/)
+    end
+
+    it "raises on a registered preset name with a non-Class, non-String value" do
+      klass = component_class
+      expect do
+        described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+          insert_tag(klass) do
+            button "Tip", tooltip: 5, target: "#tip"
+          end
+        end.to_s
+      end.to raise_error(Weft::InvalidUsage, /tooltip/)
+    end
+
+    it "treats nil-valued Weft kwargs as absent, for conditional call sites" do
+      klass = component_class
+      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        insert_tag(klass) do
+          button "Plain", navigate: nil, loads: nil, tooltip: nil, with: nil
+        end
+      end.to_s
+
+      expect(html).not_to include("hx-get")
+      expect(html).to include("<button")
     end
   end
 
