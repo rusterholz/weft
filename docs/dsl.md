@@ -34,7 +34,7 @@ end
   - [`includes` — companions in the same response](#includes--companions-in-the-same-response)
   - [`recovers` — declare error behavior](#recovers--declare-error-behavior)
   - [Other class-body declarations](#other-class-body-declarations)
-- [Element kwargs](#element-kwargs): [`action:`](#action), [`navigate:`](#navigate), [`loads:`](#loads), [`trigger:`](#trigger), [`push_url:`](#push_url) — plus the [swap](#swap-values), [trigger](#trigger-values), and [target](#targets) value tables
+- [Element kwargs](#element-kwargs) — [the two ranks and their rules](#the-kwarg-rules); [`action:`](#action), [`navigate:`](#navigate), [`loads:`](#loads), [`trigger:`](#trigger), [`push_url:`](#push_url), [`confirm:`](#confirm) — plus the [swap](#swap-values), [trigger](#trigger-values), and [target](#targets) value tables
 - [Presets](#presets)
 
 ## Params
@@ -169,6 +169,8 @@ Two shapes of consumption both work, and both are idiomatic:
 Subclasses can also **redeclare** an inherited key. Redeclaring through the *same* door overrides the parent's declaration (the block or metadata is replaced, keeping the parent's declaration-order position). Redeclaring through a *different* door adds a dual — it doesn't replace the parent's door. There's no way to *un*-declare a key a parent declared; a subclass that needs different behavior overrides or duals, it doesn't remove.
 
 ## Verbs
+
+Verbs are **class-body declarations**: they state what a component *does* — once, at the class level, the way `param` and its siblings declare what it *consumes*. The other layer, [element kwargs](#element-kwargs), wires individual elements to these behaviors from inside `build`; a `performs` declared here is inert until some element carries `action:` naming it (forms and buttons usually).
 
 ### `refreshes` — the client re-fetches
 
@@ -320,7 +322,27 @@ The leading `@` in the symbol is required, as a reminder that *you* must assign 
 
 ## Element kwargs
 
-Inside `build` (and inside blocks nested under it), any element accepts Weft kwargs alongside its normal HTML params. Weft intercepts them at render time and expands them into htmx wiring.
+Inside `build` (and inside blocks nested under it), any element accepts Weft kwargs alongside its normal HTML attributes. Weft intercepts them at render time and expands them into htmx wiring. The vocabulary has two ranks:
+
+- **Interaction kwargs** say what request the element makes — [`action:`](#action), [`navigate:`](#navigate), [`loads:`](#loads), or any [preset](#presets). One per element, and the *value shape* is part of the claim: a Symbol `action:` is Weft's, while a String `action:` on a form is plain HTML.
+- **Modifier kwargs** adjust the wiring the interaction generates. `target:` and `swap:` override where the response lands and how it swaps — whatever the interaction, and whatever its declaration or preset would have used. [`trigger:`](#trigger), [`push_url:`](#push_url), and [`confirm:`](#confirm) do the same and *also* work standalone, on an element that makes no request of its own, because htmx lets those attributes inherit from a containing element.
+
+### The kwarg rules
+
+A kwarg that is unmistakably Weft's but can't make sense **raises `Weft::InvalidUsage`** at render time rather than leaking into your HTML — a mistyped action name, a `navigate:` key the component doesn't declare, a `with:` with nothing to feed. A **`nil` value always means "not this time"** (`tooltip: maybe_class`) and renders nothing. Everything else — `class:`, `data:`, raw `hx-*` strings, a real HTML `target:` on a link — passes through to the element untouched.
+
+| Kwarg | Rank | Weft's when… | Otherwise |
+| --- | --- | --- | --- |
+| `action:` | interaction | the value is a Symbol naming a declared action | String values are plain HTML (`form action: "/path"`); an unmatched Symbol raises |
+| `navigate:` | interaction | the value is a Hash of param overrides | any other value raises |
+| `loads:` | interaction | the value is a component Class | any other value raises |
+| preset names (`tooltip:`, …) | interaction | the value is a Class or URL String | any other value raises |
+| `target:` | modifier | an interaction kwarg is present | plain HTML (`target: "_blank"` on a link works as ever) |
+| `swap:` | modifier | an interaction kwarg is present | passes through as an attribute, with a one-time warning |
+| `trigger:` | modifier | always | — |
+| `push_url:` | modifier | always | — |
+| `confirm:` | modifier | always | — |
+| `with:` | feeds `loads:`/presets | `loads:` or a preset is alongside | raises |
 
 ### `action:`
 
@@ -328,7 +350,13 @@ Inside `build` (and inside blocks nested under it), any element accepts Weft kwa
 button "Advance", action: :advance, class: "btn btn-primary"
 ```
 
-Wires the element to a declared `performs`/`transfers` action on the nearest enclosing component that declares it. Expands to the full htmx set: the request (`hx-post` etc. to the action's route), the target (the component's own element, unless the action declared `target:`), the swap, and the component's current params as the payload (`hx-vals`).
+Wires the element to a declared `performs`/`transfers` action on the nearest enclosing component that declares it. Expands to the full htmx set: the request (`hx-post` etc. to the action's route), the target (the component's own element, unless the action declared `target:`), the swap, and the component's current params as the payload (`hx-vals`). A Symbol that matches no enclosing component's declarations raises — a typo can't silently produce a dead button.
+
+Add `target:` / `swap:` alongside to override, for this element only, where the response lands and how it swaps — the declaration's values stay the defaults for every other call site:
+
+```ruby
+button "Advance", action: :advance, target: "#detail-pane", swap: :fill
+```
 
 On a `form` element, `action:` additionally emits plain HTML `action` and `method` params, so the form still submits without JavaScript — and the field values themselves become the payload:
 
@@ -345,7 +373,11 @@ end
 button "Next", navigate: { page: params.page + 1 }
 ```
 
-Re-fetches the enclosing component with some of its params changed — a GET to the component's own route with the overridden values, replacing the component. This is the idiom for filters, sorting, and pagination: same component, different wire state. Pass `nil` to drop a param from the URL. Pairs naturally with `push_url:` when the new state should be reflected in the address bar.
+Re-fetches the enclosing component with some of its params changed — a GET to the component's own route with the overridden values, replacing the component. This is the idiom for filters, sorting, and pagination: same component, different wire state. Pass `nil` to drop a param from the URL. Pairs naturally with `push_url:` when the new state should be reflected in the address bar, and takes `target:` / `swap:` overrides like any interaction kwarg.
+
+**`navigate:` or `performs`?** `navigate:` is pure wire-state navigation: no side effects, no route of its own, honest GET semantics. The moment an interaction *does* something — writes, calls a service — it's a `performs`. And when you find yourself repeating the same override hash at many call sites, prefer a named `performs` returning that hash even without side effects: the declaration names the pattern once instead of scattering it.
+
+Because the re-fetch renders the component standalone, only its own declared `param`s survive the round trip — so every key you override must be one the component (or a class ancestor) declares. Anything else raises `Weft::InvalidUsage` at render time; to change an *ancestor's* state instead, target the ancestor itself ([`enclosing`](arbre.md#reaching-enclosing-components) + `loads:`).
 
 ### `loads:`
 
@@ -373,6 +405,23 @@ button label, action: :filter, push_url: "/orders?status=#{status}"
 ```
 
 Pushes a URL into the browser's address bar when the request completes, keeping the location shareable and the back button meaningful. Pass the URL string, or `true` to push the request's own URL.
+
+### `confirm:`
+
+```ruby
+button "Delete", action: :destroy, confirm: "Delete this order?"
+```
+
+Shows the browser's native confirmation dialog before the request fires; Cancel means no request at all. Works alongside any interaction kwarg — actions, navigations, loads, presets — or standalone on a container, where htmx inheritance applies it to every request fired from inside:
+
+```ruby
+div confirm: "This affects the live feed. Continue?" do
+  button "Pause", action: :pause
+  button "Reset", action: :reset
+end
+```
+
+There is deliberately no `prompt:` counterpart yet — htmx delivers the typed reply in a request header that action callables can't read today; the kwarg arrives once they can.
 
 ### Swap values
 
@@ -441,3 +490,5 @@ Weft.register_preset :paginate, trigger: :click, swap: :replace
 ```
 
 A registration names the preset and provides any of `trigger:`, `swap:`, and `target:`. From then on, `paginate:` works as an element kwarg everywhere — same machinery, your vocabulary. Naming interactions after their intent keeps call sites readable: `button "Next", paginate: OrdersPanel, with: { page: 2 }` says more than the four htmx params it expands to.
+
+Names are checked at registration. One that collides with Weft's own element-kwarg vocabulary (`action`, `navigate`, `loads`, `trigger`, `push_url`, `swap`, `target`, `with`, `confirm` — and `prompt`, reserved) raises `Weft::InvalidDefinition`: a preset by that name would shadow the grammar itself. One that shadows a standard HTML attribute (`title`, `href`, …) registers but logs a warning — elements passing a Class or String value for that kwarg will expand as your preset instead of rendering the attribute.
