@@ -56,10 +56,15 @@ module Weft
       # from the bag at build (render kwargs are pseudo-wire), so only its
       # declared params enter its bag. The full bag still flows to OOB
       # includes so callable-returned params reach them.
+      #
+      # Delete-swap actions skip the primary render entirely: htmx discards
+      # the body on a delete swap, and the component's record is typically
+      # gone by now. OOB includes still ride (a 200, never a 204 — htmx
+      # refuses to swap 204s, which would skip the delete itself).
       def render_action_response(action, component_class, resolved_params, returned)
         bag = returned.is_a?(Hash) ? resolved_params.merge(returned) : resolved_params
         apply_trigger_header(component_class)
-        html = action.renders.render(**bag)
+        html = action.swap == :delete ? "" : action.renders.render(**bag)
         html + render_oob_includes(component_class, Weft::Params.new(bag), action_name: action.name)
       end
 

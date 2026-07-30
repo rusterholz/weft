@@ -1687,6 +1687,17 @@ RSpec.describe Weft::Component do
       expect(action.swap).to eq(:delete)
     end
 
+    it "forwards target: to the underlying action" do
+      component_class = Class.new(described_class) do
+        def self.name = "TargetedDismiss"
+        dismisses :remove, target: "closest tr"
+      end
+
+      action = component_class.actions[%i[remove delete]]
+      expect(action.target).to eq("closest tr")
+      expect(action.swap).to eq(:delete)
+    end
+
     it "generates htmx delete attributes via action: kwarg" do
       component_class = Class.new(described_class) do
         def self.name = "DismissRender"

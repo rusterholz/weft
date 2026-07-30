@@ -76,6 +76,19 @@ RSpec.describe "Weft::Defaults" do
 
       expect(content).to include("weft-error")
     end
+
+    it "adopts the failing component's tag via :component_tag" do
+      html = described_class.render(exception: nil, component_tag: "tr")
+
+      expect(html).to match(/\A<tr\b/)
+      expect(html).to include("</tr>")
+    end
+
+    it "renders as a div when :component_tag is absent" do
+      html = described_class.render(exception: nil)
+
+      expect(html).to match(/\A<div\b/)
+    end
   end
 
   describe Weft::Defaults::ErrorPage do
@@ -118,6 +131,12 @@ RSpec.describe "Weft::Defaults" do
       Weft.configuration.verbose_error_pages = true
       html = described_class.render(request_path: "/no-such-thing", status_code: 404)
       expect(html).to include("/no-such-thing")
+    end
+
+    it "adopts the failing component's tag via :component_tag" do
+      html = described_class.render(request_path: "/gone", component_tag: "tr")
+
+      expect(html).to match(/\A<tr\b/)
     end
 
     it "renders generic copy when non-verbose" do

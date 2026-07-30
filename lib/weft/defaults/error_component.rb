@@ -26,6 +26,7 @@ module Weft
       # :retry_url is the failing component's GET URL with current params.
       # :attempts_remaining is the push-path countdown (nil on HTTP paths).
       param :component_id, type: :string
+      param :component_tag, type: :string
       param :exception
       param :request_path, type: :string
       param :status_code, type: :integer
@@ -55,6 +56,13 @@ module Weft
       # :component_id. Otherwise fall back to the class-derived default.
       def weft_id
         @params.component_id || super
+      end
+
+      # Adopt the failing component's wrapper tag when the Router injected
+      # :component_tag — a div swapped into a <tr>'s position is invalid
+      # table content; a <tr> error row is not.
+      def tag_name
+        @params.component_tag || super
       end
 
       private

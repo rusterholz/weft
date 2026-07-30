@@ -1003,6 +1003,109 @@ RSpec.describe Weft::Router do
     end
   end
 
+  describe "delete-swap short-circuit" do
+    it "returns an empty success body instead of a dead render" do
+      Class.new(Weft::Component) do
+        def self.name = "DismissEmpty"
+        param :id
+        dismisses(:remove) { nil }
+
+        def build(attributes = {})
+          super
+          span "content htmx would discard"
+        end
+      end
+
+      delete "/_components/dismiss_empty/remove", id: "1"
+
+      expect(last_response.status).to eq(200)
+      expect(last_response.body).to eq("")
+    end
+
+    it "never renders the component after the callable deletes its record" do
+      store = { "1" => "a record" }
+      Class.new(Weft::Component) do
+        def self.name = "DismissDeletes"
+        param :id
+        dismisses(:destroy) { |p| store.delete(p.id) }
+
+        define_method(:build) do |attributes = {}|
+          super(attributes)
+          raise "record gone" unless store[params.id]
+
+          span store[params.id]
+        end
+      end
+
+      delete "/_components/dismiss_deletes/destroy", id: "1"
+
+      expect(last_response.status).to eq(200)
+      expect(last_response.body).to eq("")
+      expect(store).to be_empty
+    end
+
+    it "sends only OOB include fragments when inclusions apply" do # rubocop:disable RSpec/ExampleLength
+      sink = Class.new(Weft::Component) do
+        def self.name = "DismissOobSink"
+        param :id
+
+        def build(attributes = {})
+          super
+          span(class: "sink") { text_node "sibling update" }
+        end
+      end
+      source = Class.new(Weft::Component) do
+        def self.name = "DismissOobSource"
+        param :id
+        dismisses(:remove) { nil }
+
+        def build(attributes = {})
+          super
+          span(class: "primary") { text_node "primary body" }
+        end
+      end
+      source.includes(sink)
+
+      delete "/_components/dismiss_oob_source/remove", id: "1"
+
+      expect(last_response.body).to include('hx-swap-oob="true"')
+      expect(last_response.body).to include("sibling update")
+      expect(last_response.body).not_to include("primary body")
+    end
+
+    it "applies to performs with swap: :delete, not just the sugar" do
+      Class.new(Weft::Component) do
+        def self.name = "RawDeleteSwap"
+        param :id
+        performs(:vanish, swap: :delete) { nil }
+
+        def build(attributes = {})
+          super
+          span "dead body"
+        end
+      end
+
+      post "/_components/raw_delete_swap/vanish", id: "1"
+
+      expect(last_response.status).to eq(200)
+      expect(last_response.body).to eq("")
+    end
+
+    it "still carries HX-Trigger events on the empty response" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "DismissTriggers"
+        param :id
+        dismisses(:remove) { nil }
+      end
+      klass.triggers "row-removed"
+
+      delete "/_components/dismiss_triggers/remove", id: "1"
+
+      expect(last_response.headers["HX-Trigger"]).to eq("row-removed")
+      expect(last_response.body).to eq("")
+    end
+  end
+
   describe "dismisses error handling" do
     it "sets HX-Reswap on error for delete swap actions" do
       Class.new(Weft::Component) do
@@ -1390,6 +1493,69 @@ RSpec.describe Weft::Router do
 
       expect(last_response.body).to include("got-comp-id")
       expect(last_response.body).to include("id=injects-comp-id-1")
+    end
+
+    it "injects :component_tag when the target declares it — the failing component's wrapper tag" do
+      Class.new(Weft::Component) do
+        def self.name = "InjectsTag"
+        param :id
+        param :component_tag
+
+        recovers(from: StandardError)
+
+        def tag_name = "tr"
+
+        def build(attributes = {})
+          super
+          raise "boom" unless params.component_tag
+
+          td(class: "got-tag") { text_node "tag=#{params.component_tag}" }
+        end
+      end
+
+      get "/_components/injects_tag", id: "1"
+
+      expect(last_response.body).to include("tag=tr")
+    end
+
+    it "renders the gem-default error fragment with a failing <tr> component's tag" do
+      Class.new(Weft::Component) do
+        def self.name = "RowBoom"
+        param :id
+
+        def tag_name = "tr"
+
+        def build(attributes = {})
+          super
+          raise "row exploded"
+        end
+      end
+
+      get "/_components/row_boom", id: "1"
+
+      expect(last_response.status).to eq(500)
+      expect(last_response.body).to match(/\A<tr\b/)
+      expect(last_response.body).to include("weft-error")
+    end
+
+    it "falls back to a div when the failing component's tag_name needs instance state" do
+      Class.new(Weft::Component) do
+        def self.name = "StatefulTagBoom"
+        param :kind
+
+        def tag_name = (params.kind == "row" ? "tr" : "div")
+
+        def build(attributes = {})
+          super
+          raise "boom"
+        end
+      end
+
+      get "/_components/stateful_tag_boom", kind: "row"
+
+      expect(last_response.status).to eq(500)
+      expect(last_response.body).to match(/\A<div\b/)
+      expect(last_response.body).to include("weft-error")
     end
 
     it "injects :retry_url when the target declares it — pointing at the component's GET URL with params" do
