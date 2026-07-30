@@ -31,13 +31,11 @@ class ContactRow < Weft::Component
   def build(attributes = {})
     super
     contact = CONTACT_BOOK[params.contact_id]
-    return unless contact
-
     td contact[:name]
     td contact[:email]
     td contact[:status]
     td do
-      button "Delete", action: :destroy, "hx-confirm" => "Are you sure?"
+      button "Delete", action: :destroy, confirm: "Are you sure?"
     end
   end
 end
@@ -67,9 +65,9 @@ end
 
 **`dismisses` is the delete-shaped verb.** It's sugar for a `performs` with `method: :delete, swap: :delete` (see [`dismisses`](../dsl.md#dismisses--remove-from-the-dom)): the button wired with `action: :destroy` issues a `DELETE` to the action's route, the callable removes the record, and on success htmx deletes the target element — the row — from the DOM. The row's identity travels automatically: an action button carries the component's params as `hx-vals`. Note there's no non-JavaScript fallback here — plain HTML has no DELETE — which is the nature of the pattern rather than a Weft limitation.
 
-**The confirmation is one raw attribute.** Kwargs Weft doesn't recognize pass straight through to the element, so `"hx-confirm" => "Are you sure?"` lands on the button as-is and htmx shows the browser's native confirm dialog before sending anything. No request fires on Cancel. For the fuller confirm-and-prompt story, see [Browser Dialogs](browser-dialogs.md).
+**The confirmation is one kwarg.** [`confirm:`](../dsl.md#confirm) rides along on the wired button: htmx shows the browser's native confirm dialog before sending anything, and no request fires on Cancel. For the fuller confirm-and-prompt story, see [Browser Dialogs](browser-dialogs.md).
 
-**The dismissal response is rendered, then thrown away.** htmx ignores the response body on a delete swap, but Weft still renders the component once after the callable runs — so `build` must survive the record being gone, hence the `return unless contact` guard (an empty `<tr>` nobody will see). The trailing `nil` in the callable matters for the same reason: `Hash#delete` returns the deleted record, and a hash returned from a callable merges into the params for that final render. If the callable *raises*, Weft overrides the destructive swap (via `HX-Reswap`) so the error rendering appears where the row was, instead of the row silently vanishing.
+**A successful dismissal responds with nothing.** htmx removes the row on its own, so the response carries no body — Weft doesn't render the component it just helped delete, which is why `build` can assume its record exists without guarding. (Out-of-band [`includes`](../dsl.md#includes--companions-in-the-same-response) companions still ride the response when declared — a delete can update the count beside the table it shrinks.) The trailing `nil` in the callable keeps `Hash#delete`'s return value — the deleted record — from merging into the params those companions read. If the callable *raises*, Weft overrides the destructive swap (via `HX-Reswap`) so the error rendering appears where the row was, instead of the row silently vanishing — and the error fragment arrives as a `<tr>` itself, because recovery fragments [adopt the failing component's tag](../error-handling.md#auto-injected-recovery-params), landing as valid table content.
 
 ## On the wire
 
@@ -81,20 +79,17 @@ Each row arrives fully wired — `GET /_components/contact_row?contact_id=1` ret
   <td>angie@macdowell.org</td>
   <td>Active</td>
   <td>
-    <button hx-confirm="Are you sure?" hx-delete="/_components/contact_row/destroy"
+    <button hx-delete="/_components/contact_row/destroy"
             hx-target="#contact-row-1" hx-swap="delete"
-            hx-vals="{&quot;contact_id&quot;:&quot;1&quot;}">Delete</button>
+            hx-vals="{&quot;contact_id&quot;:&quot;1&quot;}"
+            hx-confirm="Are you sure?">Delete</button>
   </td>
 </tr>
 ```
 
-Confirming the dialog sends `DELETE /_components/contact_row/destroy?contact_id=1` (htmx 2 puts DELETE parameters in the query string). The server deletes the record and responds `200` with the guarded, now-empty render — which htmx discards while removing the row:
+Confirming the dialog sends `DELETE /_components/contact_row/destroy?contact_id=1` (htmx 2 puts DELETE parameters in the query string). The server deletes the record and responds `200` with an empty body — there is nothing left worth rendering — and htmx removes the row.
 
-```html
-<tr id="contact-row-1"></tr>
-```
-
-Fetching the table again shows two rows; fetching the deleted row's own URL returns the same empty `<tr>`, confirming the record is gone.
+Fetching the table again shows two rows. Fetching the deleted row's own URL now fails like any other missing-record lookup and lands in the error chain — if stale fetches are a real path in your app, brand them with [`recovers from:`](../error-handling.md).
 
 ## Related
 

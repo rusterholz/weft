@@ -2,7 +2,7 @@
 
 A destructive button guarded by the browser's native `confirm()` dialog — the user gets a chance to back out before the request is ever made, with no dialog component to build and no CSS to write.
 
-This is Weft's take on [htmx's dialogs example](https://htmx.org/examples/dialogs/). The honest point of this page is that Weft has no kwarg for `hx-confirm` — and doesn't need one: raw htmx attributes pass through to the element untouched, side by side with whatever the Weft kwargs expand to.
+This is Weft's take on [htmx's dialogs example](https://htmx.org/examples/dialogs/). The confirm half is one kwarg — [`confirm:`](../dsl.md#confirm) rides the same button the action already wired. The prompt half is deliberately *not* a kwarg (below), and shows the escape hatch that remains for htmx vocabulary Weft doesn't cover.
 
 ## The components
 
@@ -22,7 +22,7 @@ class AccountPanel < Weft::Component
     para "Your account is #{ACCOUNT[:status]}."
     if ACCOUNT[:status] == "active"
       button "Deactivate my account", action: :deactivate,
-             "hx-confirm" => "Deactivate your account? You can sign back in to reactivate."
+             confirm: "Deactivate your account? You can sign back in to reactivate."
     end
   end
 end
@@ -32,25 +32,25 @@ end
 
 ## How it works
 
-**Raw htmx attributes ride along.** Weft intercepts only its own kwargs — `action:`, `trigger:`, and friends. Everything else on an element, string-keyed htmx attributes included, renders as a plain HTML attribute. So `"hx-confirm" => "..."` lands verbatim next to the wiring that [`action:`](../dsl.md#action) expanded, and htmx picks it up like any hand-written page. This is the general escape hatch: whenever htmx has a feature Weft has no vocabulary for, write the attribute yourself.
+**The guard is one modifier kwarg.** [`confirm:`](../dsl.md#confirm) works alongside any interaction kwarg — this action, a [`navigate:`](../dsl.md#navigate), a preset — or standalone on a container, where htmx inheritance applies it to every request fired from inside. Weft consumes the kwarg and emits `hx-confirm` beside the wiring [`action:`](../dsl.md#action) expanded.
 
-**The guard lives in the browser, not on the server.** `hx-confirm` gates the *request*: htmx shows the native dialog and only issues the POST if the user accepts. The endpoint itself is unchanged — a request made outside htmx skips the question entirely. Treat it as protection against misclicks, never as access control; anything truly destructive still needs authorization server-side.
+**The guard lives in the browser, not on the server.** The confirm gates the *request*: htmx shows the native dialog and only issues the POST if the user accepts. The endpoint itself is unchanged — a request made outside htmx skips the question entirely. Treat it as protection against misclicks, never as access control; anything truly destructive still needs authorization server-side.
 
 **The action is ordinary Weft.** `performs :deactivate` runs the write and re-renders the component, which now shows the deactivated state — the standard action contract, unaware that a dialog ever happened.
 
-**`hx-prompt` doesn't carry over.** htmx's companion attribute asks for a line of text and sends the answer as an `HX-Prompt` *request header* — but a Weft action callable receives only the component's resolved params, which come from request parameters, so the prompted value never reaches your code. When an action needs user input, give the component a real input: a form field paired with a declared param, as in [Click to Edit](click-to-edit.md).
+**There is no `prompt:` kwarg — on purpose.** htmx's companion attribute asks for a line of text and sends the answer as an `HX-Prompt` *request header* — but a Weft action callable receives only the component's resolved params, which come from request parameters, so the prompted value would never reach your code. When an action needs user input, give the component a real input: a form field paired with a declared param, as in [Click to Edit](click-to-edit.md). And if you want the browser's prompt anyway, the escape hatch is always open: kwargs Weft doesn't recognize pass through untouched, so `"hx-prompt" => "..."` renders verbatim — the general pattern whenever htmx has a feature Weft has no vocabulary for.
 
 ## On the wire
 
-The initial render — the confirm attribute sits verbatim beside the expanded action wiring:
+The initial render — the confirm lands beside the expanded action wiring:
 
 ```html
 <div id="account-panel">
   <p>Your account is active.</p>
-  <button hx-confirm="Deactivate your account? You can sign back in to reactivate."
-          hx-post="/_components/account_panel/deactivate"
+  <button hx-post="/_components/account_panel/deactivate"
           hx-target="#account-panel" hx-swap="outerHTML"
-          hx-vals="{}">Deactivate my account</button>
+          hx-vals="{}"
+          hx-confirm="Deactivate your account? You can sign back in to reactivate.">Deactivate my account</button>
 </div>
 ```
 

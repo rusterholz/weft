@@ -83,7 +83,7 @@ The symbols resolve through `Weft.configuration`, so [reassigning those knobs](c
 
 **In component context** — a fragment render or an action — the Router walks the failing component's chain and renders the matched target as a fragment, with the response status taken from the exception (`Weft::HTTPError#status`, else 500). On the client, the fragment swaps in where the component's response would have gone, so the error appears exactly where the problem is. If the matched target is a *page* class, the recovery becomes a redirect to that page instead (`HX-Redirect` for htmx requests, 302 otherwise) — the `with: LoginPage` pattern above.
 
-One wrinkle worth knowing: for actions with a destructive swap (`dismisses`, or any `performs` with `swap: :delete`), a successful response removes the element — which would make an error invisible. Weft overrides the swap on error responses (via `HX-Reswap`) so the error rendering replaces the component instead of vanishing with it.
+One wrinkle worth knowing: for actions with a destructive swap (`dismisses`, or any `performs` with `swap: :delete`), a successful response removes the element — which would make an error invisible. Weft overrides the swap on error responses (via `HX-Reswap`) so the error rendering replaces the component instead of vanishing with it. The replacement also arrives correctly shaped: recovery fragments adopt the failing component's wrapper tag (via `:component_tag`, below), so a failed delete on a table row produces an error *row* the table can legally contain.
 
 **In page context** — a full-document render, or a request no route matched — the Router walks the page's chain (for routing misses, the base `Weft::Page` chain, which lands on the not-found page). A traditional request gets the recovery page as a complete document; an htmx request gets just the page's body content, since the document shell is already on the client.
 
@@ -103,7 +103,7 @@ If the recovery render itself raises, that frame is skipped (and the failure sti
 
 ## Auto-injected recovery params
 
-A recovery target usually wants context: what failed, where, with what status. The Router offers six values, injected **schema-gated**: each is passed only if the target *declares a param of that name*. Declaring the param is the opt-in; anything not declared is never injected, so nothing leaks into renders (or URLs) uninvited.
+A recovery target usually wants context: what failed, where, with what status. The Router offers seven values, injected **schema-gated**: each is passed only if the target *declares a param of that name*. Declaring the param is the opt-in; anything not declared is never injected, so nothing leaks into renders (or URLs) uninvited.
 
 | Param | Value |
 | --- | --- |
@@ -111,6 +111,7 @@ A recovery target usually wants context: what failed, where, with what status. T
 | `:request_path` | The path of the failing request. |
 | `:status_code` | The resolved HTTP status (the exception's, or 500). |
 | `:component_id` | The failing component's DOM id. |
+| `:component_tag` | The failing component's wrapper tag name. |
 | `:retry_url` | A GET URL that re-renders the failing component with its current params. |
 | `:attempts_remaining` | On a live stream: failed pushes left before the stream closes. Absent elsewhere. |
 
@@ -135,8 +136,9 @@ end
 
 Notes on the individual values:
 
-- **These six names are reserved** on any class used as a recovery target. Declaring a param with one of these names *means* "inject the recovery value here" — so don't reuse them for your own data on error components, or on any component/page reachable through a `recovers` edge.
+- **These seven names are reserved** on any class used as a recovery target. Declaring a param with one of these names *means* "inject the recovery value here" — so don't reuse them for your own data on error components, or on any component/page reachable through a `recovers` edge.
 - **`:component_id`** preserves DOM identity: render your error wrapper with it as the element id (the gem's defaults do) and the error lands under the failing component's original id — so multiple simultaneous failures each swap into their own slot rather than colliding.
+- **`:component_tag`** keeps swaps *valid*: return it from your error component's `tag_name` (the gem's defaults do) and a failure inside a `<tr>` or `<li>` component produces a fragment its surroundings can legally contain, instead of a `<div>` forced somewhere divs can't go. Weft reads the tag without re-running the failed construction; when a component computes its tag from instance state, the value falls back to absent and the target renders with its own default tag.
 - **`:retry_url`** feeds the [`retry:` preset](dsl.md#presets): one button attribute, and the user can re-request the failed component in place. For a failed *action*, the URL renders the underlying component's view — a fresh look, not a replay of the failed action. On a stream's final frame it feeds [`reopen_stream:`](dsl.md#presets) the same way.
 - **`:attempts_remaining`** is also the push-path context signal: non-nil only when rendering a recovery frame for a live stream. Its presence lets one error component serve both paths — the gem default renders its request shape when it's nil and its stream shape otherwise.
 - When a recovery resolves to a **redirect** (page target from component context), only `:request_path` and `:status_code` travel — the others have no meaning in a URL.
