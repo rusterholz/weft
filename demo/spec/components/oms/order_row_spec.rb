@@ -42,4 +42,28 @@ RSpec.describe Oms::OrderRow, type: :component do
     expect(html).to include('hx-trigger="click"')
     expect(html).to include('hx-target="closest tr"')
   end
+
+  it "derives a unique DOM id from the handed-off order id" do
+    html = render_weft_html({ order: order }) { order_row order_id: order.id, order: order }
+    expect(html).to include("id=\"oms-order-row-#{order.id}\"")
+  end
+
+  it "wires a cancel dismissal with a browser confirm" do
+    html = render_weft_html({ order: order }) { order_row order_id: order.id, order: order }
+    expect(html).to include('hx-delete="/_components/oms/order_row/cancel"')
+    expect(html).to include('hx-swap="delete"')
+    expect(html).to include("hx-confirm=")
+  end
+
+  it "destroys the order when the cancel action runs" do
+    action = described_class.actions[%i[cancel delete]]
+    Weft::DSL::Sandbox.run(Weft::Params.new(order_id: order.id), &action.callable)
+
+    expect(Oms::Order.exists?(order.id)).to be(false)
+  end
+
+  it "renders standalone from the wire, deriving the order itself" do
+    html = render_weft_html(wire: { order_id: order.id }) { order_row }
+    expect(html).to include("Alice Smith")
+  end
 end

@@ -21,7 +21,7 @@ module Oms
       super
       add_class "order-detail"
 
-      td(colspan: "7", style: "background:#f8fafc; padding:1rem 1.5rem") do
+      td(colspan: "8", style: "background:#f8fafc; padding:1rem 1.5rem") do
         render_header_row
         render_details_dl
         render_shipments_line if params.shipments.any?

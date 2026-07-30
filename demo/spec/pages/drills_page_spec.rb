@@ -44,6 +44,10 @@ RSpec.describe DrillsPage, type: :component do
     expect(rendered).to include('hx-get="/_components/drills/redirect_boom"')
   end
 
+  it "embeds the destructive-swap drill rows with live delete triggers" do
+    expect(rendered).to include('hx-delete="/_components/drills/boom_row/remove"')
+  end
+
   it "links a live order for the stream-outage drill when shipments exist" do
     warehouse = Logistics::Warehouse.create!(name: "Main WH", lat: 1.0, lon: 1.0)
     order = Oms::Order.create!(customer_name: "Alice", lat: 0.0, lon: 0.0)
