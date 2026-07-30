@@ -763,6 +763,40 @@ RSpec.describe Weft::Component do
         to raise_error(Weft::NotReceived, /PlainStrictSlip.*:order/)
     end
 
+    it "lands a handed value over a dual derivation without forcing it" do
+      klass = Class.new(described_class) do
+        def self.name = "PlainDualSlip"
+        receives :order
+        derives(:order) { |_p| raise "standalone-only derivation must not force" }
+
+        def build(attributes = {})
+          super
+          span params.order.name
+        end
+      end
+      handed = order
+      ctx = Arbre::Context.new { insert_tag(klass, order: handed) }
+
+      expect(ctx.to_s).to include("Drum of cable")
+    end
+
+    it "leaves unread lazy derivations unforced through the hand-off door" do
+      klass = Class.new(described_class) do
+        def self.name = "PlainLazySlip"
+        receives :order
+        derives(:audit_trail) { |_p| raise "unread keys must stay lazy" }
+
+        def build(attributes = {})
+          super
+          span params.order.name
+        end
+      end
+      handed = order
+      ctx = Arbre::Context.new { insert_tag(klass, order: handed) }
+
+      expect(ctx.to_s).to include("Drum of cable")
+    end
+
     it "applies declared defaults when nothing is handed" do
       klass = Class.new(described_class) do
         def self.name = "PlainSoftSlip"

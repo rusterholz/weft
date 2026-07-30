@@ -56,6 +56,15 @@ module Weft
       @data.compact
     end
 
+    # @api private
+    # A same-bag copy with +values+ overlaid at their keys. Unlike
+    # to_h-then-merge, nothing materializes: untouched thunks stay lazy, nil
+    # entries stay resolved-absent, provenance rides. The plain-context
+    # hand-off fallback lands received values through this.
+    def overlay(values)
+      self.class.new(@data.merge(values), @provenance)
+    end
+
     def [](key)
       value = @data[key]
       value.is_a?(Thunk) ? force!(key, value) : value
