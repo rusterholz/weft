@@ -13,8 +13,9 @@ module Weft
       param :request_path, type: :string
       param :status_code, type: :integer
 
+      title "Not found"
+
       def build(attributes = {})
-        attributes[:title] ||= "Not found"
         super
         insert_tag(
           Weft::Defaults::NotFoundComponent,
