@@ -6,8 +6,9 @@
 class DrillsPage < ApplicationPage
   self.page_path = "/drills"
 
+  title "Error drills"
+
   def build(attributes = {})
-    attributes[:title] ||= "Error drills"
     super
     div(class: "page-header") { h1 "Error drills" }
     render_missing_record_drill

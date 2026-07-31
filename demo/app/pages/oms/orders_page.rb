@@ -7,8 +7,9 @@ module Oms
     param :status, type: :string
     param :page, type: :integer
 
+    title "Orders"
+
     def build(attributes = {})
-      attributes[:title] ||= "Orders"
       super
       div(class: "page-header d-flex justify-content-between align-items-center") do
         h1 "Orders"

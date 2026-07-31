@@ -16,9 +16,6 @@ module DropshipUI
     register_stylesheet "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap"
     register_stylesheet "css/design-system.css"
 
-    def build(attributes = {})
-      attributes[:title] ||= "Dropship Co."
-      super
-    end
+    title "Dropship Co."
   end
 end
