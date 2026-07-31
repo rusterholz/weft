@@ -91,7 +91,7 @@ module Weft
       # plain params hash, without instantiating. The Router uses this to
       # populate the `:component_id` auto-injected param when a recovery
       # target opts in. Single source of truth; the instance method delegates.
-      def weft_id_for(params = {})
+      def weft_dom_id_for(params = {})
         base = name.underscore.tr("/", "-").tr("_", "-")
         primary_value = params.respond_to?(:values) ? params.values.first : nil
         primary_value ? "#{base}-#{primary_value}" : base
@@ -141,7 +141,7 @@ module Weft
       apply_received_fallback(attributes) unless arbre_context.respond_to?(:take_received!)
       warn_declared_chrome_collisions(attributes)
       super
-      self.id = weft_id
+      self.id = weft_dom_id
       apply_refresh_attrs
       apply_push_attrs
     end
@@ -159,8 +159,8 @@ module Weft
     end
 
     # Convention-based DOM ID: dasherized class name + primary wire-param value.
-    def weft_id
-      self.class.weft_id_for(serializable_params)
+    def weft_dom_id
+      self.class.weft_dom_id_for(serializable_params)
     end
 
     private
@@ -191,7 +191,7 @@ module Weft
 
       set_attribute "hx-ext", "sse"
       set_attribute "sse-connect", stream_url
-      set_attribute "sse-swap", weft_id
+      set_attribute "sse-swap", weft_dom_id
       set_attribute "sse-close", Weft::Router::Streaming::CLOSE_EVENT
       set_attribute "hx-swap", "innerHTML"
     end

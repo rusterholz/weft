@@ -834,7 +834,7 @@ RSpec.describe Weft::Router do
       component = router.send(:build_component_with_wire, stat_card_class, { status: "shipped", value: 10 })
 
       expect(component).to be_a(Weft::Component)
-      expect(component.weft_id).to eq("stat-card-shipped")
+      expect(component.weft_dom_id).to eq("stat-card-shipped")
       expect(component.content).to include("shipped")
       expect(component.to_s).to include('id="stat-card-shipped"')
     end

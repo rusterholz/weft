@@ -64,7 +64,7 @@ module Weft
       path = route_path(component.class.resolved_component_path)
       {
         "hx-#{method}" => path,
-        "hx-target" => target || "##{component.weft_id}",
+        "hx-target" => target || "##{component.weft_dom_id}",
         "hx-swap" => self.class.resolve_swap(swap),
         "hx-vals" => component.serializable_params.to_json
       }

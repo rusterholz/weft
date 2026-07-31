@@ -194,7 +194,7 @@ module Weft
       def navigate_attrs(component, overrides)
         {
           "hx-get" => component.weft_url(**overrides),
-          "hx-target" => "##{component.weft_id}",
+          "hx-target" => "##{component.weft_dom_id}",
           "hx-swap" => "outerHTML"
         }
       end

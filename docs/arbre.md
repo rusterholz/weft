@@ -255,7 +255,7 @@ class Pager < Weft::Component
   def build(attributes = {})
     super
     panel = enclosing(Weft::Component)     # the nearest ancestor component
-    button "Next →", loads: panel.class, target: "##{panel.weft_id}"
+    button "Next →", loads: panel.class, target: "##{panel.weft_dom_id}"
   end
 end
 ```
@@ -270,7 +270,7 @@ What you can match on:
 
 The return value is the matching node — a component for a class match, a plain element for a tag.
 
-**What to rely on.** The ancestor you reach mid-`build` is itself mid-build, above you on the stack — so lean on its *identity* and *params* (its class, `weft_id`, route, resolved params, all fixed at construction), not on instance variables its own `build` may not have set yet. And mind one edge of the refining block: it runs only on nodes that already matched the positional, but `closest(Weft::Component, &:paginatable?)` still raises if a matched component doesn't define `paginatable?` — prefer matching the **role module** (`closest(Paginatable)`) over a predicate where you can.
+**What to rely on.** The ancestor you reach mid-`build` is itself mid-build, above you on the stack — so lean on its *identity* and *params* (its class, `weft_dom_id`, route, resolved params, all fixed at construction), not on instance variables its own `build` may not have set yet. And mind one edge of the refining block: it runs only on nodes that already matched the positional, but `closest(Weft::Component, &:paginatable?)` still raises if a matched component doesn't define `paginatable?` — prefer matching the **role module** (`closest(Paginatable)`) over a predicate where you can.
 
 One include-self subtlety: because `closest` includes self and *every* component is a `Weft::Component`, `closest(Weft::Component)` returns **self**. "My nearest ancestor component" is `enclosing(Weft::Component)` (or `closest(Weft::Component, include_self: false)`).
 
