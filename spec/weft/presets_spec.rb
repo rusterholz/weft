@@ -31,9 +31,9 @@ RSpec.describe Weft::Presets do
       expect(preset).to eq(trigger: :hover, swap: :fill)
     end
 
-    it "inline_expand has click trigger and after swap" do
+    it "inline_expand has click-once trigger and after swap" do
       preset = described_class.lookup(:inline_expand)
-      expect(preset).to eq(trigger: :click, swap: :after)
+      expect(preset).to eq(trigger: :click_once, swap: :after)
     end
 
     it "lazy has visible trigger, fill swap, and self target" do

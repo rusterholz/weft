@@ -55,6 +55,25 @@ RSpec.describe Weft::Action do
     end
   end
 
+  describe ".resolve_trigger" do
+    {
+      click: "click",
+      click_once: "click once",
+      change: "change",
+      hover: "mouseenter once",
+      visible: "revealed",
+      input: "input changed delay:300ms"
+    }.each do |symbol, htmx_value|
+      it "resolves :#{symbol} to #{htmx_value.inspect}" do
+        expect(described_class.resolve_trigger(symbol)).to eq(htmx_value)
+      end
+    end
+
+    it "passes unrecognized strings through for raw htmx grammar" do
+      expect(described_class.resolve_trigger("keyup[key=='Enter'] from:body")).to eq("keyup[key=='Enter'] from:body")
+    end
+  end
+
   describe "#to_htmx_attrs" do
     it "generates htmx attributes from component state" do
       action = described_class.new(name: :advance, method: :post, renders: component_class)

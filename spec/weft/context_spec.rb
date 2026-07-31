@@ -934,11 +934,11 @@ RSpec.describe Weft::Context do
       expect(html).to include('hx-swap="innerHTML"')
     end
 
-    it "inline_expand: click + after" do
+    it "inline_expand: click-once + after" do
       html = render_with_preset(:inline_expand, target: "closest tr")
 
       expect(html).to include('hx-swap="afterend"')
-      expect(html).to include('hx-trigger="click"')
+      expect(html).to include('hx-trigger="click once"')
     end
 
     it "lazy: visible + fill + self" do
