@@ -26,14 +26,14 @@ module Weft
 
         # Sugar for performs with swap: :delete. Removes the component from
         # the DOM on success. The callable (if given) runs for side effects;
-        # the return value is rendered but htmx ignores the response body.
+        # the success response carries no body (OOB includes still ride).
         #
         #   dismisses :close                          # no side effects
         #   dismisses :remove do |params|             # with side effects
         #     Item.find(params.item_id).archive!
         #   end
-        def dismisses(name = nil, method: :delete, &)
-          performs(name, method: method, swap: :delete, &)
+        def dismisses(name = nil, method: :delete, target: nil, &)
+          performs(name, method: method, swap: :delete, target: target, &)
         end
 
         # Declare a transfer — an action that renders a different component.

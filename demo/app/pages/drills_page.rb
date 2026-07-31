@@ -14,6 +14,7 @@ class DrillsPage < ApplicationPage
     render_routing_miss_drill
     render_validation_drill
     render_component_failure_drill
+    render_destructive_swap_drill
     render_page_failure_drill
     render_redirect_recovery_drill
     render_stream_outage_drill
@@ -58,6 +59,20 @@ class DrillsPage < ApplicationPage
            "swaps in where the button was, and the rest of this page is untouched. " \
            "Retry re-fails, on purpose.", class: "text-muted"
       button "Trigger component failure", load_more: Drills::BoomComponent, class: drill_button
+    end
+  end
+
+  def render_destructive_swap_drill
+    card(title: "Destructive-swap failure", class: "mb-3") do
+      para "Each row's delete always fails server-side: the error swaps in as a real " \
+           "table row where the deleted one would have vanished — the rest of the " \
+           "table is untouched.", class: "text-muted"
+      table(class: "table table-data mb-0") do
+        tbody do
+          boom_row label: "Doomed row one"
+          boom_row label: "Doomed row two"
+        end
+      end
     end
   end
 

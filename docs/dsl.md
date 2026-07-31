@@ -264,7 +264,9 @@ dismisses :archive do |params|           # with side effects
 end
 ```
 
-Sugar for `performs` with `method: :delete, swap: :delete`: on success, the component is removed from the page entirely. The callable, if given, runs for side effects. If it raises, Weft overrides the destructive swap (via `HX-Reswap`) so the error rendering appears where the component was, rather than the element silently vanishing.
+Sugar for `performs` with `method: :delete, swap: :delete`: on success, the component is removed from the page entirely. The callable, if given, runs for side effects, and the success response carries no body — htmx removes the element on its own, and Weft never re-renders a component whose record was just deleted, so `build` needs no guard against the vanished state. Out-of-band [`includes`](#includes--companions-in-the-same-response) companions still ride the response. Like `performs`, it accepts a `target:` for the occasional removal that should land elsewhere.
+
+If the callable raises, Weft overrides the destructive swap (via `HX-Reswap`) so the error rendering appears where the component was, rather than the element silently vanishing — and the error fragment [adopts the component's own tag](error-handling.md#auto-injected-recovery-params), so a failed row delete produces an error `<tr>`, not a `<div>` wedged into a table.
 
 ### `triggers` — announce to the rest of the page
 

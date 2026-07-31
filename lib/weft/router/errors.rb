@@ -9,8 +9,8 @@ module Weft
     # for unmatched errors and recovery handlers that themselves raise.
     #
     # Also owns the schema-gated auto-injection of recovery params
-    # (:exception, :request_path, :status_code, :component_id, :retry_url,
-    # :attempts_remaining).
+    # (:exception, :request_path, :status_code, :component_id, :component_tag,
+    # :retry_url, :attempts_remaining).
     #
     # Depends on Router internals: `headers`, `status`, `request`,
     # `redirect`, `htmx_request?`.
@@ -29,6 +29,7 @@ module Weft
         { key: :request_path,       redirect_safe: true },
         { key: :status_code,        redirect_safe: true },
         { key: :component_id,       redirect_safe: false },
+        { key: :component_tag,      redirect_safe: false },
         { key: :retry_url,          redirect_safe: false },
         { key: :attempts_remaining, redirect_safe: false }
       ].freeze
@@ -147,6 +148,7 @@ module Weft
         target = component_class.resolve_recovery_target(entry)
         component_ctx = {
           originating_id: component_class.weft_id_for(resolved_params),
+          originating_tag: component_tag_for(component_class),
           retry_url: compute_retry_url(component_class, resolved_params),
           status: recovery_status(error, entry)
         }
@@ -156,6 +158,17 @@ module Weft
         else
           render_recovery_component(target, merged_params, error, component_ctx: component_ctx)
         end
+      end
+
+      # The failing component's wrapper tag, so a recovery fragment can render
+      # as a like-for-like element (a div swapped into <tr> position is invalid
+      # table content). `allocate` skips initialize — no param resolution, so
+      # reading the tag can't re-raise the failure; a tag_name that depends on
+      # instance state falls back to nil (target renders its own default).
+      def component_tag_for(component_class)
+        component_class.allocate.tag_name
+      rescue StandardError
+        nil
       end
 
       # GET URL to render the failing component fresh: its resolved_component_path
@@ -253,6 +266,7 @@ module Weft
           request_path: request.path,
           status_code: component_ctx[:status] || recovery_status(error),
           component_id: component_ctx[:originating_id],
+          component_tag: component_ctx[:originating_tag],
           retry_url: component_ctx[:retry_url],
           attempts_remaining: component_ctx[:attempts_remaining]
         }

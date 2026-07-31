@@ -14,6 +14,7 @@ module Weft
       # ErrorComponent — preserves DOM identity when a component-context
       # NotFound recovers through this.
       param :component_id, type: :string
+      param :component_tag, type: :string
       param :request_path, type: :string
       param :status_code, type: :integer
 
@@ -34,6 +35,12 @@ module Weft
       # :component_id. Otherwise fall back to the class-derived default.
       def weft_id
         @params.component_id || super
+      end
+
+      # Adopt the failing component's wrapper tag when the Router injected
+      # :component_tag (see ErrorComponent#tag_name).
+      def tag_name
+        @params.component_tag || super
       end
 
       private

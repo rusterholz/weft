@@ -14,10 +14,11 @@ module Oms
         tr do
           th ""
           %w[Order Customer Items Shipments Status Created].each { |c| th c }
+          th ""
         end
       end
       tbody do
-        params.orders.each { |o| order_row(order: o) }
+        params.orders.each { |o| order_row(order_id: o.id, order: o) }
       end
     end
 

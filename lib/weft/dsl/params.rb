@@ -216,9 +216,12 @@ module Weft
         provenance
       end
 
+      # Checks required_hand_off? before reading the key: a required hand-off
+      # is receives-only (never thunked), so the read can't force anything —
+      # and dual keys short-circuit without touching their lazy derivation.
       def validate_hand_offs!(bag)
         self.class.received_params.each_key do |key|
-          raise_not_received!(key) if bag[key].nil? && required_hand_off?(key)
+          raise_not_received!(key) if required_hand_off?(key) && bag[key].nil?
         end
       end
 
@@ -300,9 +303,8 @@ module Weft
       def apply_received_fallback(attributes)
         keys = self.class.received_params.keys & attributes.keys
         handed = keys.to_h { |k| [k, attributes.delete(k)] }
-        bag = @params.to_h.merge(handed.compact)
-        validate_hand_offs!(bag)
-        @params = Weft::Params.new(bag)
+        @params = @params.overlay(handed.compact)
+        validate_hand_offs!(@params)
       end
 
       # A builder kwarg naming a declared param renders as an HTML attribute
