@@ -87,17 +87,29 @@ module Weft
         end.to_s
       end
 
+      # Value classes whose instances may suffix a DOM id. An allowlist:
+      # arrays, hashes, and rich objects stringify to selector-hostile junk
+      # ("member-roster-[]" breaks querySelector), so only honest scalars ride.
+      SCALAR_ID_CLASSES = [String, Symbol, Numeric, TrueClass, FalseClass].freeze
+
       # Compute the would-be DOM ID for an instance of this class given a
       # plain params hash, without instantiating. The Router uses this to
       # populate the `:component_id` auto-injected param when a recovery
       # target opts in. Single source of truth; the instance method delegates.
+      # The primary value suffixes only when it's a non-blank scalar — nil,
+      # "", and non-scalar values all derive the same bare class id, so a
+      # component's identity is stable across the ways "no value" arrives.
       def weft_dom_id_for(params = {})
         base = name.underscore.tr("/", "-").tr("_", "-")
         primary_value = params.respond_to?(:values) ? params.values.first : nil
-        primary_value ? "#{base}-#{primary_value}" : base
+        identity_suffix?(primary_value) ? "#{base}-#{primary_value}" : base
       end
 
       private
+
+      def identity_suffix?(value)
+        SCALAR_ID_CLASSES.any? { |klass| value.is_a?(klass) } && !value.to_s.empty?
+      end
 
       # Gem-default name-based path derivation, plus the well-formedness guard.
       # Mirrors {Weft::Page.default_page_path}: a routable class whose demodulized

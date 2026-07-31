@@ -944,6 +944,41 @@ RSpec.describe Weft::Component do
 
       expect(component.weft_dom_id).to eq("oms-order-header-42")
     end
+
+    it "derives the same unsuffixed id for a blank and an absent primary value" do
+      component_class = Class.new(described_class) do
+        def self.name = "ContactResults"
+        param :q
+      end
+
+      expect(component_class.weft_dom_id_for(q: "")).to eq("contact-results")
+      expect(component_class.weft_dom_id_for(q: nil)).to eq("contact-results")
+      expect(component_class.weft_dom_id_for({})).to eq("contact-results")
+    end
+
+    it "skips the suffix for non-scalar primary values" do
+      component_class = Class.new(described_class) do
+        def self.name = "MemberRoster"
+        param :ids
+      end
+
+      expect(component_class.weft_dom_id_for(ids: [])).to eq("member-roster")
+      expect(component_class.weft_dom_id_for(ids: %w[a b])).to eq("member-roster")
+      expect(component_class.weft_dom_id_for(ids: { a: 1 })).to eq("member-roster")
+      expect(component_class.weft_dom_id_for(ids: Object.new)).to eq("member-roster")
+    end
+
+    it "suffixes every scalar identity value, false included" do
+      component_class = Class.new(described_class) do
+        def self.name = "FilterCard"
+        param :key
+      end
+
+      expect(component_class.weft_dom_id_for(key: 42)).to eq("filter-card-42")
+      expect(component_class.weft_dom_id_for(key: :hot)).to eq("filter-card-hot")
+      expect(component_class.weft_dom_id_for(key: true)).to eq("filter-card-true")
+      expect(component_class.weft_dom_id_for(key: false)).to eq("filter-card-false")
+    end
   end
 
   describe "resolved_component_path" do
