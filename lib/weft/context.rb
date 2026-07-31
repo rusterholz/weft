@@ -5,6 +5,7 @@ require "arbre"
 require "weft/context/expansion"
 require "weft/context/interception"
 require "weft/context/modifiers"
+require "weft/context/wiring"
 
 module Weft
   # Arbre::Context subclass that intercepts element creation to expand Weft
@@ -18,6 +19,7 @@ module Weft
     include Expansion
     include Interception
     include Modifiers
+    include Wiring
 
     # The render's wire params (query/body/path values), carried on the
     # context so every component in the tree resolves its own declared
