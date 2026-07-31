@@ -147,7 +147,7 @@ module Weft
         merged_params = resolved_params.merge(block_result)
         target = component_class.resolve_recovery_target(entry)
         component_ctx = {
-          originating_id: component_class.weft_id_for(resolved_params),
+          originating_id: component_class.weft_dom_id_for(resolved_params),
           originating_tag: component_tag_for(component_class),
           retry_url: compute_retry_url(component_class, resolved_params),
           status: recovery_status(error, entry)
@@ -221,7 +221,7 @@ module Weft
         merged = resolved_params.merge(invoke_recovery_block(entry, resolved_params, error))
         target = component_class.resolve_recovery_target(entry)
         component_ctx = {
-          originating_id: component_class.weft_id_for(resolved_params),
+          originating_id: component_class.weft_dom_id_for(resolved_params),
           retry_url: compute_retry_url(component_class, resolved_params),
           attempts_remaining: attempts_remaining,
           status: recovery_status(error, entry)

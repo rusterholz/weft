@@ -15,6 +15,9 @@ module PagerSpecFixtures
 
   class Panel < Weft::Component
     def self.name = "FakeTarget"
+    # A real pageable panel is always routable (the pager's swaps re-fetch
+    # it); without this the load-target routability lint rightly raises.
+    routable!
 
     class << self
       attr_accessor :pager_attrs

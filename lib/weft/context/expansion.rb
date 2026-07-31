@@ -20,7 +20,8 @@ module Weft
     # stays honest form HTML — and a claimed kwarg that cannot resolve
     # raises Weft::InvalidUsage rather than leaking into the HTML. The
     # MODIFIER rank (trigger:/push_url:/confirm:/swap:/target:) lives in
-    # Context::Modifiers.
+    # Context::Modifiers; the hx-* builders and tree lookups the expanders
+    # assemble from live in Context::Wiring.
     module Expansion
       # @api private
       def expand_weft_attrs(attrs, for_class: nil)
@@ -34,9 +35,7 @@ module Weft
 
       # @api private
       # Whether an attrs hash carries any Weft kwarg.
-      def weft_kwarg?(hash)
-        interaction_kwarg?(hash) || modifier_kwarg?(hash) || claimed?(hash, :with)
-      end
+      def weft_kwarg?(hash) = interaction_kwarg?(hash) || modifier_kwarg?(hash) || claimed?(hash, :with)
 
       private
 
@@ -79,15 +78,6 @@ module Weft
         expanded
       end
 
-      # On <form> elements, also emit the HTML action and method attributes so
-      # non-JS submission works (browser POSTs to the same URL htmx would).
-      # Drop hx-vals because the form fields are the submission payload —
-      # hx-vals would duplicate or shadow them.
-      def augment_for_form(expanded, action, htmx)
-        url = htmx["hx-#{action.method}"]
-        expanded.except("hx-vals").merge("action" => url, "method" => action.method.to_s)
-      end
-
       def expand_navigate(attrs)
         return unless claimed?(attrs, :navigate)
 
@@ -96,11 +86,24 @@ module Weft
           raise Weft::InvalidUsage, "navigate: expects a Hash of wire-param overrides, got #{overrides.inspect}"
         end
 
+        component = navigation_component!
+        validate_navigate_keys!(component, overrides)
+        attrs.except(:navigate).merge(navigate_attrs(component, overrides))
+      end
+
+      # The enclosing component navigate: re-fetches — present and routable,
+      # or the wiring could only 404.
+      def navigation_component!
         component = find_nearest_component
         raise Weft::InvalidUsage, "navigate: has no enclosing component whose route it could re-fetch" if component.nil?
 
-        validate_navigate_keys!(component, overrides)
-        attrs.except(:navigate).merge(navigate_attrs(component, overrides))
+        unless component.class.routable?
+          raise Weft::InvalidUsage,
+                "navigate: re-fetches #{component.class.name}, which is not routable — its URL can only 404. " \
+                "Drop the class's abstract!/dependent! marking, or reach a routable ancestor with enclosing + loads:"
+        end
+
+        component
       end
 
       # navigate: re-fetches the component's own route, and the resulting
@@ -124,6 +127,7 @@ module Weft
           raise Weft::InvalidUsage, "loads: expects a component Class, got #{target_class.inspect}"
         end
 
+        ensure_routable_target!(target_class, :loads)
         validate_loads_kwargs!(mods)
         remaining = attrs.except(:loads, :with)
         remaining.merge(loads_attrs(target_class, resolve_with(attrs), mods[:swap], mods[:target]))
@@ -149,72 +153,31 @@ module Weft
       end
 
       def build_preset_attrs(attrs, mods, preset_key, target_or_url, preset)
+        ensure_routable_target!(target_or_url, preset_key) if target_or_url.is_a?(Class)
         target = mods[:target] || preset[:target]
         raise Weft::InvalidUsage, "#{preset_key}: requires target: (e.g., target: :self)" unless target
 
-        swap = mods[:swap] || preset[:swap]
-        htmx = if target_or_url.is_a?(String)
-                 htmx_get_attrs(target_or_url, swap, target)
-               else
-                 loads_attrs(target_or_url, resolve_with(attrs), swap, target)
-               end
-        htmx["hx-trigger"] = resolve_trigger(preset[:trigger]) if preset[:trigger]
+        htmx = preset_wiring(attrs, target_or_url, preset, mods[:swap] || preset[:swap], target)
         attrs.except(preset_key, :with).merge(htmx)
       end
 
-      def resolve_with(attrs)
-        attrs[:with] || find_nearest_component&.serializable_params || {}
-      end
+      def resolve_with(attrs) = attrs[:with] || find_nearest_component&.serializable_params || {}
 
       def validate_loads_kwargs!(mods)
         raise Weft::InvalidUsage, "loads: requires swap: (e.g., swap: :fill)" unless mods[:swap]
         raise Weft::InvalidUsage, "loads: requires target: (e.g., target: :self)" unless mods[:target]
       end
 
-      def find_action_context(action_name)
-        el = current_arbre_element
-        while el
-          return el if el.is_a?(Weft::Component) && el.class.action_for(action_name)
+      # A load target is fetched over the wire at click time — a non-routable
+      # class wires a URL that can only 404, silently. Raise at render instead.
+      # String URLs (retry-style presets) are unverifiable and pass through;
+      # transfers to: is exempt by design (a render target, not a route).
+      def ensure_routable_target!(target_class, kwarg)
+        return if target_class.routable?
 
-          el = el.parent
-        end
-        nil
-      end
-
-      def find_nearest_component
-        el = current_arbre_element
-        while el
-          return el if el.is_a?(Weft::Component)
-
-          el = el.parent
-        end
-        nil
-      end
-
-      def navigate_attrs(component, overrides)
-        {
-          "hx-get" => component.weft_url(**overrides),
-          "hx-target" => "##{component.weft_id}",
-          "hx-swap" => "outerHTML"
-        }
-      end
-
-      def loads_attrs(target_class, with_attrs, swap, target)
-        htmx_get_attrs(component_url(target_class, with_attrs), swap, target)
-      end
-
-      def component_url(target_class, with_attrs)
-        path = target_class.resolved_component_path
-        params = with_attrs.compact
-        params.empty? ? path : "#{path}?#{URI.encode_www_form(params)}"
-      end
-
-      def htmx_get_attrs(url, swap, target)
-        {
-          "hx-get" => url,
-          "hx-swap" => Action.resolve_swap(swap),
-          "hx-target" => resolve_target(target)
-        }
+        raise Weft::InvalidUsage,
+              "#{kwarg}: targets #{target_class.name}, which is not routable — the generated URL can only 404. " \
+              "Mark it routable! (or drop its abstract!/dependent! marking) so it can serve standalone fetches"
       end
     end
   end

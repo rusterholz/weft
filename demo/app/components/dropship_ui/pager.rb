@@ -57,7 +57,7 @@ module DropshipUI
         button label,
                paginate: target_panel.class,
                with: params.extra_params.merge(page: target_page),
-               target: "##{target_panel.weft_id}",
+               target: "##{target_panel.weft_dom_id}",
                push_url: build_push_url(target_page),
                class: classes
       end

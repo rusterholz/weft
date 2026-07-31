@@ -82,6 +82,8 @@ Declared param names always win over hash methods — if you declare `param :cou
 
 Only a component's *own* declared params serialize — into its refresh and stream URLs and its action payloads. That's the refresh contract: a standalone request must be able to reconstruct the component from its URL, so only URL-safe wire state belongs there. The other three doors are server-side and never serialize.
 
+The first `param` also anchors the component's DOM identity: the wrapper's element id is the dasherized class name suffixed with the first declared param's value — `StatCard` with `status: "shipped"` renders `id="stat-card-shipped"`, which is how sibling instances stay individually addressable. Declare the identifying param first. The suffix rides only when the value is a non-blank scalar (String, Symbol, number, or boolean): `nil`, `""`, and non-scalar values all derive the same bare class id, so a component's identity is stable across the different ways "no value" can arrive.
+
 Declaring a param has a routing consequence: a component with params (or any verb below) is considered independently addressable and gets its own route. See [Routing](routing.md).
 
 ### `receives` — caller hand-offs
@@ -336,9 +338,9 @@ A kwarg that is unmistakably Weft's but can't make sense **raises `Weft::Invalid
 | Kwarg | Rank | Weft's when… | Otherwise |
 | --- | --- | --- | --- |
 | `action:` | interaction | the value is a Symbol naming a declared action | String values are plain HTML (`form action: "/path"`); an unmatched Symbol raises |
-| `navigate:` | interaction | the value is a Hash of param overrides | any other value raises |
-| `loads:` | interaction | the value is a component Class | any other value raises |
-| preset names (`tooltip:`, …) | interaction | the value is a Class or URL String | any other value raises |
+| `navigate:` | interaction | the value is a Hash of param overrides | any other value raises; so does re-fetching a non-routable component |
+| `loads:` | interaction | the value is a component Class | any other value raises; so does a non-routable target |
+| preset names (`tooltip:`, …) | interaction | the value is a Class or URL String | any other value raises; so does a non-routable Class target |
 | `target:` | modifier | an interaction kwarg is present | plain HTML (`target: "_blank"` on a link works as ever) |
 | `swap:` | modifier | an interaction kwarg is present | passes through as an attribute, with a one-time warning |
 | `trigger:` | modifier | always | — |
@@ -390,6 +392,8 @@ button "Show manifest", loads: Logistics::ShipmentManifest,
 ```
 
 Loads a *different* component into a chosen DOM location on click (or whatever `trigger:` you add). `swap:` and `target:` are required — `loads:` is the fully-explicit primitive underneath the [presets](#presets), which exist to fill those in for common patterns. `with:` supplies the target component's wire params; omitted, it defaults to the enclosing component's current params.
+
+The target must be [routable](routing.md#what-routes--and-what-doesnt) — the click fetches it at its own URL. A non-routable target (here or as a preset's Class value) raises `Weft::InvalidUsage` at render time rather than wiring a fetch that could only 404; a purely presentational target opts in with `routable!`.
 
 ### `trigger:`
 

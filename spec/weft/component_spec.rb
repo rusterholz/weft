@@ -313,7 +313,7 @@ RSpec.describe Weft::Component do
       end.children.first
 
       expect(component.get_attribute("hx-get")).to eq("/_components/quietly_deriving_panel?status=hot")
-      expect(component.weft_id).to eq("quietly-deriving-panel-hot")
+      expect(component.weft_dom_id).to eq("quietly-deriving-panel-hot")
       expect(runs).to eq(0)
     end
 
@@ -877,7 +877,7 @@ RSpec.describe Weft::Component do
       expect(component.weft_url).to eq("/_components/dual_card?status=fresh")
     end
 
-    it "derives weft_id from own wire params only, never a hand-off" do
+    it "derives weft_dom_id from own wire params only, never a hand-off" do
       klass = Class.new(described_class) do
         def self.name = "SlipCard"
         receives :order
@@ -885,7 +885,7 @@ RSpec.describe Weft::Component do
       handed = order
       component = Weft::Context.new { insert_tag(klass, order: handed) }.children.first
 
-      expect(component.weft_id).to eq("slip-card")
+      expect(component.weft_dom_id).to eq("slip-card")
     end
 
     it "keeps hand-offs out of the SSE stream URL" do
@@ -903,7 +903,7 @@ RSpec.describe Weft::Component do
     end
   end
 
-  describe "weft_id" do
+  describe "weft_dom_id" do
     it "derives ID from class name and primary param value" do
       component_class = Class.new(described_class) do
         def self.name = "StatCard"
@@ -915,7 +915,7 @@ RSpec.describe Weft::Component do
       end
       component = ctx.children.first
 
-      expect(component.weft_id).to eq("stat-card-shipped")
+      expect(component.weft_dom_id).to eq("stat-card-shipped")
     end
 
     it "uses class name alone when no attributes are declared" do
@@ -928,7 +928,7 @@ RSpec.describe Weft::Component do
       end
       component = ctx.children.first
 
-      expect(component.weft_id).to eq("global-stats")
+      expect(component.weft_dom_id).to eq("global-stats")
     end
 
     it "handles namespaced class names" do
@@ -942,7 +942,42 @@ RSpec.describe Weft::Component do
       end
       component = ctx.children.first
 
-      expect(component.weft_id).to eq("oms-order-header-42")
+      expect(component.weft_dom_id).to eq("oms-order-header-42")
+    end
+
+    it "derives the same unsuffixed id for a blank and an absent primary value" do
+      component_class = Class.new(described_class) do
+        def self.name = "ContactResults"
+        param :q
+      end
+
+      expect(component_class.weft_dom_id_for(q: "")).to eq("contact-results")
+      expect(component_class.weft_dom_id_for(q: nil)).to eq("contact-results")
+      expect(component_class.weft_dom_id_for({})).to eq("contact-results")
+    end
+
+    it "skips the suffix for non-scalar primary values" do
+      component_class = Class.new(described_class) do
+        def self.name = "MemberRoster"
+        param :ids
+      end
+
+      expect(component_class.weft_dom_id_for(ids: [])).to eq("member-roster")
+      expect(component_class.weft_dom_id_for(ids: %w[a b])).to eq("member-roster")
+      expect(component_class.weft_dom_id_for(ids: { a: 1 })).to eq("member-roster")
+      expect(component_class.weft_dom_id_for(ids: Object.new)).to eq("member-roster")
+    end
+
+    it "suffixes every scalar identity value, false included" do
+      component_class = Class.new(described_class) do
+        def self.name = "FilterCard"
+        param :key
+      end
+
+      expect(component_class.weft_dom_id_for(key: 42)).to eq("filter-card-42")
+      expect(component_class.weft_dom_id_for(key: :hot)).to eq("filter-card-hot")
+      expect(component_class.weft_dom_id_for(key: true)).to eq("filter-card-true")
+      expect(component_class.weft_dom_id_for(key: false)).to eq("filter-card-false")
     end
   end
 
@@ -1912,7 +1947,7 @@ RSpec.describe Weft::Component do
       expect(Weft.logger).to have_received(:warn).once.with(/title/)
     end
 
-    it "sets the DOM id from weft_id" do
+    it "sets the DOM id from weft_dom_id" do
       component_class = Class.new(described_class) do
         def self.name = "StatCard"
         param :status

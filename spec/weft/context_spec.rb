@@ -678,6 +678,65 @@ RSpec.describe Weft::Context do
     end
   end
 
+  describe "load-target routability lint" do
+    let(:unroutable_class) do
+      Class.new(Weft::Component) do
+        def self.name = "EmbeddedOnlyPane"
+
+        def build(attributes = {})
+          super
+          span "pane"
+        end
+      end
+    end
+
+    it "raises when a loads: target is not routable" do
+      target = unroutable_class
+      klass = component_class
+
+      expect do
+        described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+          insert_tag(klass) do
+            button "Load", loads: target, swap: :fill, target: "#pane"
+          end
+        end.to_s
+      end.to raise_error(Weft::InvalidUsage, /EmbeddedOnlyPane.*routable!/m)
+    end
+
+    it "raises when a preset's Class target is not routable" do
+      Weft.register_preset :lint_probe, trigger: :click, swap: :fill, target: :self
+      target = unroutable_class
+      klass = component_class
+
+      expect do
+        described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+          insert_tag(klass) do
+            button "Load", lint_probe: target
+          end
+        end.to_s
+      end.to raise_error(Weft::InvalidUsage, /lint_probe.*EmbeddedOnlyPane.*routable!/m)
+    end
+
+    it "raises when navigate: would re-fetch a component marked non-routable" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "DependentPanel"
+        param :status
+        dependent!
+
+        def build(attributes = {})
+          super
+          button "All", navigate: { status: nil }
+        end
+      end
+
+      expect do
+        described_class.new({}, nil, wire_params: { "status" => "hot" }) do
+          insert_tag(klass)
+        end.to_s
+      end.to raise_error(Weft::InvalidUsage, /DependentPanel.*not routable/m)
+    end
+  end
+
   describe "preset kwarg dispatch" do
     let(:target_class) do
       Class.new(Weft::Component) do

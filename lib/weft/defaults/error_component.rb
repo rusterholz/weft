@@ -54,7 +54,7 @@ module Weft
 
       # Preserve the failing component's DOM identity when the Router injected
       # :component_id. Otherwise fall back to the class-derived default.
-      def weft_id
+      def weft_dom_id
         @params.component_id || super
       end
 

@@ -6,7 +6,7 @@ module Weft
   class Context < Arbre::Context
     # Render-tree navigation for components and pages: reach an ancestor — or
     # self — in the Arbre tree by type or tag, to read its identity (class,
-    # weft_id, route, page path). This is the "child affects ancestor"
+    # weft_dom_id, route, page path). This is the "child affects ancestor"
     # affordance: a nested component discovers what it needs to target instead
     # of being hand-fed its parent's identity.
     #

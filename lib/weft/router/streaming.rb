@@ -76,7 +76,7 @@ module Weft
       def push_component_event(out, component_class)
         component = build_component(component_class)
         html = component.content + render_oob_includes(component_class, component.params)
-        out << format_sse_event(component.weft_id, html)
+        out << format_sse_event(component.weft_dom_id, html)
       end
 
       # A failure cycle's frames: the recovery fragment (when the chain yields
@@ -105,7 +105,7 @@ module Weft
       def push_recovery_frame(out, component_class, error, attempts_remaining)
         resolved = Weft::Resolver.resolve(component_class, filtered_params)
         html = render_push_recovery(component_class, resolved, error, attempts_remaining: attempts_remaining)
-        out << format_sse_event(component_class.weft_id_for(resolved), html) if html
+        out << format_sse_event(component_class.weft_dom_id_for(resolved), html) if html
       rescue Errno::EPIPE, IOError
         raise
       rescue StandardError => e
