@@ -85,8 +85,9 @@ Create `app/pages/events_page.rb`:
 
 ```ruby
 class EventsPage < Weft::Page
+  title "Upcoming Events"
+
   def build(attributes = {})
-    attributes[:title] = "Upcoming Events"
     super
     h1 "Upcoming Events"
     para "If you can read this in the browser, the app is wired up."
@@ -94,7 +95,7 @@ class EventsPage < Weft::Page
 end
 ```
 
-A page is a class. `build` describes its content using [Arbre](arbre.md)'s HTML builder methods — `h1`, `ul`, `div`, and friends — as plain Ruby. The `super` call renders the document shell around you: doctype, `<head>` with the htmx script, `<body>`. Setting `attributes[:title]` before `super` puts your title in the `<head>`.
+A page is a class. The `title` declaration names the browser tab; `build` describes the content using [Arbre](arbre.md)'s HTML builder methods — `h1`, `ul`, `div`, and friends — as plain Ruby. The `super` call renders the document shell around you: doctype, `<head>` with your title and the htmx script, `<body>`.
 
 Start the server and have a look:
 
@@ -150,8 +151,9 @@ And make `EventsPage` list the real events:
 
 ```ruby
 class EventsPage < Weft::Page
+  title "Upcoming Events"
+
   def build(attributes = {})
-    attributes[:title] = "Upcoming Events"
     super
     h1 "Upcoming Events"
     ul do
@@ -182,11 +184,12 @@ class EventPage < Weft::Page
 
   param :event_id
 
+  title { |params| EventStore.find(params.event_id).name }
+
   def build(attributes = {})
     event = EventStore.find(params.event_id)
     raise Weft::NotFound, "no event called #{params.event_id}" unless event
 
-    attributes[:title] = event.name
     super
     h1 event.name
     para "#{event.date} — #{event.location}"
@@ -199,7 +202,7 @@ Restart (new file), then click through to an event. Two new ideas here:
 
 **Params are a page's wire state.** `param :event_id` declares that this page is parameterized, and the `page_path` pattern says where the value comes from: `/events/summer-bbq` gives the page `event_id = "summer-bbq"`. A page with params needs an explicit `page_path` — there's no way to derive a parameterized pattern from a class name, and Weft will tell you exactly that if you forget.
 
-One nicety worth calling out: `params` is resolved before `build` runs, so `params.event_id` is available throughout — *including* before `super`. That's what lets us look the event up in time to set the page title, which has to be in place before `super` renders the `<head>`. (The `attributes` hash is a separate thing: it carries the page's shell chrome, like `title`, into `super`.)
+**The title can be dynamic.** The block form of `title` receives the page's resolved params, so each event names its own browser tab. The block runs while `super` renders the `<head>` — after the guard at the top of `build` has already raised for a bogus id, so it can assume the event exists. (And looking the event up twice is fine against a hash; when lookups get real, [`derives`](params.md#four-doors-how-a-component-gets-what-it-needs) declares the record once and every reader — the title block included — shares it.)
 
 **Raising is error handling.** For an unknown event, we `raise Weft::NotFound` and we're done — Weft turns it into a proper 404 response with its default not-found page. Try [http://localhost:9292/events/nope](http://localhost:9292/events/nope). There's a whole family of semantic errors (`Weft::Unprocessable` will appear shortly), and everything about the resulting rendering is customizable — see [Error handling](error-handling.md).
 

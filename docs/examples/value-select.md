@@ -41,7 +41,7 @@ class CarsPage < Weft::Page
     div do
       label "Make ", for: "make"
       select name: "make", id: "make",
-             loads: ModelSelect, trigger: "change", swap: :fill, target: "#models" do
+             loads: ModelSelect, trigger: :change, swap: :fill, target: "#models" do
         option "Audi",   value: "audi"
         option "Toyota", value: "toyota"
         option "BMW",    value: "bmw"
@@ -67,7 +67,7 @@ end
 
 **The component is the `<select>` itself.** Overriding `tag_name` (an [Arbre-layer move](../arbre.md#inside-build-the-component-contract)) makes the wrapper element a `<select>` rather than the default `<div>`, so the fetched fragment drops into the form as a real form control. Note that its `name` attribute is set inside `build` rather than at the call site: a fragment fetched over the wire is rebuilt from its declared params alone, so any wrapper attribute the pattern depends on belongs in `build`. And its DOM id derives from the `make` value, changing with every swap — which is why the make select targets the stable `#models` slot with `swap: :fill` instead of chasing the select by id.
 
-**`trigger: "change"` is spelled out for clarity.** It's also htmx's default trigger for a `<select>`, which is why the original htmx example omits it; keeping it explicit costs one kwarg and makes the interaction readable at the call site.
+**`trigger: :change` is spelled out for clarity.** It's also htmx's default trigger for a `<select>`, which is why the original htmx example omits it; keeping it explicit costs one kwarg and makes the interaction readable at the call site.
 
 ## On the wire
 

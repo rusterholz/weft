@@ -231,7 +231,7 @@ performs :name, method: :post, swap: :outer_html, target: nil do |params| ... en
 Action callables receive one argument — the component's resolved `params` — and their return value directs what happens next:
 
 - **`nil`** (or any ignored value): re-render with the original params. The common case — the callable did its side effect; the fresh render reflects it.
-- **a `Hash`**: merged into the params (returned keys win), and the merged set drives the re-render. Use this to change state on the way through: `performs :filter do |params| { page: 1 } end`.
+- **a `Hash`**: merged into the params (returned keys win), and the merged set drives the re-render. Use this to change state on the way through: `performs :filter do |params| { page: 1 } end`. Because *any* hash return is a merge, watch your last expression — `Hash#delete` and `merge!` return hashes, and a callable ending on one silently merges it. End a side-effect-only callable with an explicit `nil`.
 - **a `Weft::Redirect`**: navigate away instead of re-rendering. Build one with `Weft.redirect`:
 
 ```ruby
@@ -324,6 +324,20 @@ The leading `@` in the symbol is required, as a reminder that *you* must assign 
 
 **`abstract!` / `routable!`** — override the class's routing eligibility in either direction. Covered in [Routing](routing.md#abstract-and-routable).
 
+**`title`** (pages only) — declares what goes in the browser tab. A static value, or a block computed from the page's params — the block is a `(params) → value` function run in the same sandbox as every other verb block:
+
+```ruby
+class OrderDetailPage < Weft::Page
+  self.page_path = "/orders/:order_id"
+  param :order_id
+  derives(:order) { |p| Order.find(p.order_id) }
+
+  title { |params| "Order ##{params.order.number}" }
+end
+```
+
+The nearest declaration in the class ancestry wins — declare a static `title "My App"` on your base page and each concrete page overrides it (or doesn't, and inherits the app-wide default). With no declaration anywhere, the title is `"Weft"`. This is the only title channel: there's nothing to set in `build`, and nothing renders before `super` — the declaration is available to the head assembly no matter where in the lifecycle it's needed. One nearby name to keep straight: *inside* `build`, a bare `title "x"` is [Arbre](arbre.md)'s HTML tag builder and inserts a literal `<title>` element into the body — the page-title declaration lives in the class body.
+
 ## Element kwargs
 
 Inside `build` (and inside blocks nested under it), any element accepts Weft kwargs alongside its normal HTML attributes. Weft intercepts them at render time and expands them into htmx wiring. The vocabulary has two ranks:
@@ -354,7 +368,7 @@ A kwarg that is unmistakably Weft's but can't make sense **raises `Weft::Invalid
 button "Advance", action: :advance, class: "btn btn-primary"
 ```
 
-Wires the element to a declared `performs`/`transfers` action on the nearest enclosing component that declares it. Expands to the full htmx set: the request (`hx-post` etc. to the action's route), the target (the component's own element, unless the action declared `target:`), the swap, and the component's current params as the payload (`hx-vals`). A Symbol that matches no enclosing component's declarations raises — a typo can't silently produce a dead button.
+Wires the element to a declared `performs`/`transfers` action on the nearest enclosing component that declares it. Expands to the full htmx set: the request (`hx-post` etc. to the action's route), the target (the component's own element, unless the action declared `target:`), the swap, and the component's current params as the payload (`hx-vals`). A Symbol that matches no enclosing component's declarations raises — a typo can't silently produce a dead button. And it isn't just for buttons and forms: `action:` works on any element — a `div` serving as a modal underlay, a table row, a badge — with htmx's default trigger (click) applying.
 
 Add `target:` / `swap:` alongside to override, for this element only, where the response lands and how it swaps — the declaration's values stay the defaults for every other call site:
 
@@ -391,7 +405,7 @@ button "Show manifest", loads: Logistics::ShipmentManifest,
                         swap: :fill, target: "#detail-pane"
 ```
 
-Loads a *different* component into a chosen DOM location on click (or whatever `trigger:` you add). `swap:` and `target:` are required — `loads:` is the fully-explicit primitive underneath the [presets](#presets), which exist to fill those in for common patterns. `with:` supplies the target component's wire params; omitted, it defaults to the enclosing component's current params.
+Loads a *different* component into a chosen DOM location on click (or whatever `trigger:` you add). `swap:` and `target:` are required — `loads:` is the fully-explicit primitive underneath the [presets](#presets), which exist to fill those in for common patterns. `with:` supplies the target component's wire params; omitted, it defaults to the enclosing component's current params. That default cuts both ways: the encloser's params are *baked into the generated URL at render time*, so when they overlap the target's own schema (or a value the browser appends, like a select's), the stale baked value competes with the fresh one. When the target should fetch clean, say so explicitly with `with: {}`.
 
 The target must be [routable](routing.md#what-routes--and-what-doesnt) — the click fetches it at its own URL. A non-routable target (here or as a preset's Class value) raises `Weft::InvalidUsage` at render time rather than wiring a fetch that could only 404; a purely presentational target opts in with `routable!`.
 
@@ -402,7 +416,7 @@ div(loads: Preview, with: { id: id }, swap: :fill, target: :self,
     trigger: :visible)
 ```
 
-Sets when the element's request fires. Accepts the semantic symbols in the [trigger table](#trigger-values) or any raw [htmx trigger string](https://htmx.org/params/hx-trigger/) for full control (`"mouseenter once from:closest .card"`). Works standalone or alongside `action:` / `navigate:` / `loads:` / a preset.
+Sets when the element's request fires. Accepts the semantic symbols in the [trigger table](#trigger-values) or any raw [htmx trigger string](https://htmx.org/params/hx-trigger/) for full control (`"mouseenter once from:closest .card"`). Works standalone or alongside `action:` / `navigate:` / `loads:` / a preset. One thing to expect when inspecting output: a raw string's special characters render HTML-escaped (`keyup[altKey&&key=='A']` emits as `hx-trigger="keyup[altKey&amp;&amp;key=='A']"`) — that's correct HTML, and htmx reads it as written.
 
 ### `push_url:`
 
@@ -449,6 +463,8 @@ Weft accepts semantic swap names (preferred), the htmx-native names as symbols, 
 | Semantic | htmx equivalent | Fires… |
 | --- | --- | --- |
 | `:click` | `click` | on click |
+| `:click_once` | `click once` | on the first click, then never again |
+| `:change` | `change` | when the value changes (selects, checkboxes) |
 | `:hover` | `mouseenter once` | on first hover |
 | `:visible` | `revealed` | when scrolled into view |
 | `:input` | `input changed delay:300ms` | as the user types, debounced |
@@ -472,7 +488,7 @@ The kwarg's value is the component class to load (`with:` supplies its params, s
 | Preset | Trigger | Swap | Target | Example |
 | --- | --- | --- | --- | --- |
 | `tooltip:` | `:hover` | `:fill` | supply `target:` | [Tooltip](examples/tooltip.md) |
-| `inline_expand:` | `:click` | `:after` | supply `target:` | [Inline Expansion](examples/inline-expansion.md) |
+| `inline_expand:` | `:click_once` | `:after` | supply `target:` | [Inline Expansion](examples/inline-expansion.md) |
 | `lazy:` | `:visible` | `:fill` | `:self` | [Lazy Loading](examples/lazy-loading.md) |
 | `modal:` | `:click` | `:fill` | supply `target:` | [Modal Dialog](examples/modal-dialog.md) |
 | `load_more:` | `:click` | `:replace` | `:self` | [Click to Load](examples/click-to-load.md) |
@@ -480,10 +496,11 @@ The kwarg's value is the component class to load (`with:` supplies its params, s
 | `live_search:` | `:input` | `:fill` | supply `target:` | [Active Search](examples/active-search.md) |
 | `tabs:` | `:click` | `:fill` | supply `target:` | [Tabs](examples/tabs.md) |
 | `retry:` | `:click` | `:replace` | `closest .weft-error` | — |
+| `reopen_stream:` | `:click` | `:replace` | `closest [sse-swap]` | — |
 
 Where the table says "supply `target:`", the preset has no universally-right answer for where the content lands, so the call site provides it (omitting it raises immediately, with a message saying so). Explicit `swap:` and `target:` kwargs always override the preset.
 
-`retry:` is the odd one out: its value is a **URL string** rather than a component class — the failing component's own GET URL, as injected into error components via the `:retry_url` recovery param (see [Error handling](error-handling.md)). Its baked-in target replaces the enclosing `.weft-error` box with the freshly-rendered component:
+`retry:` and `reopen_stream:` are the odd ones out: their value is a **URL string** rather than a component class — the failing component's own GET URL, as injected into error components via the `:retry_url` recovery param (see [Error handling](error-handling.md)). `retry:`'s baked-in target replaces the enclosing `.weft-error` box with the freshly-rendered component; `reopen_stream:` targets a closed SSE stream's wrapper so the fresh render reconnects it:
 
 ```ruby
 button "Retry", retry: params.retry_url

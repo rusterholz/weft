@@ -139,6 +139,15 @@ register_script "https://cdn.example.com/widgets.js",
 
 (The htmx core and SSE-extension scripts Weft includes itself are integrity-pinned the same way.)
 
+For the snippets that don't warrant a file, `register_inline_css` and `register_inline_js` embed CSS and JavaScript directly in the head — each registered string emits as its own `<style>`/`<script>` tag, subclasses add atop their parents' registrations, and inline JS lands after the external scripts so registered libraries are in reach:
+
+```ruby
+class ApplicationPage < Weft::Page
+  register_inline_css ".mono { font-family: monospace; }"
+  register_inline_js "htmx.config.defaultSwapDelay = 50;"
+end
+```
+
 Registering a duplicate bundle name, or a second bundle at the same root, raises `Weft::InvalidConfiguration` — bundles are declared once, at boot.
 
 ## Routing
