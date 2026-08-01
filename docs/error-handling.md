@@ -103,7 +103,7 @@ If the recovery render itself raises, that frame is skipped (and the failure sti
 
 ## Auto-injected recovery params
 
-A recovery target usually wants context: what failed, where, with what status. The Router offers seven values, injected **schema-gated**: each is passed only if the target *declares a param of that name*. Declaring the param is the opt-in; anything not declared is never injected, so nothing leaks into renders (or URLs) uninvited.
+A recovery target usually wants context: what failed, where, with what status. The Router offers seven values, delivered as **request overlays**: a component reads each by *declaring a param of that name*. The declaration is the opt-in — anything not declared is never read — and because overlays reach the whole recovery render, a component *nested inside* your branded error page can declare and read them too (a shared error-detail partial reading `:exception` itself, say). Recovery redirect URLs stay schema-gated and carry only the redirect-safe values the destination declares, so nothing rides a URL uninvited.
 
 | Param | Value |
 | --- | --- |

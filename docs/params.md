@@ -53,7 +53,7 @@ When a component wants to control a value rather than inherit it, it declares th
 - **`derives`** — a value the component computes for itself, lazily, the first time it's read.
 - **`defines`** — a static value a subclass pins; sugar over `derives`.
 
-A single key can have more than one door, and they resolve in a fixed order — a handed value beats a wire value beats an inherited value beats a derivation beats a default. The [DSL reference](dsl.md#how-the-doors-combine) lays out that precedence and the useful *dual* combinations; the shape to carry away here is that all four doors land in the same `params`, read the same way (`params.name`).
+A single key can have more than one door, and they resolve in a fixed order — a handed value beats a request overlay (a hash a verb block returned earlier in the request) beats a wire value beats an inherited value beats a derivation beats a default. The [DSL reference](dsl.md#how-the-doors-combine) lays out that precedence and the useful *dual* combinations; the shape to carry away here is that all four doors land in the same `params`, read the same way (`params.name`).
 
 ## What a component keeps for itself
 
@@ -71,7 +71,7 @@ The same discipline applies to a component's HTML attributes. Chrome passed at t
 This is the payoff. Because a rendered component carries its own wire params, it can regenerate itself without its parent in the picture:
 
 - A **refresh** is a GET to the component's own route, its own params in the query string. Weft routes straight to that component, resolves those params from the wire — the first step again — and re-renders.
-- An **action** is a POST (or DELETE) to the component's route, its params in the payload. The callable runs, then the component re-renders.
+- An **action** is a POST (or DELETE) to the component's route, its params in the payload. The callable runs, then the component re-renders — and the re-render, nested components and OOB companions included, resolves against the *same request wire*, with the callable's returned hash overlaid on top. One universe per request, amended by the verbs that run in it: no matter how rendering flows inside a request (an action re-render, a `transfers` hand-off, an error recovery), a component that reads a wire param keeps reading it, without any outer component relaying it.
 
 So "render with enough to get where it needs" is literal: whatever a component will need to reconstruct itself on the next request, it must hold as its own `param`s at render time, because that is what gets serialized into the refresh URL and the action payload. A self-refreshing card embedded as `status_card(status: "hot")` keeps refreshing correctly *only* if it declares `param :status` — otherwise the refresh request carries no status and the standalone re-render has nothing to go on.
 

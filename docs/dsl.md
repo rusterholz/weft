@@ -146,10 +146,11 @@ The catch is in the name: the values are fixed **when the class body runs**, not
 A key can have more than one door, and Weft resolves the value from a fixed order of sources. Highest wins; `nil` at any level falls through to the next:
 
 1. a **received** hand-off (`receives`)
-2. the component's **own wire** value (`param`)
-3. an **inherited** value from an ancestor in the render tree
-4. the component's **own derivation** (`derives` / `defines`)
-5. the declared **default**
+2. a **request overlay** — a hash returned from a verb block earlier in this request (an action callable, a `transfers` or `includes` block, a `recovers` adjustment). An overlay entry speaks *as* the wire for its key: its value replaces the wire's — including rich objects, which pre-empt a matching `derives` so nothing refetches what the request already loaded — and an explicit `nil` *clears*, masking the wire so resolution falls below it
+3. the component's **own wire** value (`param`)
+4. an **inherited** value from an ancestor in the render tree
+5. the component's **own derivation** (`derives` / `defines`)
+6. the declared **default**
 
 That order is what makes *duals* work — declaring a key through two doors so it resolves whether it's handed over or has to fetch itself:
 
@@ -231,7 +232,7 @@ performs :name, method: :post, swap: :outer_html, target: nil do |params| ... en
 Action callables receive one argument — the component's resolved `params` — and their return value directs what happens next:
 
 - **`nil`** (or any ignored value): re-render with the original params. The common case — the callable did its side effect; the fresh render reflects it.
-- **a `Hash`**: merged into the params (returned keys win), and the merged set drives the re-render. Use this to change state on the way through: `performs :filter do |params| { page: 1 } end`. Because *any* hash return is a merge, watch your last expression — `Hash#delete` and `merge!` return hashes, and a callable ending on one silently merges it. End a side-effect-only callable with an explicit `nil`.
+- **a `Hash`**: an overlay on the request. The returned keys override wire values for *everything* the response renders — the component, its nested children, its OOB companions — an explicit `nil` clears a value, and a rich object (a record the callable already loaded) pre-empts matching `derives` down the tree. Use this to change state on the way through: `performs :filter do |params| { page: 1 } end`. Because *any* hash return is an overlay, watch your last expression — `Hash#delete` and `merge!` return hashes, and a callable ending on one silently applies it. End a side-effect-only callable with an explicit `nil`.
 - **a `Weft::Redirect`**: navigate away instead of re-rendering. Build one with `Weft.redirect`:
 
 ```ruby
@@ -255,7 +256,7 @@ transfers :edit, to: EditableOrderHeader do |params|
 end
 ```
 
-Identical to `performs` in signature and contract, except the response renders the `to:` component instead of the declaring one — for actions whose natural result is a different piece of UI (a read-only header becoming an edit form). The merged params feed the target component. The target only needs to *render*; it does not need its own route (see [routability vs. render targets](routing.md#routable-vs-render-target)).
+Identical to `performs` in signature and contract, except the response renders the `to:` component instead of the declaring one — for actions whose natural result is a different piece of UI (a read-only header becoming an edit form). The returned hash overlays the request for the target's render: override its wire values, or hand it rich objects that pre-empt its own `derives`. The target renders with its own declarations sovereign — the declarer's defaults and derivations never leak into it — and it's the *target's* [`includes`](#includes--companions-in-the-same-response) companions that ride the response: after the swap, the target is the component in charge. The target only needs to *render*; it does not need its own route (see [routability vs. render targets](routing.md#routable-vs-render-target)).
 
 ### `dismisses` — remove from the DOM
 
@@ -278,19 +279,27 @@ triggers "delivery-completed"
 
 Every action response from this component carries the named event in its `HX-Trigger` header. Other components subscribe with `refreshes on: "delivery-completed"` — a decoupled way to say "when this changes, those refresh," without the components knowing about each other. Multiple `triggers` declarations accumulate.
 
+Events follow the *action*, not the rendering: on a [`transfers`](#transfers--actions-that-render-something-else) response the declaring component's events fire — its callable is what ran — while the target's own events wait for the target's own actions. (The same rule is why a `dismisses` response, which renders no body at all, still announces.)
+
 ### `includes` — companions in the same response
 
 ```ruby
-includes Oms::OrderHeader                     # alongside every response
-includes Oms::OrderHeader, on: :advance       # only for the :advance action
-includes Oms::OrderHeader do |params|          # with explicit param mapping
+includes Oms::OrderHeader                       # alongside every response
+includes Oms::OrderHeader, on: :advance         # own action(s) only — arrays too
+includes Oms::OrderHeader, when: :transferred   # only as a transfer target
+includes Oms::OrderHeader do |params|            # adjust this companion's params
   { order_id: params.order_id, compact: true }
 end
 ```
 
-Sometimes one interaction changes two things: completing a shipment updates the shipment card *and* the order header above it. `includes` declares that relationship — whenever this component responds to an action or pushes an SSE frame, the included component renders too, marked out-of-band (`hx-swap-oob`) so htmx routes it to its own DOM slot by id.
+Sometimes one interaction changes two things: completing a shipment updates the shipment card *and* the order header above it. `includes` declares that relationship — when this component renders a response, the included component renders too, marked out-of-band (`hx-swap-oob`) so htmx routes it to its own DOM slot by id.
 
-Without a block, the included component resolves its params from the same request parameters. With a block, the block receives the primary component's resolved params and returns the wire params for the included one. With `on:`, the inclusion applies only to that named action (and not to SSE pushes; unfiltered inclusions apply to both).
+A companion is an **OOB-delivered child**: it renders against the same request, and it inherits the primary's params exactly as a child built inside the primary's `build` would — rich values included, so an `Order` the primary already derived is shared, not fetched once per companion. The block, if given, receives the primary's params and returns a *delta* overlaid on that picture for this companion alone (an explicit `nil` clears a value; one companion's delta is invisible to the next). Blockless is simply an empty delta.
+
+Unfiltered inclusions ride every response the component renders in: its own action responses, its SSE pushes, and its arrivals as a [`transfers`](#transfers--actions-that-render-something-else) target. Filters enumerate contexts, and declaring both is a union — either fires:
+
+- **`on:`** names this component's **own** actions (a symbol or an array). It never matches another component's action names — an action arriving via transfer isn't consulted — and it doesn't apply to pushes.
+- **`when: :transferred`** fires only when this component renders as a transfer target: for companions that should ride the arrival, not every response.
 
 ### `recovers` — declare error behavior
 
