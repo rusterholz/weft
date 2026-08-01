@@ -4,8 +4,9 @@ module Oms
   class NewOrderPage < ::ApplicationPage
     self.page_path = "/orders/new"
 
+    title "New Order"
+
     def build(attributes = {})
-      attributes[:title] ||= "New Order"
       super
       div(class: "page-header") { h1 "New Order" }
 

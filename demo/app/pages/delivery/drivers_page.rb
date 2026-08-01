@@ -6,8 +6,9 @@ module Delivery
 
     param :page, type: :integer
 
+    title "Drivers"
+
     def build(attributes = {})
-      attributes[:title] ||= "Drivers"
       super
       div(class: "page-header") { h1 "Drivers" }
       drivers_panel

@@ -47,6 +47,8 @@ module Weft
 
     TRIGGER_VALUES = {
       click: "click",
+      click_once: "click once",
+      change: "change",
       hover: "mouseenter once",
       visible: "revealed",
       input: "input changed delay:300ms"

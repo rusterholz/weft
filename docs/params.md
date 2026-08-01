@@ -64,6 +64,8 @@ Here is the pivot that makes the whole system hold together: **only a component'
 
 The other three doors never serialize: you can't put an `Order` object in a query string, and a derived value can always be re-derived. So what travels forward is exactly the URL-safe wire state the component declared with `param`, and nothing else. Inherited values don't travel either — a child that merely *read* its parent's `order_id` doesn't carry it. A child that needs `order_id` on the next request must declare it.
 
+The same discipline applies to a component's HTML attributes. Chrome passed at the call site (`status_card(class: "wide", name: "picker")`) exists only in that in-page render — a wire re-render rebuilds the component from its params alone, and the call-site attributes are gone. An attribute the component *depends on* (a `name` the pattern reads, an ARIA role) belongs inside `build` via `set_attribute`, where every render path reproduces it.
+
 ## The round trip: refresh and actions
 
 This is the payoff. Because a rendered component carries its own wire params, it can regenerate itself without its parent in the picture:

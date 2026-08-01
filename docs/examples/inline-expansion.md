@@ -44,7 +44,7 @@ class OrdersTable < Weft::Component
           tr do
             td do
               button "▸", inline_expand: OrderItemsRow, with: { order_id: id },
-                          target: "closest tr", trigger: "click once"
+                          target: "closest tr"
             end
             td id
             td order[:customer]
@@ -61,9 +61,9 @@ end
 
 ## How it works
 
-**The detail arrives *after* the trigger's row.** [`inline_expand:`](../dsl.md#presets) presets trigger `:click` and swap `:after` (htmx's `afterend`); the call site supplies the target. `target: "closest tr"` walks up from the button to its row, so the fetched component is inserted as the next sibling row — which is why `OrderItemsRow` overrides `tag_name` to render as a `<tr>`. A `colspan` spanning the table's columns lets the detail breathe across the full width.
+**The detail arrives *after* the trigger's row.** [`inline_expand:`](../dsl.md#presets) presets trigger `:click_once` and swap `:after` (htmx's `afterend`); the call site supplies the target. `target: "closest tr"` walks up from the button to its row, so the fetched component is inserted as the next sibling row — which is why `OrderItemsRow` overrides `tag_name` to render as a `<tr>`. A `colspan` spanning the table's columns lets the detail breathe across the full width.
 
-**`trigger: "click once"` guards against double insertion.** The preset's `:click` fires on *every* click — left alone, a second click would insert a second copy of the detail row. The `trigger:` kwarg overrides the preset with htmx's raw trigger grammar, and `once` caps the interaction at a single firing. (There's currently no semantic symbol for "click once" the way `:hover` bakes in `mouseenter once`, so the raw string is the honest spelling.)
+**One click, one insertion.** The preset's `:click_once` bakes in htmx's `once` modifier, capping the interaction at a single firing — because the detail lands *after* the button's row rather than replacing anything, a repeat click would otherwise insert a second copy. If your detail row removes itself on close and the button should work again, override with `trigger: :click`.
 
 **Expansion, not a toggle.** Once expanded, the row stays expanded — this preset opens, it doesn't close. When you need collapse, give the detail component the behavior: a [`dismisses`](../dsl.md#dismisses--remove-from-the-dom) verb and a "Hide" button inside `OrderItemsRow` remove it from the DOM server-consistently. (The one-shot button does remain spent after that; a fully re-armable open/close control is a two-state component pair, as in [Click to Edit](click-to-edit.md).)
 

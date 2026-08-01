@@ -6,15 +6,17 @@ module Oms
 
     param :order_id, type: :string
 
+    derives(:order) { |p| Oms::Order.includes(:line_items).find(p.order_id) }
+
+    title { |p| "Order #{p.order.id[..7]}" }
+
     def build(attributes = {})
-      order = Oms::Order.includes(:line_items).find(params.order_id)
-      attributes[:title] ||= "Order #{order.id[..7]}"
       super
 
       order_header
-      render_details_card(order)
-      render_line_items_card(order)
-      return unless Logistics::Shipment.for_order(order.id).any?
+      render_details_card(params.order)
+      render_line_items_card(params.order)
+      return unless Logistics::Shipment.for_order(params.order.id).any?
 
       shipments_card
       outage_switch

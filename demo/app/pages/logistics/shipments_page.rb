@@ -6,8 +6,9 @@ module Logistics
 
     param :page, type: :integer
 
+    title "Shipments"
+
     def build(attributes = {})
-      attributes[:title] ||= "Shipments"
       super
       div(class: "page-header") { h1 "Shipments" }
       shipments_panel

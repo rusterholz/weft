@@ -6,16 +6,17 @@ module Logistics
 
     param :shipment_id, type: :string
 
-    def build(attributes = {})
-      shipment = Logistics::Shipment.includes(:warehouse).find(params.shipment_id)
-      attributes[:title] ||= "Shipment #{shipment.id[..7]}"
-      super
-      order = Oms::Order.find(shipment.order_id)
-      driver = Delivery::Driver.find_by(id: shipment.driver_id)
+    derives(:shipment) { |p| Logistics::Shipment.includes(:warehouse).find(p.shipment_id) }
+    derives(:order) { |p| Oms::Order.find(p.shipment.order_id) }
+    derives(:driver) { |p| Delivery::Driver.find_by(id: p.shipment.driver_id) }
 
-      render_header(shipment)
-      render_details_card(shipment, order, driver)
-      render_items_card(shipment.items || [])
+    title { |p| "Shipment #{p.shipment.id[..7]}" }
+
+    def build(attributes = {})
+      super
+      render_header(params.shipment)
+      render_details_card(params.shipment, params.order, params.driver)
+      render_items_card(params.shipment.items || [])
     end
 
     private

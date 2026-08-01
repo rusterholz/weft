@@ -71,7 +71,9 @@ end
 # + loads: expansion handles the rest.
 
 Weft::Presets.register :tooltip,         trigger: :hover, swap: :fill
-Weft::Presets.register :inline_expand,   trigger: :click, swap: :after
+# click_once, not click: the inserted detail lands after the trigger element,
+# so a repeat click would insert a second copy.
+Weft::Presets.register :inline_expand,   trigger: :click_once, swap: :after
 Weft::Presets.register :lazy,            trigger: :visible, swap: :fill, target: :self
 Weft::Presets.register :modal,           trigger: :click, swap: :fill
 Weft::Presets.register :load_more,       trigger: :click, swap: :replace, target: :self

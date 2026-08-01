@@ -15,9 +15,94 @@ RSpec.describe Weft::Page do
     expect(html).to include("<title>Weft</title>")
   end
 
-  it "accepts a custom title" do
-    html = Arbre::Context.new { weft_page title: "My App" }.to_s
-    expect(html).to include("<title>My App</title>")
+  describe "title" do
+    it "renders a static declared title" do
+      page_class = Class.new(described_class) do
+        def self.name = "OrdersPage"
+        title "Orders"
+      end
+
+      html = Arbre::Context.new { insert_tag(page_class) }.to_s
+      expect(html).to include("<title>Orders</title>")
+    end
+
+    it "computes a block title from the page's params" do
+      page_class = Class.new(described_class) do
+        def self.name = "OrderPage"
+        self.page_path = "/orders/:order_id"
+        param :order_id
+        title { |params| "Order ##{params.order_id}" }
+      end
+
+      html = page_class.render(order_id: "42")
+      expect(html).to include("<title>Order #42</title>")
+    end
+
+    it "runs the block in the verb sandbox, out of reach of page internals" do
+      page_class = Class.new(described_class) do
+        def self.name = "SneakyPage"
+        title { page_helper }
+        def page_helper = "nope"
+      end
+
+      expect { Arbre::Context.new { insert_tag(page_class) }.to_s }.
+        to raise_error(NameError, /page_helper/)
+    end
+
+    it "inherits the nearest ancestor's declaration" do
+      parent = Class.new(described_class) do
+        def self.name = "BaseAppPage"
+        title "Base App"
+      end
+      child = Class.new(parent) do
+        def self.name = "ChildAppPage"
+      end
+
+      html = Arbre::Context.new { insert_tag(child) }.to_s
+      expect(html).to include("<title>Base App</title>")
+    end
+
+    it "lets a subclass redeclaration override, across forms" do
+      parent = Class.new(described_class) do
+        def self.name = "StaticTitlePage"
+        title "Static"
+      end
+      child = Class.new(parent) do
+        def self.name = "DynamicTitlePage"
+        title { "Dynamic" }
+      end
+
+      html = Arbre::Context.new { insert_tag(child) }.to_s
+      expect(html).to include("<title>Dynamic</title>")
+    end
+
+    it "raises when given both a value and a block" do
+      expect do
+        Class.new(described_class) do
+          def self.name = "GreedyPage"
+          title("Both") { "Ways" }
+        end
+      end.to raise_error(Weft::InvalidDefinition, /not both/)
+    end
+
+    it "raises when given neither" do
+      expect do
+        Class.new(described_class) do
+          def self.name = "EmptyTitlePage"
+          title
+        end
+      end.to raise_error(Weft::InvalidDefinition)
+    end
+
+    it "ignores a :title build attribute (the class declaration is the only channel)" do
+      page_class = Class.new(described_class) do
+        def self.name = "DeclaredTitlePage"
+        title "Declared"
+      end
+
+      html = Arbre::Context.new { insert_tag(page_class, title: "Attribute") }.to_s
+      expect(html).to include("<title>Declared</title>")
+    end
   end
 
   it "redirects block content into the body" do
@@ -407,6 +492,66 @@ RSpec.describe Weft::Page do
 
       html = Arbre::Context.new { insert_tag(page_class) }.to_s
       expect(html).to include("/* comment */ a > b::after { content: '>'; }")
+    end
+  end
+
+  describe "register_inline_js" do
+    it "emits the registered inline JS inside a <script> tag in the head" do
+      page_class = Class.new(described_class) do
+        def self.name = "InlineScriptedPage"
+        register_inline_js "console.log('hi');"
+      end
+
+      html = Arbre::Context.new { insert_tag(page_class) }.to_s
+      expect(html).to match(%r{<head>.*<script>console\.log\('hi'\);</script>.*</head>}m)
+    end
+
+    it "emits each entry as its own <script> tag (source attribution stays visible)" do
+      page_class = Class.new(described_class) do
+        def self.name = "MultiScriptedPage"
+        register_inline_js "one();"
+        register_inline_js "two();"
+      end
+
+      html = Arbre::Context.new { insert_tag(page_class) }.to_s
+      expect(html).to include("<script>one();</script>")
+      expect(html).to include("<script>two();</script>")
+    end
+
+    it "inherits parent JS and appends child JS (composable, not replacing)" do
+      parent = Class.new(described_class) do
+        def self.name = "BaseScriptedPage"
+        register_inline_js "base();"
+      end
+      child = Class.new(parent) do
+        def self.name = "ChildScriptedPage"
+        register_inline_js "child();"
+      end
+
+      html = Arbre::Context.new { insert_tag(child) }.to_s
+      expect(html).to include("<script>base();</script>")
+      expect(html).to include("<script>child();</script>")
+    end
+
+    it "renders after external scripts, so registered libraries are in reach" do
+      page_class = Class.new(described_class) do
+        def self.name = "OrderedScriptsPage"
+        register_script "https://cdn.example.com/lib.js"
+        register_inline_js "lib.start();"
+      end
+
+      html = Arbre::Context.new { insert_tag(page_class) }.to_s
+      expect(html.index("lib.js")).to be < html.index("lib.start();")
+    end
+
+    it "does not strip or escape the JS (it goes in literally)" do
+      page_class = Class.new(described_class) do
+        def self.name = "RawJsPage"
+        register_inline_js "if (a && b < 2) { go(); }"
+      end
+
+      html = Arbre::Context.new { insert_tag(page_class) }.to_s
+      expect(html).to include("if (a && b < 2) { go(); }")
     end
   end
 

@@ -6,9 +6,11 @@ module Delivery
 
     param :driver_id, type: :string
 
+    derives(:driver) { |p| Delivery::Driver.find(p.driver_id) }
+
+    title { |p| p.driver.name }
+
     def build(attributes = {})
-      driver = Delivery::Driver.find(params.driver_id)
-      attributes[:title] ||= driver.name
       super
 
       driver_header_section

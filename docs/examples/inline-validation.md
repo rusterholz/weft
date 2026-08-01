@@ -32,7 +32,7 @@ class SignupEmailField < Weft::Component
   def build(attributes = {})
     super
     set_attribute :id, "signup-email-field"
-    form(action: :validate, trigger: "change") do
+    form(action: :validate, trigger: :change) do
       label "Email Address ", for: "email"
       input type: "email", name: "email", id: "email", value: params.email
     end
@@ -49,9 +49,9 @@ end
 
 ## How it works
 
-**The field is a component, and the form belongs to the field.** `form(action: :validate, trigger: "change")` wires the POST like any action form, but `trigger:` swaps the form's natural submit trigger for `change` events — which bubble up from the input, so the request fires the moment the user leaves the field. A form's fields are its payload: the typed email reaches the callable as `params.email`, exactly as it would on a full submit.
+**The field is a component, and the form belongs to the field.** `form(action: :validate, trigger: :change)` wires the POST like any action form, but `trigger:` swaps the form's natural submit trigger for `change` events — which bubble up from the input, so the request fires the moment the user leaves the field. A form's fields are its payload: the typed email reaches the callable as `params.email`, exactly as it would on a full submit.
 
-**Put the action on the form, not the input.** It's tempting to skip the form and hang `action: :validate, trigger: "change"` on the input itself. Don't: on a non-form element, `action:` carries the component's declared params along as `hx-vals`, and htmx gives those precedence over the triggering element's own value — so the request goes out with the *component's* stale idea of the email, never the fresh keystrokes. A one-field form is the honest wiring: what's in the field is what gets sent.
+**Put the action on the form, not the input.** It's tempting to skip the form and hang `action: :validate, trigger: :change` on the input itself. Don't: on a non-form element, `action:` carries the component's declared params along as `hx-vals`, and htmx gives those precedence over the triggering element's own value — so the request goes out with the *component's* stale idea of the email, never the fresh keystrokes. A one-field form is the honest wiring: what's in the field is what gets sent.
 
 **Validation failures are still renders.** Bad input raises `Weft::Unprocessable`; the `recovers from:` block catches it and returns `{ error_message: error.message }`, which merges into the params for the re-render. The response goes out as a semantic `422 Unprocessable Content` whose body is this same component wearing its error paragraph. Valid input sails through to the `nil` return and renders the success line at a plain `200`. (The machinery is [the `recovers` chain](../error-handling.md#the-recovers-chain); the merge is [the callable contract](../dsl.md#the-callable-contract).)
 

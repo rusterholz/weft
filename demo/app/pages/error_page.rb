@@ -12,8 +12,9 @@ class ErrorPage < ApplicationPage
   param :request_path, type: :string
   param :status_code, type: :integer
 
+  title "Error"
+
   def build(attributes = {})
-    attributes[:title] ||= "Error"
     super
     insert_tag(
       ErrorComponent,

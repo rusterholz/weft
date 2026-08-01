@@ -115,6 +115,11 @@ RSpec.describe "Weft::Defaults" do
       expect(html).to include("ArgumentError")
       expect(html).to include("bad arg")
     end
+
+    it "declares its title" do
+      html = described_class.render(exception: nil, request_path: "/x", status_code: 500)
+      expect(html).to include("<title>Error</title>")
+    end
   end
 
   describe Weft::Defaults::NotFoundComponent do
@@ -163,6 +168,11 @@ RSpec.describe "Weft::Defaults" do
 
       expect(html).to start_with("<!DOCTYPE html>")
       expect(html).to include("/missing")
+    end
+
+    it "declares its title" do
+      html = described_class.render(request_path: "/missing", status_code: 404)
+      expect(html).to include("<title>Not found</title>")
     end
   end
 end

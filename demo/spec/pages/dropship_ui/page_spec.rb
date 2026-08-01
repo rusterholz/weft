@@ -24,8 +24,15 @@ RSpec.describe DropshipUI::Page, type: :component do
     expect(render_concrete).to include("<title>Dropship Co.</title>")
   end
 
-  it "accepts a custom title that overrides the default" do
-    expect(render_concrete(title: "Specific Page")).to include("<title>Specific Page</title>")
+  it "lets a subclass declaration override the default" do
+    subclass = Class.new(described_class) do
+      def self.name = "SpecificPage"
+      title "Specific Page"
+    end
+    klass = subclass
+
+    html = render_arbre_html { insert_tag(klass) }
+    expect(html).to include("<title>Specific Page</title>")
   end
 
   it "includes Bootstrap stylesheet (the design system's framework choice)" do
