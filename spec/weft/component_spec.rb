@@ -731,6 +731,134 @@ RSpec.describe Weft::Component do
     end
   end
 
+  describe "overlay level (request-scoped deltas)" do
+    it "speaks as the wire when it holds a key, beating the actual wire value" do
+      klass = Class.new(described_class) do
+        def self.name = "PagedPanel"
+        param :page, type: :integer
+      end
+
+      component = Weft::Context.new({}, nil, wire_params: { "page" => "3" },
+                                             overlays: { page: 5 }) { insert_tag(klass) }.children.first
+
+      expect(component.params.page).to eq(5)
+    end
+
+    it "loses to an explicit hand-off" do
+      klass = Class.new(described_class) do
+        def self.name = "LabeledCard"
+        receives :label
+      end
+
+      component = Weft::Context.new({}, nil, overlays: { label: "from-overlay" }) do
+        insert_tag(klass, label: "handed")
+      end.children.first
+
+      expect(component.params.label).to eq("handed")
+    end
+
+    it "pre-empts a derivation with a rich value (the delta already did the work)" do
+      klass = Class.new(described_class) do
+        def self.name = "OrderPane"
+        derives(:order) { |_p| raise "derivation must not run" }
+      end
+      order = Struct.new(:id).new(42)
+
+      component = Weft::Context.new({}, nil, overlays: { order: order }) { insert_tag(klass) }.children.first
+
+      expect(component.params.order).to be(order)
+    end
+
+    it "clears with nil: the wire value is masked and resolution falls below it" do
+      klass = Class.new(described_class) do
+        def self.name = "StatusCard"
+        param :status, type: :string, default: "fresh"
+      end
+
+      component = Weft::Context.new({}, nil, wire_params: { "status" => "stale" },
+                                             overlays: { status: nil }) { insert_tag(klass) }.children.first
+
+      expect(component.params.status).to eq("fresh")
+    end
+
+    it "falls from a nil overlay to a derivation on a dual key" do
+      klass = Class.new(described_class) do
+        def self.name = "TallyCard"
+        param :tally, type: :integer
+        derives(:tally) { |_p| 7 }
+      end
+
+      component = Weft::Context.new({}, nil, wire_params: { "tally" => "3" },
+                                             overlays: { tally: nil }) { insert_tag(klass) }.children.first
+
+      expect(component.params.tally).to eq(7)
+    end
+
+    it "reaches nested components at any depth" do
+      inner = Class.new(described_class) do
+        def self.name = "InnerBadge"
+        param :account_id, type: :string
+      end
+
+      inner_component = nil
+      Weft::Context.new({}, nil, overlays: { account_id: "acct-9" }) do
+        div do
+          div do
+            inner_component = insert_tag(inner)
+          end
+        end
+      end
+
+      expect(inner_component.params.account_id).to eq("acct-9")
+    end
+  end
+
+  describe "branch bag (root inheritance from the context)" do
+    it "lets a root component inherit from a context-provided bag" do
+      klass = Class.new(described_class) do
+        def self.name = "CompanionCard"
+      end
+      primary_bag = Weft::Params.new({ order_id: "o-1" })
+
+      component = Weft::Context.new({}, nil, branch_bag: primary_bag) { insert_tag(klass) }.children.first
+
+      expect(component.params[:order_id]).to eq("o-1")
+    end
+
+    it "supplies inherited values that pre-empt the root's own derivation" do
+      klass = Class.new(described_class) do
+        def self.name = "SharedOrderCard"
+        derives(:order) { |_p| raise "must inherit, not re-derive" }
+      end
+      order = Struct.new(:id).new(1)
+      primary_bag = Weft::Params.new({ order: order })
+
+      component = Weft::Context.new({}, nil, branch_bag: primary_bag) { insert_tag(klass) }.children.first
+
+      expect(component.params.order).to be(order)
+    end
+
+    it "yields to a genuine tree ancestor when one exists" do
+      parent = Class.new(described_class) do
+        def self.name = "TreeParent"
+        param :label, type: :string
+      end
+      child = Class.new(described_class) do
+        def self.name = "TreeChild"
+      end
+
+      child_component = nil
+      Weft::Context.new({}, nil, wire_params: { "label" => "from-tree" },
+                                 branch_bag: Weft::Params.new({ label: "from-branch" })) do
+        insert_tag(parent) do
+          child_component = insert_tag(child)
+        end
+      end
+
+      expect(child_component.params[:label]).to eq("from-tree")
+    end
+  end
+
   describe "receives in a plain Arbre::Context" do
     let(:order) { Struct.new(:id, :name).new(11, "Drum of cable") }
 

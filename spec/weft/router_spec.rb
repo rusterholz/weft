@@ -223,6 +223,155 @@ RSpec.describe Weft::Router do
     end
   end
 
+  describe "one universe per request" do
+    let!(:badge_class) do
+      Class.new(Weft::Component) do
+        def self.name = "AccountBadge"
+        param :corporate_account_id, type: :string
+
+        def build(attributes = {})
+          super
+          span { text_node "badge-#{params.corporate_account_id}" }
+        end
+      end
+    end
+
+    it "keeps the request's wire reaching nested components across the action border" do
+      badge = badge_class
+      Class.new(Weft::Component) do
+        def self.name = "DraftPanel"
+        param :order_id, type: :string
+        performs(:touch) { nil }
+
+        define_method(:build) do |attributes = {}|
+          super(attributes)
+          insert_tag(badge)
+        end
+      end
+
+      post "/_components/draft_panel/touch", order_id: "o-1", corporate_account_id: "acct-9"
+
+      expect(last_response.body).to include("badge-acct-9")
+    end
+
+    it "keeps the request's wire reaching nested components across a transfer" do # rubocop:disable RSpec/ExampleLength
+      badge = badge_class
+      submitted = Class.new(Weft::Component) do
+        def self.name = "SubmittedPanel"
+        param :order_id, type: :string
+
+        define_method(:build) do |attributes = {}|
+          super(attributes)
+          div { text_node "submitted-#{params.order_id}" }
+          insert_tag(badge)
+        end
+      end
+      Class.new(Weft::Component) do
+        def self.name = "DraftFormPanel"
+        param :order_id, type: :string
+        transfers(:submit, to: submitted) { |_p| nil }
+      end
+
+      post "/_components/draft_form_panel/submit", order_id: "o-2", corporate_account_id: "acct-3"
+
+      expect(last_response.body).to include("submitted-o-2")
+      expect(last_response.body).to include("badge-acct-3")
+    end
+
+    it "lets a callable delta override the wire for nested components" do # rubocop:disable RSpec/ExampleLength
+      pager = Class.new(Weft::Component) do
+        def self.name = "InnerPager"
+        param :page, type: :integer
+
+        def build(attributes = {})
+          super
+          span { text_node "page-#{params.page}" }
+        end
+      end
+      Class.new(Weft::Component) do
+        def self.name = "FilterPanel"
+        param :page, type: :integer
+        performs(:reset) { |_p| { page: 1 } }
+
+        define_method(:build) do |attributes = {}|
+          super(attributes)
+          insert_tag(pager)
+        end
+      end
+
+      post "/_components/filter_panel/reset", page: "5"
+
+      expect(last_response.body).to include("page-1")
+      expect(last_response.body).not_to include("page-5")
+    end
+
+    it "keeps a transfer target's own defaults sovereign over the declarer's" do
+      target = Class.new(Weft::Component) do
+        def self.name = "OpenModeCard"
+        param :view, type: :string, default: "open"
+
+        def build(attributes = {})
+          super
+          div { text_node "view-#{params.view}" }
+        end
+      end
+      Class.new(Weft::Component) do
+        def self.name = "AllModePanel"
+        param :view, type: :string, default: "all"
+        transfers(:show, to: target)
+      end
+
+      post "/_components/all_mode_panel/show"
+
+      expect(last_response.body).to include("view-open")
+    end
+
+    it "pre-empts the target's derivation with a rich delta value" do # rubocop:disable RSpec/ExampleLength
+      order = Struct.new(:id).new("o-77")
+      target = Class.new(Weft::Component) do
+        def self.name = "OrderSummaryCard"
+        derives(:order) { |_p| raise "derivation must not run" }
+
+        def build(attributes = {})
+          super
+          div { text_node "summary-#{params.order.id}" }
+        end
+      end
+      Class.new(Weft::Component) do
+        def self.name = "OrderPickerPanel"
+        param :order_id, type: :string
+        transfers(:pick, to: target) { |_p| { order: order } }
+      end
+
+      post "/_components/order_picker_panel/pick", order_id: "o-77"
+
+      expect(last_response.status).to eq(200)
+      expect(last_response.body).to include("summary-o-77")
+    end
+
+    it "keeps the request's wire reaching nested components through a recovery render" do # rubocop:disable RSpec/ExampleLength
+      badge = badge_class
+      Class.new(Weft::Component) do
+        def self.name = "SubmittableDraftPanel"
+        param :order_id, type: :string
+        performs(:submit) { |_p| raise Weft::Unprocessable, "invalid" }
+        recovers from: Weft::Unprocessable
+
+        define_method(:build) do |attributes = {}|
+          super(attributes)
+          div { text_node "draft-#{params.order_id}" }
+          insert_tag(badge)
+        end
+      end
+
+      post "/_components/submittable_draft_panel/submit", order_id: "o-4", corporate_account_id: "acct-5"
+
+      expect(last_response.status).to eq(422)
+      expect(last_response.body).to include("draft-o-4")
+      expect(last_response.body).to include("badge-acct-5")
+    end
+  end
+
   describe "cross-component-class param isolation" do
     let!(:contact_card_class) do
       Class.new(Weft::Component) do

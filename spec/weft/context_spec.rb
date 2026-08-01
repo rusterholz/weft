@@ -26,6 +26,31 @@ RSpec.describe Weft::Context do
     it "defaults to an empty hash" do
       expect(described_class.new.wire_params).to eq({})
     end
+  end
+
+  describe "overlays" do
+    it "carries request-scoped overlay values provided at construction" do
+      ctx = described_class.new({}, nil, overlays: { page: 1 })
+
+      expect(ctx.overlays).to eq({ page: 1 })
+    end
+
+    it "defaults to an empty hash" do
+      expect(described_class.new.overlays).to eq({})
+    end
+  end
+
+  describe "branch bag" do
+    it "carries a bag for root components to branch from" do
+      bag = Weft::Params.new({ order_id: 7 })
+      ctx = described_class.new({}, nil, branch_bag: bag)
+
+      expect(ctx.branch_bag).to be(bag)
+    end
+
+    it "defaults to nil" do
+      expect(described_class.new.branch_bag).to be_nil
+    end
 
     it "is readable inside the construction block" do
       seen = nil

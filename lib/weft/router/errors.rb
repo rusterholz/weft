@@ -40,7 +40,7 @@ module Weft
       # Walk a Page-context recovers chain (B1, B2, C1 page-context, C4).
       # `originating_page_class` is nil for routing misses (no specific Page);
       # the gem-default chain on Weft::Page handles those.
-      def handle_page_chain_failure(error, originating_page_class:, originating_params: {})
+      def handle_page_chain_failure(error, originating_page_class:, originating_params: {}, originating_wire: nil)
         root = originating_page_class || Weft::Page
         entry = root.recovery_for(error)
         return page_safety_net(error) unless entry
@@ -50,38 +50,41 @@ module Weft
         return htmx_redirect_to_error_page(error) if d1_applies?(entry, error)
 
         target = root.resolve_recovery_target(entry)
-        merged_params = recovery_merged_params(entry, originating_params, error)
+        block_delta = invoke_recovery_block(entry, originating_params, error)
 
         if page_target?(target)
-          dispatch_page_recovery(target, merged_params, error, entry)
+          dispatch_page_recovery(target, block_delta, error, entry, universe: originating_wire)
         else
-          render_recovery_component(target, merged_params, error,
-                                    component_ctx: { status: recovery_status(error, entry) })
+          render_recovery_component(target, block_delta, error,
+                                    component_ctx: { status: recovery_status(error, entry) },
+                                    universe: originating_wire)
         end
-      end
-
-      def recovery_merged_params(entry, originating_params, error)
-        block_result = invoke_recovery_block(entry, originating_params, error)
-        originating_params.merge(block_result)
       end
 
       # Render or redirect for a Page recovery target. htmx requests get the
       # Page's body content as a fragment; traditional requests get the full
       # document. Status comes from the exception, or the entry's override.
-      def dispatch_page_recovery(page_class, merged_params, error, entry = nil)
+      # The page renders against the request's universe; the recovery values
+      # ride as overlays (one universe per request).
+      def dispatch_page_recovery(page_class, block_delta, error, entry = nil, universe: nil)
         wire_status = recovery_status(error, entry)
-        injected = inject_auto_params(page_class, merged_params, error,
-                                      on_redirect: false, component_ctx: { status: wire_status })
+        overlays = block_delta.merge(auto_param_overlay(error, { status: wire_status }))
         status wire_status
-        htmx_request? ? page_body_html(page_class, injected) : page_class.render(**injected)
+        wire = universe || filtered_params
+        htmx_request? ? page_body_html(page_class, wire, overlays) : render_full_page(page_class, wire, overlays)
+      end
+
+      def render_full_page(page_class, wire_params, overlays)
+        klass = page_class
+        Weft::Context.new({}, nil, wire_params: wire_params, overlays: overlays) { insert_tag(klass) }.to_s
       end
 
       # Extract the rendered HTML inside a Page's <body>. For htmx fragment
       # responses to full-document failures — the surrounding doc shell is
       # already on the client; only the body content should swap.
-      def page_body_html(page_class, wire_params)
+      def page_body_html(page_class, wire_params, overlays)
         klass = page_class
-        ctx = Weft::Context.new({}, nil, wire_params: wire_params) { insert_tag(klass) }
+        ctx = Weft::Context.new({}, nil, wire_params: wire_params, overlays: overlays) { insert_tag(klass) }
         page_instance = ctx.children.first
         body_el = page_instance.children.find { |c| c.respond_to?(:tag_name) && c.tag_name == "body" }
         body_el ? body_el.children.join : page_instance.to_s
@@ -139,12 +142,11 @@ module Weft
         ""
       end
 
-      # Execute a matched recovery entry: invoke block, merge params, dispatch
-      # to either a Page-redirect (HX-Redirect / 302) or a fragment render
+      # Execute a matched recovery entry: invoke the block, then dispatch to
+      # either a Page-redirect (HX-Redirect / 302) or a fragment render
       # depending on the target's type.
       def render_recovery(component_class, entry, resolved_params, error)
         block_result = invoke_recovery_block(entry, resolved_params, error)
-        merged_params = resolved_params.merge(block_result)
         target = component_class.resolve_recovery_target(entry)
         component_ctx = {
           originating_id: component_class.weft_dom_id_for(resolved_params),
@@ -154,9 +156,9 @@ module Weft
         }
 
         if page_target?(target)
-          redirect_to_recovery_page(target, merged_params, error, component_ctx)
+          redirect_to_recovery_page(target, resolved_params.merge(block_result), error, component_ctx)
         else
-          render_recovery_component(target, merged_params, error, component_ctx: component_ctx)
+          render_recovery_component(target, block_result, error, component_ctx: component_ctx)
         end
       end
 
@@ -218,7 +220,7 @@ module Weft
         entry = component_class.component_recovery_for(error)
         return nil unless entry
 
-        merged = resolved_params.merge(invoke_recovery_block(entry, resolved_params, error))
+        block_delta = invoke_recovery_block(entry, resolved_params, error)
         target = component_class.resolve_recovery_target(entry)
         component_ctx = {
           originating_id: component_class.weft_dom_id_for(resolved_params),
@@ -226,26 +228,34 @@ module Weft
           attempts_remaining: attempts_remaining,
           status: recovery_status(error, entry)
         }
-        injected = inject_auto_params(target, merged, error,
-                                      on_redirect: false, component_ctx: component_ctx)
-        build_component_with_wire(target, injected).content
+        overlays = block_delta.merge(auto_param_overlay(error, component_ctx))
+        build_component_with_wire(target, filtered_params, overlays: overlays).content
       end
 
-      def render_recovery_component(target, merged_params, error, component_ctx:)
-        injected = inject_auto_params(target, merged_params, error,
-                                      on_redirect: false, component_ctx: component_ctx)
+      # The target resolves its own schema from the request's universe; the
+      # recovery values — block delta plus the auto-injected params — ride
+      # as overlays, reaching any depth of the recovery render. The failing
+      # component's resolution never crowns a new universe, so its defaults
+      # and derivations can't leak into the target's.
+      def render_recovery_component(target, block_delta, error, component_ctx:, universe: nil)
+        overlays = block_delta.merge(auto_param_overlay(error, component_ctx))
         status component_ctx.fetch(:status) { recovery_status(error) }
-        # The target projects its own schema from the pseudo-wire kwargs, so
-        # the failing component's params (which may share no schema with the
-        # target) can't leak. Declared auto-injected params survive: their
-        # defaults are nil, and coercion passes non-nil values unchanged.
-        target.render(**injected)
+        build_component_with_wire(target, universe || filtered_params, overlays: overlays).to_s
       end
 
-      # Schema-gated auto-injection of recovery params. A recovers target
-      # opts in to receiving each value by declaring `param :<key>` — the
-      # Router only injects keys the target's schema knows about (and only if
-      # the value is non-nil).
+      # The auto-injected values as an overlay: non-nil values only — a nil
+      # here would read as "clear the wire's value," which absence must not do.
+      # Declaration-driven reads make schema-gating unnecessary on renders
+      # (an unread overlay key is inert); redirects still gate via
+      # inject_auto_params below.
+      def auto_param_overlay(error, component_ctx)
+        auto_param_values(error, component_ctx).compact
+      end
+
+      # Schema-gated auto-injection of recovery params for REDIRECT URLs. A
+      # recovers target opts in to receiving each value by declaring
+      # `param :<key>` — only keys the target's schema knows about (and only
+      # redirect-safe, non-nil values) ride the URL.
       def inject_auto_params(target, base_params, error, on_redirect:, component_ctx: {})
         schema = target.respond_to?(:params) ? target.params : {}
         values = auto_param_values(error, component_ctx)
