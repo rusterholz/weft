@@ -75,7 +75,9 @@ module Weft
 
       def push_component_event(out, component_class)
         component = build_component(component_class)
-        html = component.content + render_oob_includes(component_class, component.params)
+        env = { universe: filtered_params, branch_bag: component.params }
+        html = component.content +
+               render_oob_includes(component_class, component.params, context: :push, render_env: env)
         out << format_sse_event(component.weft_dom_id, html)
       end
 

@@ -50,22 +50,45 @@ module Weft
         render_action_error(action, component_class, resolved_params || {}, e)
       end
 
-      # Successive resolution across the component-class boundary. The bag
-      # accumulates the declaring component's resolved params plus any hash
-      # the callable returned; the rendered class projects its OWN schema
-      # from the bag at build (render kwargs are pseudo-wire), so only its
-      # declared params enter its bag. The full bag still flows to OOB
-      # includes so callable-returned params reach them.
+      # One universe per request: the response renders against the request's
+      # own wire, with the callable's returned hash riding as an overlay —
+      # every component in the response (the rendered class, its nested
+      # children, OOB companions) resolves from the same substrate, and the
+      # delta overrides or clears wire values at any depth. The rendered
+      # class projects its own schema; the declaring class's resolution
+      # never crowns a new universe.
       #
       # Delete-swap actions skip the primary render entirely: htmx discards
       # the body on a delete swap, and the component's record is typically
       # gone by now. OOB includes still ride (a 200, never a 204 — htmx
       # refuses to swap 204s, which would skip the delete itself).
       def render_action_response(action, component_class, resolved_params, returned)
-        bag = returned.is_a?(Hash) ? resolved_params.merge(returned) : resolved_params
+        overlay = returned.is_a?(Hash) ? returned : {}
         apply_trigger_header(component_class)
-        html = action.swap == :delete ? "" : action.renders.render(**bag)
-        html + render_oob_includes(component_class, Weft::Params.new(bag), action_name: action.name)
+        primary = build_action_primary(action, overlay)
+        env = { universe: filtered_params, overlays: overlay, branch_bag: primary&.params }
+        (primary ? primary.to_s : "") +
+          render_oob_includes(action.renders, includes_view(primary, resolved_params, overlay),
+                              context: action.renders.equal?(component_class) ? :action : :transfer,
+                              action_name: action.name, render_env: env)
+      end
+
+      # Delete-swap actions skip the primary render: htmx discards the body
+      # on a delete swap, and the component's record is typically gone.
+      def build_action_primary(action, overlay)
+        return nil if action.swap == :delete
+
+        build_component_with_wire(action.renders, filtered_params, overlays: overlay)
+      end
+
+      # The params view an inclusion block receives: the rendered primary's
+      # bag with the overlay applied (undeclared delta keys stay readable).
+      # On a delete-swap there is no primary — the Router-resolved params
+      # stand in.
+      def includes_view(primary, resolved_params, overlay)
+        return Weft::Params.new(resolved_params.merge(overlay)) unless primary
+
+        primary.params.overlay(overlay)
       end
 
       # Error handling for actions. Adds HX-Reswap header when the action's

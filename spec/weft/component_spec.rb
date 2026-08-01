@@ -1768,14 +1768,54 @@ RSpec.describe Weft::Component do
       expect(component_class.inclusions.first[:component_class]).to eq(included)
     end
 
-    it "stores optional on: filter" do
+    it "stores an on: filter, normalized to an array" do
       included = Class.new(described_class) { def self.name = "IncFiltered" }
       component_class = Class.new(described_class) do
         def self.name = "IncFilterSource"
       end
       component_class.includes(included, on: :advance)
 
-      expect(component_class.inclusions.first[:on]).to eq(:advance)
+      expect(component_class.inclusions.first[:on]).to eq([:advance])
+    end
+
+    it "accepts an array of action names for on:" do
+      included = Class.new(described_class) { def self.name = "IncMultiOn" }
+      component_class = Class.new(described_class) do
+        def self.name = "IncMultiOnSource"
+      end
+      component_class.includes(included, on: %i[advance retreat])
+
+      expect(component_class.inclusions.first[:on]).to eq(%i[advance retreat])
+    end
+
+    it "stores a when: filter, normalized to an array" do
+      included = Class.new(described_class) { def self.name = "IncWhen" }
+      component_class = Class.new(described_class) do
+        def self.name = "IncWhenSource"
+      end
+      component_class.includes(included, when: :transferred)
+
+      expect(component_class.inclusions.first[:when]).to eq([:transferred])
+    end
+
+    it "rejects an unknown when: value at declaration" do
+      included = Class.new(described_class) { def self.name = "IncBadWhen" }
+      component_class = Class.new(described_class) do
+        def self.name = "IncBadWhenSource"
+      end
+
+      expect { component_class.includes(included, when: :pushed) }.
+        to raise_error(Weft::InvalidDefinition, /:transferred/)
+    end
+
+    it "rejects unknown keywords" do
+      included = Class.new(described_class) { def self.name = "IncBadKw" }
+      component_class = Class.new(described_class) do
+        def self.name = "IncBadKwSource"
+      end
+
+      expect { component_class.includes(included, whenn: :transferred) }.
+        to raise_error(ArgumentError, /whenn/)
     end
 
     it "stores optional block for attr mapping" do
