@@ -2,13 +2,13 @@
 
 require "spec_helper"
 
+# One constant, defined once: every Weft::Component subclass self-registers,
+# so building the stub per-example would register several distinct class
+# objects at the same route and trip collision detection on the first request.
+TooltipContentStub = Class.new(Weft::Component) { param :id }
+
 RSpec.describe DropshipUI::Tooltip, type: :component do
-  let(:content_class) do
-    Class.new(Weft::Component) do
-      def self.name = "TooltipContentStub"
-      param :id
-    end
-  end
+  let(:content_class) { TooltipContentStub }
 
   it "wraps the trigger content and renders a popover scaffold" do
     klass = content_class

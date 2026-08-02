@@ -2,12 +2,13 @@
 
 require "spec_helper"
 
+# Defined once, not per-example: pages self-register too, so a fresh class
+# object each time would put several of them on the same route and trip
+# collision detection the first time anything drives the Router.
+class TestPage < DropshipUI::Page; end
+
 RSpec.describe DropshipUI::Page, type: :component do
-  let(:concrete_page) do
-    Class.new(described_class) do
-      def self.name = "TestPage"
-    end
-  end
+  let(:concrete_page) { TestPage }
 
   def render_concrete(**attrs)
     klass = concrete_page
