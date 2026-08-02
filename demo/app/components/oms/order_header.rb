@@ -8,6 +8,19 @@ module Oms
 
     derives(:order) { |p| Oms::Order.find(p.order_id) }
 
+    # Hands the region to the edit form. Blockless: opening the editor has
+    # nothing to say about the order, and an action callable can't read this
+    # class's `derives` anyway — those are evaluated during a render, so
+    # there is no already-loaded order here to pass along.
+    transfers :edit, to: Oms::EditableOrderHeader
+
+    # Advancing packs or dispatches shipments, so the shipments card is stale
+    # after it — but not after an edit. An edit changes the customer name,
+    # which the details card shows and the shipments card doesn't. Two
+    # companions, two different reasons to ride.
+    includes Logistics::ShipmentsCard, on: :advance
+    includes Oms::OrderDetailsCard, when: :transferred
+
     performs :advance do |params|
       order = Oms::Order.find(params.order_id)
       case order.status
@@ -28,13 +41,18 @@ module Oms
       h1 do
         text_node "Order "
         span(params.order.id[..7], class: "mono")
+        text_node " — "
+        span params.order.customer_name
         text_node " "
         status_badge params.order.status
       end
-      return if params.order.status == "fulfilled"
 
-      button "Force Advance", class: "btn btn-sm btn-outline-secondary",
-                              action: :advance
+      div(class: "d-flex gap-2") do
+        button "Edit", class: "btn btn-sm btn-outline-secondary", action: :edit
+        next if params.order.status == "fulfilled"
+
+        button "Force Advance", class: "btn btn-sm btn-outline-secondary", action: :advance
+      end
     end
   end
 end

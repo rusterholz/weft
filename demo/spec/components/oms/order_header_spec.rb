@@ -29,4 +29,36 @@ RSpec.describe Oms::OrderHeader, type: :component do
     component = render_weft({ order: order }, wire: { "order_id" => order.id }) { order_header }
     expect(component.id).to eq("oms-order-header-#{order.id}")
   end
+
+  it "names the customer alongside the order id" do
+    html = render_weft_html({ order: order }, wire: { "order_id" => order.id }) { order_header }
+    expect(html).to include("Test Customer")
+  end
+
+  it "offers an edit affordance wired to the transfer" do
+    html = render_weft_html({ order: order }, wire: { "order_id" => order.id }) { order_header }
+    expect(html).to include("Edit")
+    expect(html).to include('hx-post="/_components/oms/order_header/edit"')
+  end
+
+  it "hands the region to the editable header" do
+    expect(described_class.actions[%i[edit post]].renders).to eq(Oms::EditableOrderHeader)
+  end
+
+  it "opens the editor without a callable — nothing changes on the server" do
+    expect(described_class.actions[%i[edit post]].callable).to be_nil
+  end
+
+  it "refreshes the shipments card on its own advance, and the details card on an edit arrival" do
+    by_class = described_class.inclusions.to_h { |inc| [inc[:component_class], inc] }
+
+    expect(by_class[Logistics::ShipmentsCard][:on]).to eq([:advance])
+    expect(by_class[Logistics::ShipmentsCard][:when]).to be_nil
+    expect(by_class[Oms::OrderDetailsCard][:when]).to eq([:transferred])
+    expect(by_class[Oms::OrderDetailsCard][:on]).to be_nil
+  end
+
+  it "stays silent on the wire until per-action triggers exist" do
+    expect(described_class.trigger_events).to be_empty
+  end
 end
