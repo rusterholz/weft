@@ -42,7 +42,11 @@ module Oms
       Weft.redirect(Oms::OrderDetailPage, order_id: order.id)
     end
 
-    recovers(from: [ActiveRecord::RecordInvalid, Weft::Unprocessable]) do |_params, error|
+    # `status:` declares what this edge means on the wire — the declaration
+    # site's call, not a fallback. ActiveRecord::RecordInvalid carries no
+    # status of its own, so without it that branch would report 500 for what
+    # is plainly a validation failure.
+    recovers(from: [ActiveRecord::RecordInvalid, Weft::Unprocessable], status: 422) do |_params, error|
       { error_message: error.message }
     end
 
