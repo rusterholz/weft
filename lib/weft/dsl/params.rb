@@ -189,13 +189,24 @@ module Weft
         self.class.params.keys | self.class.received_params.keys | self.class.derived_params.keys
       end
 
-      # The per-key source stack, top wins: hand-off > own wire > inherited >
-      # own derivation (registered lazily) > default. nil never wins a level —
-      # it means that source didn't have it. A thunk always "produces," so a
-      # same-key default is unreachable behind a derives.
+      # The per-key source stack, top wins: hand-off > overlay > own wire >
+      # inherited > own derivation (registered lazily) > default. nil never
+      # wins a level — it means that source didn't have it. A thunk always
+      # "produces," so a same-key default is unreachable behind a derives.
+      # The overlay (request-scoped verb-block deltas) speaks AS the wire
+      # when it holds a key: its value replaces the wire's, and a nil clears
+      # — masking the wire so resolution falls below it.
       def stack_value(key, received, wire, inherited)
-        [received[key], wire[key], inherited[key], derived_thunk(key), default_for(key)].
+        return received[key] unless received[key].nil?
+
+        overlays = context_overlays
+        wire_level = overlays.key?(key) ? overlays[key] : wire[key]
+        [wire_level, inherited[key], derived_thunk(key), default_for(key)].
           find { |v| !v.nil? }
+      end
+
+      def context_overlays
+        arbre_context.respond_to?(:overlays) ? arbre_context.overlays : {}
       end
 
       def derived_thunk(key)
@@ -234,6 +245,7 @@ module Weft
       def warn_shadowed_derivations(received, wire, inherited, inherited_provenance)
         self.class.derived_params.each_key do |key|
           next unless received[key].nil? && wire[key].nil? && !inherited[key].nil?
+          next if context_overlays.key?(key) # the overlay won, by design — not a divergence
 
           warn_divergence(key, inherited_provenance[key])
         end
@@ -262,7 +274,9 @@ module Weft
       # beside it. At construction the current element IS the future parent,
       # so the walk works before the tree links this instance in. Returns
       # [data, provenance]; the copy is thunk-preserving (never forces the
-      # ancestor's lazy entries) and nil-dropping.
+      # ancestor's lazy entries) and nil-dropping. A root with no tree
+      # ancestor falls back to the context's branch bag — how an OOB
+      # companion inherits from the primary it rides alongside.
       def inherited_bag
         el = arbre_context.current_arbre_element
         while el
@@ -270,7 +284,12 @@ module Weft
 
           el = el.parent
         end
-        [{}, {}]
+        context_branch_bag
+      end
+
+      def context_branch_bag
+        bag = arbre_context.respond_to?(:branch_bag) ? arbre_context.branch_bag : nil
+        bag ? [bag.branch_data, bag.provenance] : [{}, {}]
       end
 
       # The wire door's default wins for dual keys — its meta always carries

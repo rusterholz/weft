@@ -223,6 +223,155 @@ RSpec.describe Weft::Router do
     end
   end
 
+  describe "one universe per request" do
+    let!(:badge_class) do
+      Class.new(Weft::Component) do
+        def self.name = "AccountBadge"
+        param :corporate_account_id, type: :string
+
+        def build(attributes = {})
+          super
+          span { text_node "badge-#{params.corporate_account_id}" }
+        end
+      end
+    end
+
+    it "keeps the request's wire reaching nested components across the action border" do
+      badge = badge_class
+      Class.new(Weft::Component) do
+        def self.name = "DraftPanel"
+        param :order_id, type: :string
+        performs(:touch) { nil }
+
+        define_method(:build) do |attributes = {}|
+          super(attributes)
+          insert_tag(badge)
+        end
+      end
+
+      post "/_components/draft_panel/touch", order_id: "o-1", corporate_account_id: "acct-9"
+
+      expect(last_response.body).to include("badge-acct-9")
+    end
+
+    it "keeps the request's wire reaching nested components across a transfer" do # rubocop:disable RSpec/ExampleLength
+      badge = badge_class
+      submitted = Class.new(Weft::Component) do
+        def self.name = "SubmittedPanel"
+        param :order_id, type: :string
+
+        define_method(:build) do |attributes = {}|
+          super(attributes)
+          div { text_node "submitted-#{params.order_id}" }
+          insert_tag(badge)
+        end
+      end
+      Class.new(Weft::Component) do
+        def self.name = "DraftFormPanel"
+        param :order_id, type: :string
+        transfers(:submit, to: submitted) { |_p| nil }
+      end
+
+      post "/_components/draft_form_panel/submit", order_id: "o-2", corporate_account_id: "acct-3"
+
+      expect(last_response.body).to include("submitted-o-2")
+      expect(last_response.body).to include("badge-acct-3")
+    end
+
+    it "lets a callable delta override the wire for nested components" do # rubocop:disable RSpec/ExampleLength
+      pager = Class.new(Weft::Component) do
+        def self.name = "InnerPager"
+        param :page, type: :integer
+
+        def build(attributes = {})
+          super
+          span { text_node "page-#{params.page}" }
+        end
+      end
+      Class.new(Weft::Component) do
+        def self.name = "FilterPanel"
+        param :page, type: :integer
+        performs(:reset) { |_p| { page: 1 } }
+
+        define_method(:build) do |attributes = {}|
+          super(attributes)
+          insert_tag(pager)
+        end
+      end
+
+      post "/_components/filter_panel/reset", page: "5"
+
+      expect(last_response.body).to include("page-1")
+      expect(last_response.body).not_to include("page-5")
+    end
+
+    it "keeps a transfer target's own defaults sovereign over the declarer's" do
+      target = Class.new(Weft::Component) do
+        def self.name = "OpenModeCard"
+        param :view, type: :string, default: "open"
+
+        def build(attributes = {})
+          super
+          div { text_node "view-#{params.view}" }
+        end
+      end
+      Class.new(Weft::Component) do
+        def self.name = "AllModePanel"
+        param :view, type: :string, default: "all"
+        transfers(:show, to: target)
+      end
+
+      post "/_components/all_mode_panel/show"
+
+      expect(last_response.body).to include("view-open")
+    end
+
+    it "pre-empts the target's derivation with a rich delta value" do # rubocop:disable RSpec/ExampleLength
+      order = Struct.new(:id).new("o-77")
+      target = Class.new(Weft::Component) do
+        def self.name = "OrderSummaryCard"
+        derives(:order) { |_p| raise "derivation must not run" }
+
+        def build(attributes = {})
+          super
+          div { text_node "summary-#{params.order.id}" }
+        end
+      end
+      Class.new(Weft::Component) do
+        def self.name = "OrderPickerPanel"
+        param :order_id, type: :string
+        transfers(:pick, to: target) { |_p| { order: order } }
+      end
+
+      post "/_components/order_picker_panel/pick", order_id: "o-77"
+
+      expect(last_response.status).to eq(200)
+      expect(last_response.body).to include("summary-o-77")
+    end
+
+    it "keeps the request's wire reaching nested components through a recovery render" do # rubocop:disable RSpec/ExampleLength
+      badge = badge_class
+      Class.new(Weft::Component) do
+        def self.name = "SubmittableDraftPanel"
+        param :order_id, type: :string
+        performs(:submit) { |_p| raise Weft::Unprocessable, "invalid" }
+        recovers from: Weft::Unprocessable
+
+        define_method(:build) do |attributes = {}|
+          super(attributes)
+          div { text_node "draft-#{params.order_id}" }
+          insert_tag(badge)
+        end
+      end
+
+      post "/_components/submittable_draft_panel/submit", order_id: "o-4", corporate_account_id: "acct-5"
+
+      expect(last_response.status).to eq(422)
+      expect(last_response.body).to include("draft-o-4")
+      expect(last_response.body).to include("badge-acct-5")
+    end
+  end
+
   describe "cross-component-class param isolation" do
     let!(:contact_card_class) do
       Class.new(Weft::Component) do
@@ -934,6 +1083,266 @@ RSpec.describe Weft::Router do
 
       expect(last_response.body).to include("header-for-from-callable")
       expect(last_response.body).to include('hx-swap-oob="true"')
+    end
+  end
+
+  describe "includes ownership and filters" do
+    let!(:companion_class) do
+      Class.new(Weft::Component) do
+        def self.name = "SideCounter"
+        param :order_id
+
+        def build(attributes = {})
+          super
+          span "side-#{params.order_id}"
+        end
+      end
+    end
+
+    let!(:other_companion_class) do
+      Class.new(Weft::Component) do
+        def self.name = "OtherCounter"
+        param :order_id
+
+        def build(attributes = {})
+          super
+          span "other-#{params.order_id}"
+        end
+      end
+    end
+
+    it "fires the render target's inclusions on a transfers response, not the declarer's" do # rubocop:disable RSpec/ExampleLength
+      mine = companion_class
+      theirs = other_companion_class
+      target = Class.new(Weft::Component) do
+        def self.name = "ArrivalCard"
+        param :order_id
+      end
+      target.includes(mine)
+      declarer = Class.new(Weft::Component) do
+        def self.name = "DepartureCard"
+        param :order_id
+      end
+      declarer.includes(theirs)
+      declarer.transfers(:hand_over, to: target)
+
+      post "/_components/departure_card/hand_over", order_id: "9"
+
+      expect(last_response.body).to include("side-9")
+      expect(last_response.body).not_to include("other-9")
+    end
+
+    it "never matches an on: filter against a foreign action name" do # rubocop:disable RSpec/ExampleLength
+      mine = companion_class
+      target = Class.new(Weft::Component) do
+        def self.name = "NamespacedTarget"
+        param :order_id
+        performs(:submit) { nil }
+      end
+      target.includes(mine, on: :submit)
+      declarer = Class.new(Weft::Component) do
+        def self.name = "NamespacedDeclarer"
+        param :order_id
+      end
+      declarer.transfers(:submit, to: target)
+
+      post "/_components/namespaced_declarer/submit", order_id: "3"
+      expect(last_response.body).not_to include("side-3")
+
+      post "/_components/namespaced_target/submit", order_id: "3"
+      expect(last_response.body).to include("side-3")
+    end
+
+    it "fires when: :transferred inclusions only on transfer arrivals" do # rubocop:disable RSpec/ExampleLength
+      mine = companion_class
+      target = Class.new(Weft::Component) do
+        def self.name = "TransferScopedTarget"
+        param :order_id
+        performs(:poke) { nil }
+      end
+      target.includes(mine, when: :transferred)
+      declarer = Class.new(Weft::Component) do
+        def self.name = "TransferScopedDeclarer"
+        param :order_id
+      end
+      declarer.transfers(:send_over, to: target)
+
+      post "/_components/transfer_scoped_target/poke", order_id: "5"
+      expect(last_response.body).not_to include("side-5")
+
+      post "/_components/transfer_scoped_declarer/send_over", order_id: "5"
+      expect(last_response.body).to include("side-5")
+    end
+
+    it "unions on: and when: filters" do # rubocop:disable RSpec/ExampleLength
+      mine = companion_class
+      target = Class.new(Weft::Component) do
+        def self.name = "UnionTarget"
+        param :order_id
+        performs(:refresh) { nil }
+        performs(:noop) { nil }
+      end
+      target.includes(mine, on: :refresh, when: :transferred)
+      declarer = Class.new(Weft::Component) do
+        def self.name = "UnionDeclarer"
+        param :order_id
+      end
+      declarer.transfers(:pass_along, to: target)
+
+      post "/_components/union_target/refresh", order_id: "6"
+      expect(last_response.body).to include("side-6")
+
+      post "/_components/union_target/noop", order_id: "6"
+      expect(last_response.body).not_to include("side-6")
+
+      post "/_components/union_declarer/pass_along", order_id: "6"
+      expect(last_response.body).to include("side-6")
+    end
+
+    it "matches any action name in an on: array" do
+      mine = companion_class
+      source = Class.new(Weft::Component) do
+        def self.name = "ArrayFilterCard"
+        param :order_id
+        performs(:advance) { nil }
+        performs(:retreat) { nil }
+        performs(:hold) { nil }
+      end
+      source.includes(mine, on: %i[advance retreat])
+
+      post "/_components/array_filter_card/advance", order_id: "8"
+      expect(last_response.body).to include("side-8")
+
+      post "/_components/array_filter_card/retreat", order_id: "8"
+      expect(last_response.body).to include("side-8")
+
+      post "/_components/array_filter_card/hold", order_id: "8"
+      expect(last_response.body).not_to include("side-8")
+    end
+  end
+
+  describe "companions as OOB-delivered children" do
+    it "inherits the primary's bag, rich derivations included, without re-deriving" do # rubocop:disable RSpec/ExampleLength
+      derive_calls = 0
+      order = Struct.new(:id, :label).new("o-1", "Crate")
+      companion = Class.new(Weft::Component) do
+        def self.name = "OrderEcho"
+
+        def build(attributes = {})
+          super
+          span "echo-#{params[:order].label}"
+        end
+      end
+      primary = Class.new(Weft::Component) do
+        def self.name = "OrderKeeper"
+        param :order_id
+        derives(:order) do |_p|
+          derive_calls += 1
+          order
+        end
+        performs(:touch) { nil }
+
+        def build(attributes = {})
+          super
+          div { text_node "keeper-#{params.order.label}" }
+        end
+      end
+      primary.includes(companion)
+
+      post "/_components/order_keeper/touch", order_id: "o-1"
+
+      expect(last_response.body).to include("keeper-Crate")
+      expect(last_response.body).to include("echo-Crate")
+      expect(derive_calls).to eq(1)
+    end
+
+    it "gives each companion its own delta, invisible to the others" do # rubocop:disable RSpec/ExampleLength
+      seen = Class.new(Weft::Component) do
+        def self.name = "FooSeer"
+        param :foo
+        param :bar
+
+        def build(attributes = {})
+          super
+          span "foo-seer[#{params.foo}|#{params.bar}]"
+        end
+      end
+      other = Class.new(Weft::Component) do
+        def self.name = "BarSeer"
+        param :foo
+        param :bar
+
+        def build(attributes = {})
+          super
+          span "bar-seer[#{params.foo}|#{params.bar}]"
+        end
+      end
+      primary = Class.new(Weft::Component) do
+        def self.name = "DeltaSplitter"
+        performs(:go) { nil }
+      end
+      primary.includes(seen) { |_p| { foo: "1" } }
+      primary.includes(other) { |_p| { bar: "2" } }
+
+      post "/_components/delta_splitter/go"
+
+      expect(last_response.body).to include("foo-seer[1|]")
+      expect(last_response.body).to include("bar-seer[|2]")
+    end
+
+    it "resolves a blockless companion from the request universe, like every other form" do # rubocop:disable RSpec/ExampleLength
+      companion = Class.new(Weft::Component) do
+        def self.name = "UniverseReader"
+        param :corporate_account_id, type: :string
+
+        def build(attributes = {})
+          super
+          span "reader-#{params.corporate_account_id}"
+        end
+      end
+      primary = Class.new(Weft::Component) do
+        def self.name = "NarrowPrimary"
+        param :order_id
+        performs(:go) { nil }
+      end
+      primary.includes(companion)
+
+      post "/_components/narrow_primary/go", order_id: "1", corporate_account_id: "acct-2"
+
+      expect(last_response.body).to include("reader-acct-2")
+    end
+
+    it "treats a blockless inclusion exactly like an empty-hash block" do # rubocop:disable RSpec/ExampleLength
+      blockless_sink = Class.new(Weft::Component) do
+        def self.name = "BlocklessSink"
+        param :order_id
+
+        def build(attributes = {})
+          super
+          span "blockless-#{params.order_id}"
+        end
+      end
+      blockful_sink = Class.new(Weft::Component) do
+        def self.name = "BlockfulSink"
+        param :order_id
+
+        def build(attributes = {})
+          super
+          span "blockful-#{params.order_id}"
+        end
+      end
+      primary = Class.new(Weft::Component) do
+        def self.name = "EquivalencePrimary"
+        param :order_id
+        performs(:go) { |_p| { order_id: "overridden" } }
+      end
+      primary.includes(blockless_sink)
+      primary.includes(blockful_sink) { |_p| {} }
+
+      post "/_components/equivalence_primary/go", order_id: "wire"
+
+      expect(last_response.body).to include("blockless-overridden")
+      expect(last_response.body).to include("blockful-overridden")
     end
   end
 

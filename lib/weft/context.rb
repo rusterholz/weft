@@ -27,8 +27,23 @@ module Weft
     # instance_evals the construction block — the tree builds during super.
     attr_reader :wire_params
 
-    def initialize(assigns = {}, helpers = nil, wire_params: nil, &)
+    # Request-scoped overlay values — the accumulated verb-block deltas
+    # (action callable returns, includes deltas, recovery injections). In
+    # the source stack an overlay entry speaks AS the wire for its key:
+    # a value overrides the wire's, a nil clears it (resolution falls
+    # below). One universe per request; these are its amendments.
+    attr_reader :overlays
+
+    # A bag for ROOT components to branch from, standing in for the tree
+    # ancestor a root doesn't have — how an OOB companion inherits its
+    # primary's bag (rich values included) exactly like a child built in
+    # the primary's own build.
+    attr_reader :branch_bag
+
+    def initialize(assigns = {}, helpers = nil, wire_params: nil, overlays: nil, branch_bag: nil, &)
       @wire_params = wire_params || {}
+      @overlays = overlays || {}
+      @branch_bag = branch_bag
       super(assigns, helpers, &)
     end
 

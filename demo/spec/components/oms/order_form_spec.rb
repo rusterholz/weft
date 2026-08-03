@@ -41,4 +41,9 @@ RSpec.describe Oms::OrderForm, type: :component do
     html = rendered
     expect(html).not_to include("alert-danger")
   end
+
+  it "reports a validation failure as 422, including the ActiveRecord branch" do
+    entry = described_class.recovery_for(ActiveRecord::RecordInvalid.new(Oms::Order.new))
+    expect(entry[:status]).to eq(422)
+  end
 end

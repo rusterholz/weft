@@ -146,9 +146,12 @@ module Weft
     # Build a component in a fresh context carrying the wire source; the
     # component resolves its own declared params from it at build. Arbre's
     # builder attributes stay pure chrome — params travel their own channel.
-    def build_component_with_wire(component_class, wire_params)
+    # `overlays` carries request-scoped verb-block deltas; `branch_bag` lets
+    # the root inherit a primary's bag (OOB companions).
+    def build_component_with_wire(component_class, wire_params, overlays: {}, branch_bag: nil)
       klass = component_class
-      context = Weft::Context.new({}, nil, wire_params: wire_params) { insert_tag(klass) }
+      context = Weft::Context.new({}, nil, wire_params: wire_params, overlays: overlays,
+                                           branch_bag: branch_bag) { insert_tag(klass) }
       context.children.first
     end
 
@@ -164,7 +167,8 @@ module Weft
     rescue StandardError => e
       handle_page_chain_failure(e,
                                 originating_page_class: page_class,
-                                originating_params: Weft::Resolver.resolve(page_class, merged_params))
+                                originating_params: Weft::Resolver.resolve(page_class, merged_params),
+                                originating_wire: merged_params)
     end
 
     def htmx_request?

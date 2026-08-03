@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "weft/error"
+
 module Weft
   module DSL
     # Mixin for classes that declare OOB-swapped sibling components.
@@ -12,21 +14,40 @@ module Weft
       end
 
       module ClassMethods
+        # Contexts a `when:` filter may name. Only :transferred ships today;
+        # the vocabulary grows deliberately.
+        WHEN_VALUES = %i[transferred].freeze
+
         # Declare that another component should be OOB-swapped alongside
-        # this component's action responses and SSE pushes.
+        # this component's responses.
         #
-        #   includes OrderHeader                          # pass-through params
-        #   includes OrderHeader, on: :advance            # only on :advance action
-        #   includes OrderHeader do |params|              # explicit param mapping
+        #   includes OrderHeader                          # every response
+        #   includes OrderHeader, on: :advance            # own action(s) only
+        #   includes OrderHeader, on: %i[advance retreat]
+        #   includes OrderHeader, when: :transferred      # transfer arrivals only
+        #   includes OrderHeader, on: :save, when: :transferred   # union: either
+        #   includes OrderHeader do |params|              # companion delta
         #     { order_id: params.order_id, compact: true }
         #   end
         #
-        # Without a block, the included component resolves from the same
-        # request params as the primary component. With a block, the block
-        # receives the primary component's resolved params and returns wire
-        # params for the included component's Resolver.
-        def includes(component_class, on: nil, &block)
-          own_inclusions << { component_class: component_class, on: on, block: block }
+        # Unfiltered inclusions ride every response this component renders in:
+        # its own actions, SSE pushes, and transfer arrivals. Filters
+        # enumerate contexts — `on:` names this component's OWN actions
+        # (never a transferring component's), `when: :transferred` fires when
+        # this component renders as a transfer target; declaring both is a
+        # union. The block's return is a DELTA overlaid on the request for
+        # this companion alone; blockless is exactly an empty delta.
+        #
+        # (`when` rides **options because it's a Ruby reserved word — call
+        # sites are unaffected, only this signature is.)
+        def includes(component_class, on: nil, **options, &block)
+          when_filter = options.delete(:when)
+          raise ArgumentError, "unknown keywords: #{options.keys.inspect}" unless options.empty?
+
+          own_inclusions << { component_class: component_class,
+                              on: on.nil? ? nil : Array(on),
+                              when: validated_when(when_filter),
+                              block: block }
         end
 
         # All declared inclusions (own + inherited).
@@ -39,6 +60,20 @@ module Weft
         end
 
         private
+
+        def validated_when(value)
+          return nil if value.nil?
+
+          contexts = Array(value)
+          unknown = contexts - WHEN_VALUES
+          unless unknown.empty?
+            raise Weft::InvalidDefinition,
+                  "includes when: #{unknown.map(&:inspect).join(', ')} names no known context — " \
+                  "recognized: #{WHEN_VALUES.map(&:inspect).join(', ')}"
+          end
+
+          contexts
+        end
 
         def own_inclusions
           @own_inclusions ||= []
