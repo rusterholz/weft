@@ -12,6 +12,12 @@
 # rspec failure tracking
 .rspec_status
 
+# Appraisal resolves these per machine and per CI run. Pinning them would mean
+# the matrix proves the gem works with one exact set of transitive dependencies
+# rather than across the range it claims to support — the .gemfile files carry
+# the arbre/activesupport combinations we actually mean to test.
+gemfiles/*.gemfile.lock
+
 # demo app — runtime artifacts
 demo/db/*.sqlite3
 demo/db/*.sqlite3-*
