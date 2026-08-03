@@ -11,13 +11,13 @@ PATH
 GEM
   remote: https://rubygems.org/
   specs:
-    activemodel (8.1.3)
-      activesupport (= 8.1.3)
-    activerecord (8.1.3)
-      activemodel (= 8.1.3)
-      activesupport (= 8.1.3)
+    activemodel (8.1.3.1)
+      activesupport (= 8.1.3.1)
+    activerecord (8.1.3.1)
+      activemodel (= 8.1.3.1)
+      activesupport (= 8.1.3.1)
       timeout (>= 0.4.0)
-    activesupport (8.1.3)
+    activesupport (8.1.3.1)
       base64
       bigdecimal
       concurrent-ruby (~> 1.0, >= 1.3.1)
@@ -44,7 +44,7 @@ GEM
     drb (2.2.3)
     i18n (1.15.2)
       concurrent-ruby (~> 1.0)
-    json (2.21.1)
+    json (2.21.2)
     language_server-protocol (3.17.0.6)
     lint_roller (1.1.0)
     logger (1.7.0)
@@ -54,13 +54,13 @@ GEM
     mustermann (3.0.4)
       ruby2_keywords (~> 0.0.1)
     nio4r (2.7.5)
-    openssl (4.0.1)
+    openssl (4.0.2)
     parallel (2.1.0)
     parser (3.3.12.0)
       ast (~> 2.4.1)
       racc
     prism (1.9.0)
-    puma (6.6.1)
+    puma (8.0.2)
       nio4r (~> 2.0)
     racc (1.8.1)
     rack (3.2.6)
@@ -157,7 +157,7 @@ DEPENDENCIES
   arbre (~> 2.2)
   clockwork (~> 4.0)
   openssl (>= 3.2.2)
-  puma (~> 6.0)
+  puma (~> 8.0)
   rackup (~> 2.2)
   rake (~> 13.0)
   rspec (~> 3.13)
