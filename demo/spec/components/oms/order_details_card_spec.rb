@@ -30,4 +30,17 @@ RSpec.describe Oms::OrderDetailsCard, type: :component do
     html = render_weft_html({}, wire: { "order_id" => order.id }) { order_details_card }
     expect(html).to include("Acme Corp")
   end
+
+  it "shows when the order was last touched" do
+    html = render_weft_html({ order: order }, wire: { "order_id" => order.id }) { order_details_card }
+    expect(html).to include("Last updated")
+    expect(html).to include(order.updated_at.strftime("%Y-%m-%d %H:%M:%S"))
+  end
+
+  # An advance changes the status without including this card, so it listens
+  # for the header's announcement instead of riding along with the response.
+  it "refetches itself when the order is advanced" do
+    html = render_weft_html({ order: order }, wire: { "order_id" => order.id }) { order_details_card }
+    expect(html).to include('hx-trigger="order-updated from:body"')
+  end
 end

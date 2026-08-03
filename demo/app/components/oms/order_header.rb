@@ -17,9 +17,19 @@ module Oms
     # Advancing packs or dispatches shipments, so the shipments card is stale
     # after it — but not after an edit. An edit changes the customer name,
     # which the details card shows and the shipments card doesn't. Two
-    # companions, two different reasons to ride.
+    # companions, two different reasons to ride. (The details card also hears
+    # about advances, but by subscribing to the event below rather than by
+    # riding along — it isn't part of that response.)
     includes Logistics::ShipmentsCard, on: :advance
     includes Oms::OrderDetailsCard, when: :transferred
+
+    # Two announcements, each mapped to the action that earns it. Advancing
+    # moves the order through the pipeline; opening the editor changes who
+    # owns this region and nothing else. Without `on:` a single declaration
+    # would fire on both, and everything listening for a status change would
+    # refetch every time someone clicked Edit.
+    triggers "order-updated", on: :advance
+    triggers "order-editing", on: :edit
 
     performs :advance do |params|
       order = Oms::Order.find(params.order_id)

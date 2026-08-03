@@ -84,6 +84,8 @@ Only a component's *own* declared params serialize — into its refresh and stre
 
 The first `param` also anchors the component's DOM identity: the wrapper's element id is the dasherized class name suffixed with the first declared param's value — `StatCard` with `status: "shipped"` renders `id="stat-card-shipped"`, which is how sibling instances stay individually addressable. Declare the identifying param first. The suffix rides only when the value is a non-blank scalar (String, Symbol, number, or boolean): `nil`, `""`, and non-scalar values all derive the same bare class id, so a component's identity is stable across the different ways "no value" can arrive.
 
+That id decides more than where a fragment lands. Because an out-of-band swap is addressed by it, it also decides which [`includes`](#includes--companions-in-the-same-response) companions can coexist in one response: two that resolve to the same id collide, and only one rides. Changing which param you declare first — or what that param holds — can therefore change *which* companions appear, not merely where they go.
+
 Declaring a param has a routing consequence: a component with params (or any verb below) is considered independently addressable and gets its own route. See [Routing](routing.md).
 
 ### `receives` — caller hand-offs
@@ -274,10 +276,20 @@ If the callable raises, Weft overrides the destructive swap (via `HX-Reswap`) so
 ### `triggers` — announce to the rest of the page
 
 ```ruby
-triggers "delivery-completed"
+triggers "delivery-completed"                # every action
+triggers "order-updated", on: :advance       # that action only — arrays too
 ```
 
 Every action response from this component carries the named event in its `HX-Trigger` header. Other components subscribe with `refreshes on: "delivery-completed"` — a decoupled way to say "when this changes, those refresh," without the components knowing about each other. Multiple `triggers` declarations accumulate.
+
+`on:` maps an event to the actions it belongs to. Without it, an event is welded to *every* action the component has — fine when there's one, rarely what a component with several means. A header that both advances an order and hands the region over to an editor would otherwise announce a status change when someone merely clicked Edit, and every subscriber would refetch for nothing. Naming the action keeps the two apart:
+
+```ruby
+triggers "order-updated", on: :advance   # the status machine ran
+triggers "order-editing", on: :edit      # responsibility handed to the editor
+```
+
+There is deliberately no `when:` counterpart, though [`includes`](#includes--companions-in-the-same-response) has one. `HX-Trigger` announces what a *callable* did, so a render-context filter has nothing to say about it: "fire when I render as a transfer target" describes a render that ran no callable, and "fire when I transfer away" is already `on: :that_action`.
 
 Events follow the *action*, not the rendering: on a [`transfers`](#transfers--actions-that-render-something-else) response the declaring component's events fire — its callable is what ran — while the target's own events wait for the target's own actions. (The same rule is why a `dismisses` response, which renders no body at all, still announces.)
 
@@ -298,8 +310,10 @@ A companion is an **OOB-delivered child**: it renders against the same request, 
 
 Unfiltered inclusions ride every response the component renders in: its own action responses, its SSE pushes, and its arrivals as a [`transfers`](#transfers--actions-that-render-something-else) target. Filters enumerate contexts, and declaring both is a union — either fires:
 
-- **`on:`** names this component's **own** actions (a symbol or an array). It never matches another component's action names — an action arriving via transfer isn't consulted — and it doesn't apply to pushes.
+- **`on:`** names this component's **own** actions (a symbol or an array). It never matches another component's action names — an action arriving via transfer isn't consulted — and it doesn't apply to pushes. Note that `on:` *replaces* the unfiltered default rather than narrowing it, which is why naming your own [`transfers`](#transfers--actions-that-render-something-else) action works: the companion rides that response even though the target, not you, is what renders. Your *unfiltered* inclusions stay home on a transfer, since "every response I render in" is false when you don't render.
 - **`when: :transferred`** fires only when this component renders as a transfer target: for companions that should ride the arrival, not every response.
+
+**One slot, one fragment.** An out-of-band swap is addressed by DOM id, so two companions resolving to the same id can't both land — the second would swap straight over the first. Weft keeps the first and logs a warning naming both declaration sites. Companions differing in an [identifying param](#params) derive different ids and both ride, which is what makes a left eye and a right eye a pair rather than a clash. The case worth knowing: two declarations whose deltas differ only in a *non*-identifying value look distinct in the source and collide in the DOM. When a transferring component and its target both include the same companion, the target's declaration keeps the slot — the response is the target's.
 
 ### `recovers` — declare error behavior
 

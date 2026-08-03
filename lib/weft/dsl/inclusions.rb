@@ -44,10 +44,12 @@ module Weft
           when_filter = options.delete(:when)
           raise ArgumentError, "unknown keywords: #{options.keys.inspect}" unless options.empty?
 
+          site = caller_locations(1, 1).first
           own_inclusions << { component_class: component_class,
                               on: on.nil? ? nil : Array(on),
                               when: validated_when(when_filter),
-                              block: block }
+                              block: block,
+                              source_location: [site.path, site.lineno] }
         end
 
         # All declared inclusions (own + inherited).

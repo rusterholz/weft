@@ -35,6 +35,10 @@ RSpec.describe "Order header edit round trip", type: :request do
       selects = count_selects("oms_orders") { response }
       expect(selects).to eq(1)
     end
+
+    it "announces the hand-off, and only the hand-off" do
+      expect(response.headers["HX-Trigger"]).to eq("order-editing")
+    end
   end
 
   describe "POST the save transfer" do
@@ -110,6 +114,12 @@ RSpec.describe "Order header edit round trip", type: :request do
 
     it "leaves the details card home — its inclusion is filtered to transfer arrivals" do
       expect(oob_ids(response.body)).not_to include("oms-order-details-card-#{order.id}")
+    end
+
+    # The details card subscribes to this event, which is how it hears about
+    # a status change it wasn't included in. It must not hear about an edit.
+    it "announces the status change, and only the status change" do
+      expect(response.headers["HX-Trigger"]).to eq("order-updated")
     end
   end
 end

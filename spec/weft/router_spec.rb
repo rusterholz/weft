@@ -483,6 +483,70 @@ RSpec.describe Weft::Router do
 
       expect(last_response.headers).not_to have_key("HX-Trigger")
     end
+
+    context "with an on: filter" do
+      let!(:filtered_class) do # rubocop:disable RSpec/LetSetup
+        Class.new(Weft::Component) do
+          def self.name = "FilteredTrigger"
+          param :id
+          triggers "advanced", on: :advance
+          triggers "always-fires"
+          performs(:advance) { nil }
+          performs(:touch) { nil }
+        end
+      end
+
+      it "fires a filtered event on the action it names" do
+        post "/_components/filtered_trigger/advance", id: "1"
+
+        expect(last_response.headers["HX-Trigger"]).to include("advanced")
+      end
+
+      it "withholds a filtered event from the component's other actions" do
+        post "/_components/filtered_trigger/touch", id: "1"
+
+        expect(last_response.headers["HX-Trigger"]).not_to include("advanced")
+      end
+
+      it "keeps an unfiltered event firing on every action" do
+        post "/_components/filtered_trigger/touch", id: "1"
+
+        expect(last_response.headers["HX-Trigger"]).to eq("always-fires")
+      end
+
+      it "fires a filtered event on any action its array names" do
+        Class.new(Weft::Component) do
+          def self.name = "ArrayTrigger"
+          param :id
+          triggers "moved", on: %i[advance retreat]
+          performs(:advance) { nil }
+          performs(:retreat) { nil }
+        end
+
+        post "/_components/array_trigger/advance", id: "1"
+        expect(last_response.headers["HX-Trigger"]).to eq("moved")
+
+        post "/_components/array_trigger/retreat", id: "1"
+        expect(last_response.headers["HX-Trigger"]).to eq("moved")
+      end
+
+      it "fires a filtered event on the transfers action it names" do
+        target = Class.new(Weft::Component) do
+          def self.name = "TriggerArrival"
+          param :id
+        end
+        declarer = Class.new(Weft::Component) do
+          def self.name = "TriggerDeparture"
+          param :id
+          triggers "handed-over", on: :hand_off
+        end
+        declarer.transfers(:hand_off, to: target)
+
+        post "/_components/trigger_departure/hand_off", id: "1"
+
+        expect(last_response.headers["HX-Trigger"]).to eq("handed-over")
+      end
+    end
   end
 
   describe "error handling" do
@@ -1218,6 +1282,135 @@ RSpec.describe Weft::Router do
 
       post "/_components/array_filter_card/hold", order_id: "8"
       expect(last_response.body).not_to include("side-8")
+    end
+
+    it "renders one fragment when two declarations resolve to the same DOM id" do
+      mine = companion_class
+      source = Class.new(Weft::Component) do
+        def self.name = "DoubleIncluder"
+        param :order_id
+        performs(:advance) { nil }
+      end
+      source.includes(mine)
+      source.includes(mine, on: :advance)
+
+      post "/_components/double_includer/advance", order_id: "9"
+
+      expect(last_response.body.scan("side-9").size).to eq(1)
+    end
+
+    it "fires the declarer's on:-filtered inclusion on its own transfers action" do
+      mine = companion_class
+      target = Class.new(Weft::Component) do
+        def self.name = "HandoffArrival"
+        param :order_id
+      end
+      declarer = Class.new(Weft::Component) do
+        def self.name = "HandoffDeparture"
+        param :order_id
+      end
+      declarer.includes(mine, on: :hand_off)
+      declarer.transfers(:hand_off, to: target)
+
+      post "/_components/handoff_departure/hand_off", order_id: "7"
+
+      expect(last_response.body).to include("side-7")
+    end
+
+    it "hands the declarer's inclusion block the declarer's picture, not the target's" do
+      mine = companion_class
+      target = Class.new(Weft::Component) do
+        def self.name = "LabelledArrival"
+        param :order_id
+        derives(:label) { "target-side" }
+      end
+      declarer = Class.new(Weft::Component) do
+        def self.name = "LabelledDeparture"
+        param :order_id
+      end
+      declarer.includes(mine, on: :hand_off) { |params| { order_id: params[:label] || "declarer-side" } }
+      declarer.transfers(:hand_off, to: target)
+
+      post "/_components/labelled_departure/hand_off", order_id: "7"
+
+      expect(last_response.body).to include("side-declarer-side")
+    end
+
+    # The deltas differ, so a class-and-delta rule would let both through —
+    # but only `note` differs and the id rides `order_id`, so both fragments
+    # are aimed at one slot and the rendered component's declaration wins.
+    it "gives the rendered component the slot when both sides claim one DOM id" do # rubocop:disable RSpec/ExampleLength
+      allow(Weft.logger).to receive(:warn)
+      noted = Class.new(Weft::Component) do
+        def self.name = "NotedCounter"
+        param :order_id
+        param :note
+
+        def build(attributes = {})
+          super
+          span "noted-#{params.note}"
+        end
+      end
+      target = Class.new(Weft::Component) do
+        def self.name = "SlotArrival"
+        param :order_id
+      end
+      declarer = Class.new(Weft::Component) do
+        def self.name = "SlotDeparture"
+        param :order_id
+      end
+      target.includes(noted, when: :transferred) { { note: "from-target" } }
+      declarer.includes(noted, on: :hand_off) { { note: "from-declarer" } }
+      declarer.transfers(:hand_off, to: target)
+
+      post "/_components/slot_departure/hand_off", order_id: "7"
+
+      expect(last_response.body).to include("noted-from-target")
+      expect(last_response.body).not_to include("noted-from-declarer")
+      # Proves the declarer's companion was built and then dropped, rather
+      # than never having fired at all.
+      expect(Weft.logger).to have_received(:warn).with(/NotedCounter companion/)
+    end
+
+    it "names both declaration sites when two companions claim one DOM id" do
+      allow(Weft.logger).to receive(:warn)
+      mine = companion_class
+      source = Class.new(Weft::Component) do
+        def self.name = "CollidingIncluder"
+        param :order_id
+        performs(:advance) { nil }
+      end
+      source.includes(mine)
+      source.includes(mine, on: :advance)
+
+      post "/_components/colliding_includer/advance", order_id: "9"
+
+      expect(Weft.logger).to have_received(:warn).
+        with(/SideCounter companion declared at .+:\d+ was dropped.+already claimed by .+:\d+\./m)
+    end
+
+    it "keeps both fragments when two declarations resolve to different DOM ids" do # rubocop:disable RSpec/ExampleLength
+      eye = Class.new(Weft::Component) do
+        def self.name = "EyeCard"
+        param :side
+
+        def build(attributes = {})
+          super
+          span "eye-#{params.side}"
+        end
+      end
+      face = Class.new(Weft::Component) do
+        def self.name = "FaceCard"
+        param :order_id
+        performs(:blink) { nil }
+      end
+      face.includes(eye, on: :blink) { { side: "right" } }
+      face.includes(eye, on: :blink) { { side: "left" } }
+
+      post "/_components/face_card/blink", order_id: "1"
+
+      expect(last_response.body).to include("eye-right")
+      expect(last_response.body).to include("eye-left")
     end
   end
 
