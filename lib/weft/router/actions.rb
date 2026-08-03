@@ -10,8 +10,9 @@ module Weft
     # destructive-swap header before delegating.
     #
     # Depends on Router internals: `filtered_params`, `handle_redirect`,
-    # `apply_trigger_header`, `render_oob_includes`, `render_error`,
-    # `headers`.
+    # `apply_trigger_header`, `render_error`, `headers`, and the
+    # OOB-include slice's `render_companions` / `applicable_inclusions` /
+    # `explicitly_named_inclusions`.
     module Actions
       private
 
@@ -66,11 +67,40 @@ module Weft
         overlay = returned.is_a?(Hash) ? returned : {}
         apply_trigger_header(component_class, action.name)
         primary = build_action_primary(action, overlay)
-        env = { universe: filtered_params, overlays: overlay, branch_bag: primary&.params }
         (primary ? primary.to_s : "") +
-          render_oob_includes(action.renders, includes_view(primary, resolved_params, overlay),
-                              context: action.renders.equal?(component_class) ? :action : :transfer,
-                              action_name: action.name, render_env: env)
+          render_companions(action_companions(action, component_class, primary, resolved_params, overlay))
+      end
+
+      # Which companions ride this response, in precedence order: the
+      # rendered component's first, then — on a transfer — the declaring
+      # component's explicitly named ones. One list, so two companions
+      # claiming a single DOM id are caught across the two sources and the
+      # rendered component's declaration keeps the slot.
+      def action_companions(action, component_class, primary, resolved_params, overlay)
+        target = target_companions(action, component_class, primary, resolved_params, overlay)
+        return target if action.renders.equal?(component_class)
+
+        target + declarer_companions(component_class, action.name, resolved_params, overlay)
+      end
+
+      # The rendered component's companions: its block reads the primary's
+      # rendered bag (rich values included) and each one branches it.
+      def target_companions(action, component_class, primary, resolved_params, overlay)
+        context = action.renders.equal?(component_class) ? :action : :transfer
+        env = { universe: filtered_params, overlays: overlay, branch_bag: primary&.params }
+        view = includes_view(primary, resolved_params, overlay)
+        applicable_inclusions(action.renders, context, action.name).map { |inc| [inc, view, env] }
+      end
+
+      # The declaring component's companions on a transfer. This branch
+      # forks before the hand-off, so the block reads the declarer's own
+      # params plus the callable's overlay — never the target's picture —
+      # and there is no primary bag to branch, because nothing rendered the
+      # declarer and so no rich values exist on this path.
+      def declarer_companions(component_class, action_name, resolved_params, overlay)
+        view = Weft::Params.new(resolved_params.merge(overlay))
+        env = { universe: filtered_params, overlays: overlay }
+        explicitly_named_inclusions(component_class, action_name).map { |inc| [inc, view, env] }
       end
 
       # Delete-swap actions skip the primary render: htmx discards the body

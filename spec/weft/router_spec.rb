@@ -1283,6 +1283,135 @@ RSpec.describe Weft::Router do
       post "/_components/array_filter_card/hold", order_id: "8"
       expect(last_response.body).not_to include("side-8")
     end
+
+    it "renders one fragment when two declarations resolve to the same DOM id" do
+      mine = companion_class
+      source = Class.new(Weft::Component) do
+        def self.name = "DoubleIncluder"
+        param :order_id
+        performs(:advance) { nil }
+      end
+      source.includes(mine)
+      source.includes(mine, on: :advance)
+
+      post "/_components/double_includer/advance", order_id: "9"
+
+      expect(last_response.body.scan("side-9").size).to eq(1)
+    end
+
+    it "fires the declarer's on:-filtered inclusion on its own transfers action" do
+      mine = companion_class
+      target = Class.new(Weft::Component) do
+        def self.name = "HandoffArrival"
+        param :order_id
+      end
+      declarer = Class.new(Weft::Component) do
+        def self.name = "HandoffDeparture"
+        param :order_id
+      end
+      declarer.includes(mine, on: :hand_off)
+      declarer.transfers(:hand_off, to: target)
+
+      post "/_components/handoff_departure/hand_off", order_id: "7"
+
+      expect(last_response.body).to include("side-7")
+    end
+
+    it "hands the declarer's inclusion block the declarer's picture, not the target's" do
+      mine = companion_class
+      target = Class.new(Weft::Component) do
+        def self.name = "LabelledArrival"
+        param :order_id
+        derives(:label) { "target-side" }
+      end
+      declarer = Class.new(Weft::Component) do
+        def self.name = "LabelledDeparture"
+        param :order_id
+      end
+      declarer.includes(mine, on: :hand_off) { |params| { order_id: params[:label] || "declarer-side" } }
+      declarer.transfers(:hand_off, to: target)
+
+      post "/_components/labelled_departure/hand_off", order_id: "7"
+
+      expect(last_response.body).to include("side-declarer-side")
+    end
+
+    # The deltas differ, so a class-and-delta rule would let both through —
+    # but only `note` differs and the id rides `order_id`, so both fragments
+    # are aimed at one slot and the rendered component's declaration wins.
+    it "gives the rendered component the slot when both sides claim one DOM id" do # rubocop:disable RSpec/ExampleLength
+      allow(Weft.logger).to receive(:warn)
+      noted = Class.new(Weft::Component) do
+        def self.name = "NotedCounter"
+        param :order_id
+        param :note
+
+        def build(attributes = {})
+          super
+          span "noted-#{params.note}"
+        end
+      end
+      target = Class.new(Weft::Component) do
+        def self.name = "SlotArrival"
+        param :order_id
+      end
+      declarer = Class.new(Weft::Component) do
+        def self.name = "SlotDeparture"
+        param :order_id
+      end
+      target.includes(noted, when: :transferred) { { note: "from-target" } }
+      declarer.includes(noted, on: :hand_off) { { note: "from-declarer" } }
+      declarer.transfers(:hand_off, to: target)
+
+      post "/_components/slot_departure/hand_off", order_id: "7"
+
+      expect(last_response.body).to include("noted-from-target")
+      expect(last_response.body).not_to include("noted-from-declarer")
+      # Proves the declarer's companion was built and then dropped, rather
+      # than never having fired at all.
+      expect(Weft.logger).to have_received(:warn).with(/NotedCounter companion/)
+    end
+
+    it "names both declaration sites when two companions claim one DOM id" do
+      allow(Weft.logger).to receive(:warn)
+      mine = companion_class
+      source = Class.new(Weft::Component) do
+        def self.name = "CollidingIncluder"
+        param :order_id
+        performs(:advance) { nil }
+      end
+      source.includes(mine)
+      source.includes(mine, on: :advance)
+
+      post "/_components/colliding_includer/advance", order_id: "9"
+
+      expect(Weft.logger).to have_received(:warn).
+        with(/SideCounter companion declared at .+:\d+ was dropped.+already claimed by .+:\d+\./m)
+    end
+
+    it "keeps both fragments when two declarations resolve to different DOM ids" do # rubocop:disable RSpec/ExampleLength
+      eye = Class.new(Weft::Component) do
+        def self.name = "EyeCard"
+        param :side
+
+        def build(attributes = {})
+          super
+          span "eye-#{params.side}"
+        end
+      end
+      face = Class.new(Weft::Component) do
+        def self.name = "FaceCard"
+        param :order_id
+        performs(:blink) { nil }
+      end
+      face.includes(eye, on: :blink) { { side: "right" } }
+      face.includes(eye, on: :blink) { { side: "left" } }
+
+      post "/_components/face_card/blink", order_id: "1"
+
+      expect(last_response.body).to include("eye-right")
+      expect(last_response.body).to include("eye-left")
+    end
   end
 
   describe "companions as OOB-delivered children" do
