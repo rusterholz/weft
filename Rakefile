@@ -10,7 +10,11 @@ require "rubocop/rake_task"
 RuboCop::RakeTask.new
 
 namespace :gemfile do
-  desc "Ensure all platforms are present in Gemfile.lock and Appraisal gemfiles"
+  # Only the root lockfile is committed, so it's the only one that has to carry
+  # every platform. The Appraisal lockfiles are generated per machine (and
+  # gitignored), and CI resolves them fresh, so whatever platform it resolves on
+  # is the right one there.
+  desc "Ensure all platforms are present in Gemfile.lock"
   task :platforms do
     platforms = %w[ruby x86_64-darwin arm64-darwin x86_64-linux]
     platform_args = platforms.join(" ")
@@ -24,17 +28,8 @@ namespace :gemfile do
       system(env, "bundle lock --add-platform #{platform_args}") || abort("Failed to lock #{gemfile_path}")
     end
 
-    # Lock main Gemfile
     lock_with_platforms.call("Gemfile")
 
-    # Lock all Appraisal gemfiles
-    Dir.glob("gemfiles/*.gemfile").each do |gemfile|
-      lock_with_platforms.call(gemfile)
-    end
-
-    # Lock demo app Gemfile
-    # lock_with_platforms.call("spec/demo/Gemfile")
-
-    puts "\nAll lockfiles updated with platforms: #{platforms.join(', ')}"
+    puts "\nGemfile.lock updated with platforms: #{platforms.join(', ')}"
   end
 end

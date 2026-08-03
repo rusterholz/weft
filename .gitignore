@@ -12,6 +12,9 @@
 # rspec failure tracking
 .rspec_status
 
+# Appraisal resolves these per machine and per CI run
+gemfiles/*.gemfile.lock
+
 # demo app — runtime artifacts
 demo/db/*.sqlite3
 demo/db/*.sqlite3-*
