@@ -10,7 +10,11 @@ module Delivery
     derives(:shipment) { |p| Logistics::Shipment.find_by(id: p.driver.current_shipment_id) }
 
     refreshes on: "delivery-completed"
-    triggers "delivery-completed"
+
+    # This section has one action today, so naming it changes nothing — but
+    # it says which action the event belongs to, which is what the other two
+    # sections are really subscribing to.
+    triggers "delivery-completed", on: :complete_delivery
 
     performs :complete_delivery do |params|
       driver = Delivery::Driver.find(params.driver_id)

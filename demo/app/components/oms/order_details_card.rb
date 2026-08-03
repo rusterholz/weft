@@ -13,6 +13,12 @@ module Oms
 
     derives(:order) { |p| Oms::Order.find(p.order_id) }
 
+    # An advance re-renders the header and the shipments card, but not this
+    # one — so it listens for the header's announcement and refetches itself.
+    # The two ways to stay current, side by side on one component: ride along
+    # when you're part of the response, subscribe when you aren't.
+    refreshes on: "order-updated"
+
     def build(attributes = {})
       super
       # Carried on the component, not the call site, so the out-of-band
@@ -35,7 +41,8 @@ module Oms
       order = params.order
       [["Customer", order.customer_name],
        ["Address", [order.address_line_1, order.city, order.state, order.zip].compact.join(", ")],
-       ["Created", order.created_at&.strftime("%Y-%m-%d %H:%M:%S")]]
+       ["Created", order.created_at&.strftime("%Y-%m-%d %H:%M:%S")],
+       ["Last updated", order.updated_at&.strftime("%Y-%m-%d %H:%M:%S")]]
     end
   end
 end
