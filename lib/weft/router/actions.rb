@@ -64,7 +64,7 @@ module Weft
       # refuses to swap 204s, which would skip the delete itself).
       def render_action_response(action, component_class, resolved_params, returned)
         overlay = returned.is_a?(Hash) ? returned : {}
-        apply_trigger_header(component_class)
+        apply_trigger_header(component_class, action.name)
         primary = build_action_primary(action, overlay)
         env = { universe: filtered_params, overlays: overlay, branch_bag: primary&.params }
         (primary ? primary.to_s : "") +

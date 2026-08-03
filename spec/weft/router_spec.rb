@@ -483,6 +483,70 @@ RSpec.describe Weft::Router do
 
       expect(last_response.headers).not_to have_key("HX-Trigger")
     end
+
+    context "with an on: filter" do
+      let!(:filtered_class) do # rubocop:disable RSpec/LetSetup
+        Class.new(Weft::Component) do
+          def self.name = "FilteredTrigger"
+          param :id
+          triggers "advanced", on: :advance
+          triggers "always-fires"
+          performs(:advance) { nil }
+          performs(:touch) { nil }
+        end
+      end
+
+      it "fires a filtered event on the action it names" do
+        post "/_components/filtered_trigger/advance", id: "1"
+
+        expect(last_response.headers["HX-Trigger"]).to include("advanced")
+      end
+
+      it "withholds a filtered event from the component's other actions" do
+        post "/_components/filtered_trigger/touch", id: "1"
+
+        expect(last_response.headers["HX-Trigger"]).not_to include("advanced")
+      end
+
+      it "keeps an unfiltered event firing on every action" do
+        post "/_components/filtered_trigger/touch", id: "1"
+
+        expect(last_response.headers["HX-Trigger"]).to eq("always-fires")
+      end
+
+      it "fires a filtered event on any action its array names" do
+        Class.new(Weft::Component) do
+          def self.name = "ArrayTrigger"
+          param :id
+          triggers "moved", on: %i[advance retreat]
+          performs(:advance) { nil }
+          performs(:retreat) { nil }
+        end
+
+        post "/_components/array_trigger/advance", id: "1"
+        expect(last_response.headers["HX-Trigger"]).to eq("moved")
+
+        post "/_components/array_trigger/retreat", id: "1"
+        expect(last_response.headers["HX-Trigger"]).to eq("moved")
+      end
+
+      it "fires a filtered event on the transfers action it names" do
+        target = Class.new(Weft::Component) do
+          def self.name = "TriggerArrival"
+          param :id
+        end
+        declarer = Class.new(Weft::Component) do
+          def self.name = "TriggerDeparture"
+          param :id
+          triggers "handed-over", on: :hand_off
+        end
+        declarer.transfers(:hand_off, to: target)
+
+        post "/_components/trigger_departure/hand_off", id: "1"
+
+        expect(last_response.headers["HX-Trigger"]).to eq("handed-over")
+      end
+    end
   end
 
   describe "error handling" do

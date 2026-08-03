@@ -187,8 +187,8 @@ module Weft
       end
     end
 
-    def apply_trigger_header(component_class)
-      events = component_class.trigger_events
+    def apply_trigger_header(component_class, action_name)
+      events = component_class.trigger_events(action_name)
       return if events.empty?
 
       headers["HX-Trigger"] = events.join(", ")
