@@ -93,9 +93,9 @@ module Weft
       SCALAR_ID_CLASSES = [String, Symbol, Numeric, TrueClass, FalseClass].freeze
 
       # Compute the would-be DOM ID for an instance of this class given a
-      # plain params hash, without instantiating. The Router uses this to
-      # populate the `:component_id` auto-injected param when a recovery
-      # target opts in. Single source of truth; the instance method delegates.
+      # plain params hash, without instantiating. Single source of truth for
+      # the convention; the instance method delegates, and the Router falls
+      # back to this when it can't construct an instance to ask.
       # The primary value suffixes only when it's a non-blank scalar — nil,
       # "", and non-scalar values all derive the same bare class id, so a
       # component's identity is stable across the ways "no value" arrives.

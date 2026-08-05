@@ -550,7 +550,7 @@ RSpec.describe Weft::Router do
   end
 
   describe "error handling" do
-    let!(:failing_class) do # rubocop:disable RSpec/LetSetup
+    let!(:failing_class) do
       Class.new(Weft::Component) do
         def self.name = "FailingCard"
         param :id
@@ -571,9 +571,52 @@ RSpec.describe Weft::Router do
       expect(last_response.body).to include("something broke")
     end
 
-    it "preserves the failing component's DOM id via the :component_id auto-injected param" do
+    it "stamps the failing component's DOM id onto the recovery fragment" do
       get "/_components/failing_card", id: "1"
       expect(last_response.body).to include('id="failing-card-1"')
+    end
+
+    # The stamp is the Router's, not an opt-in: a recovery target stands in the
+    # failing component's place, and a swap addressed anywhere else lands
+    # somewhere else. Nothing here declares an identity param.
+    it "stamps it onto an unrelated recovery target too" do
+      stand_in = Class.new(Weft::Component) do
+        def self.name = "StandInCard"
+        abstract!
+
+        def build(attributes = {})
+          super
+          span "stood in"
+        end
+      end
+      failing_class.recovers from: StandardError, with: stand_in
+
+      get "/_components/failing_card", id: "1"
+
+      expect(last_response.body).to include("stood in")
+      expect(last_response.body).to include('id="failing-card-1"')
+    end
+
+    # Identity can raise on a re-render even though the first render was fine.
+    # There is no recovering the id it would have had, so the fragment gets a
+    # unique throwaway: it lands nowhere rather than displacing something else.
+    it "falls back to a unique unresolved id when identity itself raises" do
+      unstable = Class.new(Weft::Component) do
+        def self.name = "UnstableId"
+        param :id
+
+        def build(attributes = {})
+          super
+          raise "build broke"
+        end
+
+        def weft_dom_id = raise("identity broke")
+      end
+      expect(unstable).to be_routable
+
+      get "/_components/unstable_id", id: "1"
+
+      expect(last_response.body).to match(/id="unstable-id-unresolved-[0-9a-f]{8}"/)
     end
 
     it "includes a retry button targeting the failing wrapper" do
@@ -2073,28 +2116,6 @@ RSpec.describe Weft::Router do
       get "/_components/injects_path", id: "1"
 
       expect(last_response.body).to include("at=/_components/injects_path")
-    end
-
-    it "injects :component_id when the target declares it — preserving the failing element's id" do
-      Class.new(Weft::Component) do
-        def self.name = "InjectsCompId"
-        param :id
-        param :component_id
-
-        recovers(from: StandardError)
-
-        def build(attributes = {})
-          super
-          raise "boom" unless params.component_id
-
-          div(class: "got-comp-id") { text_node "id=#{params.component_id}" }
-        end
-      end
-
-      get "/_components/injects_comp_id", id: "1"
-
-      expect(last_response.body).to include("got-comp-id")
-      expect(last_response.body).to include("id=injects-comp-id-1")
     end
 
     it "injects :component_tag when the target declares it — the failing component's wrapper tag" do

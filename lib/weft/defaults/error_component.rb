@@ -20,12 +20,10 @@ module Weft
       # Auto-injected params (opt-in, schema-gated by the Router). The
       # Router populates these at error-handling time on any recovers target
       # that declares them.
-      # :component_id preserves the failing component's DOM identity so the
-      # recovered fragment lands at the original element's id — preventing
-      # duplicate IDs when several siblings fail in the same window.
       # :retry_url is the failing component's GET URL with current params.
       # :attempts_remaining is the push-path countdown (nil on HTTP paths).
-      param :component_id, type: :string
+      # (Identity is not among them — the Router stamps the failing
+      # component's DOM id onto every recovery fragment itself.)
       param :component_tag, type: :string
       param :exception
       param :request_path, type: :string
@@ -50,12 +48,6 @@ module Weft
         div(style: HEADING_STYLE) { text_node "Something went wrong" }
         render_verbose if verbose?
         render_retry_button if @params.retry_url
-      end
-
-      # Preserve the failing component's DOM identity when the Router injected
-      # :component_id. Otherwise fall back to the class-derived default.
-      def weft_dom_id
-        @params.component_id || super
       end
 
       # Adopt the failing component's wrapper tag when the Router injected
@@ -91,7 +83,7 @@ module Weft
 
       # Retry by re-issuing a GET to refresh the failing component. The :retry
       # preset supplies the htmx wiring (outerHTML-swap the closest
-      # .weft-error box), so it works whether or not :component_id was carved out.
+      # .weft-error box), so it works wherever the fragment happens to land.
       def render_retry_button
         button "Retry", retry: @params.retry_url, style: BUTTON_STYLE
       end
