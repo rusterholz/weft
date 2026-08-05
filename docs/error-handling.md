@@ -8,7 +8,7 @@ Two layers cooperate to make this work. On the server, the Router catches errors
 
 - [The error classes](#the-error-classes)
 - [The `recovers` chain](#the-recovers-chain) — matching, targets, blocks, and [the built-in edges](#the-built-in-edges)
-- [What happens when something raises](#what-happens-when-something-raises)
+- [What happens when something raises](#what-happens-when-something-raises) — including [where failure-prone work belongs](#where-the-work-that-can-fail-belongs) and [when a companion fails](#when-a-companion-fails)
 - [Error handling on live streams](#error-handling-on-live-streams)
 - [Auto-injected recovery params](#auto-injected-recovery-params)
 - [Presentation settings](#presentation-settings)
@@ -89,6 +89,29 @@ One wrinkle worth knowing: for actions with a destructive swap (`dismisses`, or 
 
 **If the recovery itself raises** — a bug in your error component, say — Weft stops walking and emits a minimal hardcoded error rendering, logging the recovery failure and surfacing the *original* error. There is always a floor; error handling never recurses into itself.
 
+Whatever renders, it wears the **failing component's DOM id**. A recovery fragment stands in the failed component's place, and an out-of-band swap addressed anywhere else would land on the wrong element — or on none. You don't opt into this and can't forget it; Weft stamps the id on every recovery fragment it produces.
+
+### Where the work that can fail belongs
+
+Two Weft surfaces can raise, and they are not equivalent. An action callable — `performs`, `transfers`, `dismisses` — is where your app *does* something: writes, external calls, state changes. A `build` method is where it *describes* something.
+
+**Put the fallible work in the callable and keep `build` free of side effects.** The reason will be familiar from any MVC framework: by the time rendering begins, whatever the action committed is already committed. A failure inside the callable can still be reported as a failure of the whole operation; a failure during rendering can only be reported after the fact — which is why Rails rolls back a controller error but not a view error.
+
+Weft leans into that split rather than papering over it. An action that raises produces an error *response*; a fragment that raises produces an error *fragment*, and everything around it stands. The more your `build` methods are pure descriptions of state, the more that second case is a display problem rather than a correctness one.
+
+### When a companion fails
+
+A component can bring [companions](dsl.md#includes) along with a response — other fragments that went stale and ride back on the same request. **A companion is a courtesy, not a contract:** if one raises, the response still belongs to the component the request was about.
+
+So the primary render, the status, and the `HX-*` headers are all untouched. The failing companion walks *its own* `recovers` chain, and the result is delivered as a companion in that companion's own DOM slot — the error appears exactly where that fragment would have been and nowhere else, while the rest of the response arrives as though nothing happened. This is what makes an action with side effects honest: a companion that breaks *after* your callable has written to the database can no longer turn a committed change into a reported failure.
+
+Two wrinkles worth knowing:
+
+- **Recovery edges that point at a page class are skipped here**, and the walk continues to the next match. A fragment riding inside a successful response has no business navigating away from it.
+- **If the chain yields nothing, or the recovery render itself raises**, that companion is dropped and the failure is logged with the class and the `includes` declaration site that brought it along. The rest of the response is unaffected either way.
+
+Companion failures on a [live stream](#error-handling-on-live-streams) behave the same, with one addition: they don't count against the stream's attempts budget. The budget measures the *stream's* health, and a companion's trouble says nothing about it.
+
 ## Error handling on live streams
 
 A failing SSE push walks the same `recovers` chain as any other component-context failure, with three stream-shaped differences:
@@ -103,14 +126,13 @@ If the recovery render itself raises, that frame is skipped (and the failure sti
 
 ## Auto-injected recovery params
 
-A recovery target usually wants context: what failed, where, with what status. The Router offers seven values, delivered as **request overlays**: a component reads each by *declaring a param of that name*. The declaration is the opt-in — anything not declared is never read — and because overlays reach the whole recovery render, a component *nested inside* your branded error page can declare and read them too (a shared error-detail partial reading `:exception` itself, say). Recovery redirect URLs stay schema-gated and carry only the redirect-safe values the destination declares, so nothing rides a URL uninvited.
+A recovery target usually wants context: what failed, where, with what status. The Router offers six values, delivered as **request overlays**: a component reads each by *declaring a param of that name*. The declaration is the opt-in — anything not declared is never read — and because overlays reach the whole recovery render, a component *nested inside* your branded error page can declare and read them too (a shared error-detail partial reading `:exception` itself, say). Recovery redirect URLs stay schema-gated and carry only the redirect-safe values the destination declares, so nothing rides a URL uninvited.
 
 | Param | Value |
 | --- | --- |
 | `:exception` | The exception object itself. |
 | `:request_path` | The path of the failing request. |
 | `:status_code` | The resolved HTTP status (the exception's, or 500). |
-| `:component_id` | The failing component's DOM id. |
 | `:component_tag` | The failing component's wrapper tag name. |
 | `:retry_url` | A GET URL that re-renders the failing component with its current params. |
 | `:attempts_remaining` | On a live stream: failed pushes left before the stream closes. Absent elsewhere. |
@@ -136,8 +158,8 @@ end
 
 Notes on the individual values:
 
-- **These seven names are reserved** on any class used as a recovery target. Declaring a param with one of these names *means* "inject the recovery value here" — so don't reuse them for your own data on error components, or on any component/page reachable through a `recovers` edge.
-- **`:component_id`** preserves DOM identity: render your error wrapper with it as the element id (the gem's defaults do) and the error lands under the failing component's original id — so multiple simultaneous failures each swap into their own slot rather than colliding.
+- **These six names are reserved** on any class used as a recovery target. Declaring a param with one of these names *means* "inject the recovery value here" — so don't reuse them for your own data on error components, or on any component/page reachable through a `recovers` edge.
+- **DOM identity is not among them**, because it isn't optional. Weft stamps the failing component's id onto every recovery fragment, so simultaneous failures each swap into their own slot rather than colliding, and a recovery target that has never heard of any of this still lands correctly.
 - **`:component_tag`** keeps swaps *valid*: return it from your error component's `tag_name` (the gem's defaults do) and a failure inside a `<tr>` or `<li>` component produces a fragment its surroundings can legally contain, instead of a `<div>` forced somewhere divs can't go. Weft reads the tag without re-running the failed construction; when a component computes its tag from instance state, the value falls back to absent and the target renders with its own default tag.
 - **`:retry_url`** feeds the [`retry:` preset](dsl.md#presets): one button attribute, and the user can re-request the failed component in place. For a failed *action*, the URL renders the underlying component's view — a fresh look, not a replay of the failed action. On a stream's final frame it feeds [`reopen_stream:`](dsl.md#presets) the same way.
 - **`:attempts_remaining`** is also the push-path context signal: non-nil only when rendering a recovery frame for a live stream. Its presence lets one error component serve both paths — the gem default renders its request shape when it's nil and its stream shape otherwise.
