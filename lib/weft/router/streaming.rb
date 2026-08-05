@@ -13,7 +13,7 @@ module Weft
     # attempts budget; when it runs out, the CLOSE_EVENT frame tells the
     # client to stop reconnecting and the connection closes.
     #
-    # Depends on Router internals: `build_component`, `render_oob_includes`,
+    # Depends on Router internals: `build_component`, `render_push_companions`,
     # `render_push_recovery`, `pass`, `content_type`, `headers`, `stream`.
     module Streaming
       # SSE event name that tells htmx-ext-sse to close the EventSource and
@@ -74,10 +74,11 @@ module Weft
       end
 
       def push_component_event(out, component_class)
-        component = build_component(component_class)
+        slots = Set.new
+        component = build_component(component_class, slots: slots)
         env = { universe: filtered_params, branch_bag: component.params }
         html = component.content +
-               render_oob_includes(component_class, component.params, context: :push, render_env: env)
+               render_push_companions(component_class, component.params, render_env: env, slots: slots)
         out << format_sse_event(component.weft_dom_id, html)
       end
 

@@ -40,10 +40,31 @@ module Weft
     # the primary's own build.
     attr_reader :branch_bag
 
-    def initialize(assigns = {}, helpers = nil, wire_params: nil, overlays: nil, branch_bag: nil, &)
+    # The DOM ids this RESPONSE has already spoken for — a Set shared across
+    # every context the response builds in, because the primary and each of
+    # its companions get their own. An out-of-band swap is addressed by DOM
+    # id, so only one fragment per id can land; a root component claims its
+    # id as it builds (Component#claim_dom_slot!) and a second claimant
+    # abandons its render by throwing SLOT_TAKEN. Absent on renders with
+    # nothing to arbitrate, and nothing is claimed then.
+    attr_reader :slots
+
+    # Thrown with the contested DOM id when a root loses a slot. Caught by
+    # whoever asked for the render; nothing partial reaches the tree, because
+    # Arbre adds a tag to its parent only after the build returns.
+    SLOT_TAKEN = :weft_slot_taken
+
+    # Two positional parameters are Arbre's own signature; the four keywords
+    # are Weft's render-scoped channels, each independently optional. That
+    # they have grown to four is a fair signal that they want a render-environment
+    # object of their own — a change that would touch every render path and
+    # a documented constructor, so it belongs with the lifecycle work, not here.
+    def initialize(assigns = {}, helpers = nil, wire_params: nil, overlays: nil, # rubocop:disable Metrics/ParameterLists
+                   branch_bag: nil, slots: nil, &)
       @wire_params = wire_params || {}
       @overlays = overlays || {}
       @branch_bag = branch_bag
+      @slots = slots
       super(assigns, helpers, &)
     end
 

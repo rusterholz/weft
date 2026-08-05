@@ -154,6 +154,7 @@ module Weft
       warn_declared_chrome_collisions(attributes)
       super
       self.id = weft_dom_id
+      claim_dom_slot!
       apply_refresh_attrs
       apply_push_attrs
     end
@@ -176,6 +177,29 @@ module Weft
     end
 
     private
+
+    # Speak for this fragment's DOM slot, or abandon the render.
+    #
+    # A response delivers at most one fragment per DOM id — that is simply how
+    # an out-of-band swap is addressed — so when a slot is already spoken for,
+    # continuing would be work thrown away. `super` has run by here but the
+    # component's own build body has not, and that body is where the cost is:
+    # the derivations it forces, the children it renders. Leaving now costs
+    # the caller nothing, because Arbre attaches a tag to its parent only
+    # after the build returns.
+    #
+    # Only roots arbitrate. Duplicate ids among a fragment's own descendants
+    # are that fragment's business, not the response's, and a response that
+    # has nothing to arbitrate carries no register at all.
+    def claim_dom_slot!
+      slots = arbre_context.respond_to?(:slots) && arbre_context.slots
+      return unless slots && parent.equal?(arbre_context)
+      return if slots.add?(id)
+
+      # Caught by Weft::Router::OOBIncludes#attempt_companion, which turns this
+      # into a warning naming both declarations.
+      throw Weft::Context::SLOT_TAKEN, id
+    end
 
     # URL to this component's Weft route with current params (no overrides).
     # Used internally by apply_refresh_attrs.

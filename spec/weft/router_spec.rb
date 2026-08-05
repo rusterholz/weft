@@ -925,6 +925,40 @@ RSpec.describe Weft::Router do
         with(/closed after 2 consecutive failed pushes/)
     end
 
+    # A companion riding a push frame is still only a companion: its failure
+    # says nothing about the stream's health, so it must not spend the
+    # attempts budget or close the connection.
+    it "contains a failing companion inside the frame, leaving the stream and its budget alone" do # rubocop:disable RSpec/ExampleLength
+      boom = Class.new(Weft::Component) do
+        def self.name = "PushBoomCompanion"
+
+        def build(attributes = {})
+          super
+          raise "companion exploded"
+        end
+      end
+      healthy = Class.new(Weft::Component) do
+        def self.name = "HealthyPushCard"
+        pushes every: 5, attempts: 1
+
+        def build(attributes = {})
+          super
+          span "live data"
+        end
+      end
+      healthy.includes(boom)
+      out = frame_sink
+      allow(router).to receive(:stream).and_yield(out)
+
+      router.send(:stream_component, healthy)
+
+      expect(out.first).to include("live data")
+      expect(out.first).to include("Something went wrong")
+      expect(out.first).to include('hx-swap-oob="true"')
+      expect(out.first).to include('id="push-boom-companion"')
+      expect(out).to all(satisfy { |frame| !frame.include?("weft:close") })
+    end
+
     it "keeps throttling failing pushes on the cadence interval" do
       component_class = failing_class(attempts: 2)
       component_class.recovers(from: StandardError, with: notice_card_class)
@@ -1410,9 +1444,72 @@ RSpec.describe Weft::Router do
 
       expect(last_response.body).to include("noted-from-target")
       expect(last_response.body).not_to include("noted-from-declarer")
-      # Proves the declarer's companion was built and then dropped, rather
+      # Proves the declarer's companion resolved and was turned away, rather
       # than never having fired at all.
       expect(Weft.logger).to have_received(:warn).with(/NotedCounter companion/)
+    end
+
+    # The losing declaration is not merely discarded after rendering — it never
+    # renders. A component finds its slot taken as it builds, before its own
+    # build body runs, which is where the work is.
+    it "abandons a losing companion before its build body runs" do # rubocop:disable RSpec/ExampleLength
+      allow(Weft.logger).to receive(:warn)
+      builds = 0
+      counted = Class.new(Weft::Component) do
+        def self.name = "CountedCounter"
+        param :order_id
+        define_method(:build) do |attributes = {}|
+          super(attributes)
+          builds += 1
+        end
+      end
+      source = Class.new(Weft::Component) do
+        def self.name = "TwiceIncluder"
+        param :order_id
+        performs(:advance) { nil }
+      end
+      source.includes(counted)
+      source.includes(counted, on: :advance)
+
+      post "/_components/twice_includer/advance", order_id: "9"
+
+      expect(builds).to eq(1)
+    end
+
+    # The primary is a fragment with a DOM id like any other, and it is the one
+    # the response is actually about — a companion aimed at its slot would swap
+    # over the very thing that just arrived.
+    it "keeps the primary's own slot safe from a companion claiming it" do # rubocop:disable RSpec/ExampleLength
+      allow(Weft.logger).to receive(:warn)
+      thief = Class.new(Weft::Component) do
+        def self.name = "SlotThief"
+        param :order_id
+
+        # An id override aimed squarely at the primary's slot.
+        def weft_dom_id = "host-card-#{params.order_id}"
+
+        def build(attributes = {})
+          super
+          span "companion-copy"
+        end
+      end
+      source = Class.new(Weft::Component) do
+        def self.name = "HostCard"
+        param :order_id
+        performs(:advance) { nil }
+
+        def build(attributes = {})
+          super
+          span "the-primary"
+        end
+      end
+      source.includes(thief, on: :advance)
+
+      post "/_components/host_card/advance", order_id: "3"
+
+      expect(last_response.body).to include("the-primary")
+      expect(last_response.body).not_to include("companion-copy")
+      expect(Weft.logger).to have_received(:warn).with(/already claimed by the component this response renders/)
     end
 
     it "names both declaration sites when two companions claim one DOM id" do
@@ -1454,6 +1551,79 @@ RSpec.describe Weft::Router do
 
       expect(last_response.body).to include("eye-right")
       expect(last_response.body).to include("eye-left")
+    end
+  end
+
+  describe "companion render containment" do
+    let!(:boom_companion) do
+      Class.new(Weft::Component) do
+        def self.name = "BoomCompanion"
+        param :order_id
+
+        def build(attributes = {})
+          super
+          raise "companion exploded"
+        end
+      end
+    end
+
+    let!(:steady_class) do # rubocop:disable RSpec/LetSetup
+      companion = boom_companion
+      klass = Class.new(Weft::Component) do
+        def self.name = "SteadyCard"
+        param :order_id
+        performs(:advance) { nil }
+
+        def build(attributes = {})
+          super
+          span "steady-#{params.order_id}"
+        end
+      end
+      klass.includes(companion, on: :advance)
+      klass
+    end
+
+    before do
+      allow(Weft.logger).to receive(:warn)
+      allow(Weft.logger).to receive(:error)
+    end
+
+    # The action committed its side effects before the companion ever ran, so
+    # reporting the response as a failure is a lie about what happened.
+    it "leaves the primary render and its status alone when a companion raises" do
+      post "/_components/steady_card/advance", order_id: "7"
+
+      expect(last_response.status).to eq(200)
+      expect(last_response.body).to include("steady-7")
+    end
+
+    it "renders the failed companion's own recovery as a companion" do
+      post "/_components/steady_card/advance", order_id: "7"
+
+      expect(last_response.body).to include("Something went wrong")
+      expect(last_response.body).to include('hx-swap-oob="true"')
+    end
+
+    it "addresses the error fragment at the slot the failed companion would have filled" do
+      post "/_components/steady_card/advance", order_id: "7"
+
+      expect(last_response.body).to include('id="boom-companion-7"')
+    end
+
+    # The delta decides where the companion was headed, so it has to decide
+    # where its failure is reported too.
+    it "follows an id-bearing delta when placing the error fragment" do
+      relocating = Class.new(Weft::Component) do
+        def self.name = "RelocatingHost"
+        param :order_id
+        performs(:advance) { nil }
+      end
+      relocating.includes(boom_companion, on: :advance) { { order_id: "elsewhere" } }
+
+      post "/_components/relocating_host/advance", order_id: "7"
+
+      expect(last_response.body).to include('id="boom-companion-elsewhere"')
+      expect(last_response.body).not_to include('id="boom-companion-7"')
     end
   end
 
