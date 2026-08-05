@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "securerandom"
+
 module Weft
   class Router
     # Error-and-recovery slice of the Router. Walks recovers chains for
@@ -9,17 +11,18 @@ module Weft
     # for unmatched errors and recovery handlers that themselves raise.
     #
     # Also owns the schema-gated auto-injection of recovery params
-    # (:exception, :request_path, :status_code, :component_id, :component_tag,
-    # :retry_url, :attempts_remaining).
+    # (:exception, :request_path, :status_code, :component_tag, :retry_url,
+    # :attempts_remaining) and the identity a recovery fragment inherits from
+    # the component it stands in for.
     #
     # Depends on Router internals: `headers`, `status`, `request`,
     # `redirect`, `htmx_request?`.
     module Errors # rubocop:disable Metrics/ModuleLength
       # Each entry: { redirect_safe: true } means the auto-injected param is
       # included even when building a redirect URL. The component-context
-      # params (:exception, :component_id, :retry_url) are not redirect-safe
-      # — no element to preserve identity of, Exception objects aren't
-      # URL-encodable, and the destination Page rebuilds its own URL.
+      # params (:exception, :retry_url) are not redirect-safe — Exception
+      # objects aren't URL-encodable, and the destination Page rebuilds its
+      # own URL.
       # :attempts_remaining is populated only on the SSE push path (nil, and
       # therefore skipped, on HTTP recoveries) — its presence tells a recovery
       # component it is rendering inside a live stream, counting down to the
@@ -28,7 +31,6 @@ module Weft
         { key: :exception,          redirect_safe: false },
         { key: :request_path,       redirect_safe: true },
         { key: :status_code,        redirect_safe: true },
-        { key: :component_id,       redirect_safe: false },
         { key: :component_tag,      redirect_safe: false },
         { key: :retry_url,          redirect_safe: false },
         { key: :attempts_remaining, redirect_safe: false }
@@ -149,7 +151,9 @@ module Weft
         block_result = invoke_recovery_block(entry, resolved_params, error)
         target = component_class.resolve_recovery_target(entry)
         component_ctx = {
-          originating_id: component_class.weft_dom_id_for(resolved_params),
+          originating_id: resolved_dom_id(component_class,
+                                          unbuilt_instance(component_class, filtered_params),
+                                          resolved_params),
           originating_tag: component_tag_for(component_class),
           retry_url: compute_retry_url(component_class, resolved_params),
           status: recovery_status(error, entry)
@@ -171,6 +175,60 @@ module Weft
         component_class.allocate.tag_name
       rescue StandardError
         nil
+      end
+
+      # An instance constructed only to be asked about itself. Params resolve
+      # at construction, so it answers for its own identity and URL before
+      # `build` runs, and unlike the class-level derivation it honors a
+      # `weft_dom_id` override. nil when the construction itself is what
+      # raises. Where the same component goes on to render, pass that instance
+      # rather than making a second one — the two would carry separate bags,
+      # and a derivation behind a declared param would run in each.
+      def unbuilt_instance(component_class, wire_params, overlays: {}, branch_bag: nil)
+        component_class.new(Weft::Context.new({}, nil, wire_params: wire_params,
+                                                       overlays: overlays, branch_bag: branch_bag))
+      rescue StandardError
+        nil
+      end
+
+      # The DOM id a component wears, asked of an unbuilt instance first and
+      # falling back to the class-level derivation from an already-resolved
+      # params hash — that covers a construction that raises before the
+      # instance exists.
+      #
+      # Identity that raises when *asked* does not fall through to the
+      # class-level derivation, on purpose: a raising `weft_dom_id` is an
+      # override, and the convention it overrode would answer with a
+      # different id — landing the fragment on some other component's
+      # element. Landing nowhere beats landing somewhere wrong.
+      def resolved_dom_id(component_class, instance, fallback_params = nil)
+        return instance.weft_dom_id if instance
+        return component_class.weft_dom_id_for(fallback_params) if fallback_params
+
+        unresolved_dom_id(component_class)
+      rescue StandardError
+        unresolved_dom_id(component_class)
+      end
+
+      # Identity can itself raise — a `weft_dom_id` reading a record deleted
+      # between renders — and the id it would have had is unrecoverable.
+      #
+      # TEMPORARY: an unresolvable identity gets a unique throwaway, so it can
+      # never collide with or displace another fragment. Such a fragment simply
+      # lands nowhere, which is the honest outcome when we cannot say where it
+      # belongs. Component identity is due a design pass of its own; this is a
+      # placeholder until it gets one.
+      def unresolved_dom_id(component_class)
+        "#{component_class.weft_dom_id_for}-unresolved-#{SecureRandom.hex(4)}"
+      end
+
+      # A recovery fragment stands in the failing component's place, so it
+      # wears the failing component's id — a swap addressed anywhere else
+      # lands somewhere else, or nowhere at all. A page-context failure has no
+      # originating component, and its target keeps its own id.
+      def claim_dom_id(component, dom_id)
+        component.set_attribute("id", dom_id) if dom_id
+        component
       end
 
       # GET URL to render the failing component fresh: its resolved_component_path
@@ -223,7 +281,6 @@ module Weft
         block_delta = invoke_recovery_block(entry, resolved_params, error)
         target = component_class.resolve_recovery_target(entry)
         component_ctx = {
-          originating_id: component_class.weft_dom_id_for(resolved_params),
           retry_url: compute_retry_url(component_class, resolved_params),
           attempts_remaining: attempts_remaining,
           status: recovery_status(error, entry)
@@ -240,7 +297,8 @@ module Weft
       def render_recovery_component(target, block_delta, error, component_ctx:, universe: nil)
         overlays = block_delta.merge(auto_param_overlay(error, component_ctx))
         status component_ctx.fetch(:status) { recovery_status(error) }
-        build_component_with_wire(target, universe || filtered_params, overlays: overlays).to_s
+        component = build_component_with_wire(target, universe || filtered_params, overlays: overlays)
+        claim_dom_id(component, component_ctx[:originating_id]).to_s
       end
 
       # The auto-injected values as an overlay: non-nil values only — a nil
@@ -275,7 +333,6 @@ module Weft
           exception: error,
           request_path: request.path,
           status_code: component_ctx[:status] || recovery_status(error),
-          component_id: component_ctx[:originating_id],
           component_tag: component_ctx[:originating_tag],
           retry_url: component_ctx[:retry_url],
           attempts_remaining: component_ctx[:attempts_remaining]

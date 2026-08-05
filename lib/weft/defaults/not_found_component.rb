@@ -10,10 +10,9 @@ module Weft
     class NotFoundComponent < Weft::Component
       abstract!
 
-      # Opt into the :component_id auto-injected param for parity with
-      # ErrorComponent — preserves DOM identity when a component-context
-      # NotFound recovers through this.
-      param :component_id, type: :string
+      # Auto-injected params, opt-in for parity with ErrorComponent. Identity
+      # is not among them — the Router stamps the failing component's DOM id
+      # onto every recovery fragment itself.
       param :component_tag, type: :string
       param :request_path, type: :string
       param :status_code, type: :integer
@@ -29,12 +28,6 @@ module Weft
 
         div(style: "font-weight:600") { text_node "Not found" }
         render_verbose if Weft.configuration.verbose_error_pages && @params.request_path
-      end
-
-      # Preserve the failing component's DOM identity when the Router injected
-      # :component_id. Otherwise fall back to the class-derived default.
-      def weft_dom_id
-        @params.component_id || super
       end
 
       # Adopt the failing component's wrapper tag when the Router injected

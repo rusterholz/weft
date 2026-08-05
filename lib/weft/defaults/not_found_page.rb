@@ -15,13 +15,11 @@ module Weft
 
       title "Not found"
 
+      # See ErrorPage#build: the component resolves these from the same
+      # request, so passing them here would only paint them onto the wrapper.
       def build(attributes = {})
         super
-        insert_tag(
-          Weft::Defaults::NotFoundComponent,
-          request_path: @params.request_path,
-          status_code: @params.status_code
-        )
+        insert_tag(Weft::Defaults::NotFoundComponent)
       end
     end
   end

@@ -16,14 +16,13 @@ module Weft
 
       title "Error"
 
+      # The component reads the same request the page did — recovery values
+      # ride as overlays and reach every depth — so handing them over as
+      # builder kwargs would only render them as HTML attributes on the error
+      # box, exception message and all.
       def build(attributes = {})
         super
-        insert_tag(
-          Weft::Defaults::ErrorComponent,
-          exception: @params.exception,
-          request_path: @params.request_path,
-          status_code: @params.status_code
-        )
+        insert_tag(Weft::Defaults::ErrorComponent)
       end
     end
   end

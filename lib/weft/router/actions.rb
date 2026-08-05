@@ -66,9 +66,11 @@ module Weft
       def render_action_response(action, component_class, resolved_params, returned)
         overlay = returned.is_a?(Hash) ? returned : {}
         apply_trigger_header(component_class, action.name)
-        primary = build_action_primary(action, overlay)
+        slots = Set.new
+        primary = build_action_primary(action, overlay, slots)
         (primary ? primary.to_s : "") +
-          render_companions(action_companions(action, component_class, primary, resolved_params, overlay))
+          render_companions(action_companions(action, component_class, primary, resolved_params, overlay),
+                            slots)
       end
 
       # Which companions ride this response, in precedence order: the
@@ -105,10 +107,13 @@ module Weft
 
       # Delete-swap actions skip the primary render: htmx discards the body
       # on a delete swap, and the component's record is typically gone.
-      def build_action_primary(action, overlay)
+      # The primary claims its DOM slot first, so a companion aimed at the
+      # same id is turned away rather than swapping over the very fragment
+      # the response is about.
+      def build_action_primary(action, overlay, slots)
         return nil if action.swap == :delete
 
-        build_component_with_wire(action.renders, filtered_params, overlays: overlay)
+        build_component_with_wire(action.renders, filtered_params, overlays: overlay, slots: slots)
       end
 
       # The params view an inclusion block receives: the rendered primary's

@@ -3,7 +3,7 @@
 # Dropship Co.'s app-level error display, and the canonical example of the
 # user-extension pattern: subclass Weft::Defaults::ErrorComponent to inherit the
 # auto-injected param schema (:exception, :request_path, :status_code,
-# :component_id, :retry_url, :attempts_remaining), restyle it however you like,
+# :component_tag, :retry_url, :attempts_remaining), restyle it however you like,
 # and wire it in via Weft.configuration.error_component (see config/environment.rb).
 #
 # Note that the retry and resume controls are rendered through the gem's :retry
