@@ -9,7 +9,18 @@ module Drills
   class BoomRowComponent < Weft::Component
     builder_method :boom_row
 
-    param :label, type: :string, default: "doomed"
+    # Both use the dual from the delete-row idiom: `receives` because the table
+    # hands each row its own value at the call site, `param` because the row's
+    # own delete action re-resolves it from the wire. Without the `receives`
+    # half the kwargs would be chrome and every row would fall back to one
+    # default — same text, and worse, the same DOM id.
+    #
+    # :row leads, so identity rides a slug rather than the display text: the
+    # DOM id is a selector, and "Doomed row one" is not one.
+    param :row, type: :string, default: "doomed"
+    receives :row
+    param :label, type: :string, default: "Doomed row"
+    receives :label
 
     dismisses(:remove) { |_params| raise "the delete drill exploded, as requested" }
 

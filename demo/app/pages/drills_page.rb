@@ -8,17 +8,16 @@ class DrillsPage < ApplicationPage
 
   title "Error drills"
 
+  # Every recovery pathway the app can demonstrate, in the order they appear.
+  # A new pathway earns a name here and a matching render_<name>_drill method —
+  # which is the whole of what "new pathways get a card as they ship" costs.
+  DRILLS = %i[missing_record routing_miss validation component_failure destructive_swap
+              page_failure redirect_recovery companion_failure stream_outage].freeze
+
   def build(attributes = {})
     super
     div(class: "page-header") { h1 "Error drills" }
-    render_missing_record_drill
-    render_routing_miss_drill
-    render_validation_drill
-    render_component_failure_drill
-    render_destructive_swap_drill
-    render_page_failure_drill
-    render_redirect_recovery_drill
-    render_stream_outage_drill
+    DRILLS.each { |drill| send(:"render_#{drill}_drill") }
   end
 
   private
@@ -70,8 +69,8 @@ class DrillsPage < ApplicationPage
            "table is untouched.", class: "text-muted"
       table(class: "table table-data mb-0") do
         tbody do
-          boom_row label: "Doomed row one"
-          boom_row label: "Doomed row two"
+          boom_row row: "one", label: "Doomed row one"
+          boom_row row: "two", label: "Doomed row two"
         end
       end
     end
@@ -91,6 +90,17 @@ class DrillsPage < ApplicationPage
            "follows the HX-Redirect and you land on the dashboard.", class: "text-muted"
       button "Trigger redirect recovery", load_more: Drills::RedirectBoomComponent,
                                           class: drill_button
+    end
+  end
+
+  def render_companion_failure_drill
+    card(title: "Companion failure", class: "mb-3") do
+      para "The host's action brings a companion along, and the companion raises. The " \
+           "action still succeeded, so the response is a 200: the host re-renders with " \
+           "its counter advanced, and the error appears only in the companion's own box.",
+           class: "text-muted"
+      companion_host
+      flaky_companion
     end
   end
 

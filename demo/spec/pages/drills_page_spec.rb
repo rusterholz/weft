@@ -48,6 +48,11 @@ RSpec.describe DrillsPage, type: :component do
     expect(rendered).to include('hx-delete="/_components/drills/boom_row/remove"')
   end
 
+  it "embeds both halves of the companion-failure drill" do
+    expect(rendered).to include('hx-post="/_components/drills/companion_host/break_companion"')
+    expect(rendered).to include('id="drills-flaky-companion-drill"')
+  end
+
   it "links a live order for the stream-outage drill when shipments exist" do
     warehouse = Logistics::Warehouse.create!(name: "Main WH", lat: 1.0, lon: 1.0)
     order = Oms::Order.create!(customer_name: "Alice", lat: 0.0, lon: 0.0)
