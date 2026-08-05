@@ -14,6 +14,12 @@ class DrillsPage < ApplicationPage
   DRILLS = %i[missing_record routing_miss validation component_failure destructive_swap
               page_failure redirect_recovery companion_failure stream_outage].freeze
 
+  # Well-formed and guaranteed absent. An obviously fake id would leave the
+  # drill ambiguous — the branded 404 looks the same whether the route matched
+  # and the lookup found nothing, or no route matched at all. This one matches
+  # the :order_id route, reaches a real find, and comes back empty.
+  ABSENT_ID = "ffffffff-ffff-ffff-ffff-ffffffffffff"
+
   def build(attributes = {})
     super
     div(class: "page-header") { h1 "Error drills" }
@@ -30,18 +36,19 @@ class DrillsPage < ApplicationPage
       para "Detail pages use bare ActiveRecord lookups; one recovers declaration maps " \
            "RecordNotFound to the branded not-found page with a genuine 404.", class: "text-muted"
       div(class: "d-flex gap-2") do
-        a "Missing order", href: "/orders/no-such-order", class: drill_button
-        a "Missing shipment", href: "/shipments/no-such-shipment", class: drill_button
-        a "Missing driver", href: "/drivers/no-such-driver", class: drill_button
+        a "Missing order", href: "/orders/#{ABSENT_ID}", class: drill_button
+        a "Missing shipment", href: "/shipments/#{ABSENT_ID}", class: drill_button
+        a "Missing driver", href: "/drivers/#{ABSENT_ID}", class: drill_button
       end
     end
   end
 
   def render_routing_miss_drill
     card(title: "Branded 404 — routing miss", class: "mb-3") do
-      para "No route, no page: the router's not-found chain renders the branded page.",
-           class: "text-muted"
-      a "Visit an unrouted path", href: "/no-such-path", class: drill_button
+      para "No route, no page: the router's not-found chain renders the branded page. " \
+           "The path is freshly minted on every render, so it can't quietly be a " \
+           "route that happens to answer.", class: "text-muted"
+      a "Visit an unrouted path", href: "/no-such-path-#{SecureRandom.hex(4)}", class: drill_button
     end
   end
 

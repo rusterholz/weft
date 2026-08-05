@@ -19,13 +19,14 @@ RSpec.describe DrillsPage, type: :component do
 
   it "links the three bogus-id branded-404 drills" do
     html = rendered
-    expect(html).to include('href="/orders/no-such-order"')
-    expect(html).to include('href="/shipments/no-such-shipment"')
-    expect(html).to include('href="/drivers/no-such-driver"')
+    absent = DrillsPage::ABSENT_ID
+    expect(html).to include(%(href="/orders/#{absent}"))
+    expect(html).to include(%(href="/shipments/#{absent}"))
+    expect(html).to include(%(href="/drivers/#{absent}"))
   end
 
   it "links the routing-miss drill" do
-    expect(rendered).to include('href="/no-such-path"')
+    expect(rendered).to match(%r{href="/no-such-path-[0-9a-f]{8}"})
   end
 
   it "links the validation drill at the order form" do
