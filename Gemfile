@@ -14,7 +14,7 @@ gem "pry-byebug", platforms: :mri
 gem "rack-test", "~> 2.1"
 gem "rake", "~> 13.4"
 gem "rspec", "~> 3.13"
-gem "rubocop", "~> 1.88"
+gem "rubocop", "~> 1.89"
 gem "rubocop-rake"
 gem "rubocop-rspec"
 gem "webmock", "~> 3.26"
