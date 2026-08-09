@@ -16,7 +16,7 @@ gem "openssl", ">= 3.2.2"
 
 group :development, :test do
   gem "rspec", "~> 3.13"
-  gem "rubocop", "~> 1.80"
+  gem "rubocop", "~> 1.89"
   gem "rubocop-rake"
   gem "rubocop-rspec" # present in parent .rubocop.yml; rubocop walks up and loads it
 end
