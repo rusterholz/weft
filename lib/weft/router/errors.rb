@@ -1,6 +1,14 @@
 # frozen_string_literal: true
 
 require "securerandom"
+require "uri"
+
+require "weft/context"
+require "weft/dsl/sandbox"
+require "weft/error"
+require "weft/page"
+require "weft/params"
+require "weft/resolver"
 
 module Weft
   class Router
@@ -42,7 +50,7 @@ module Weft
       # Walk a Page-context recovers chain (B1, B2, C1 page-context, C4).
       # `originating_page_class` is nil for routing misses (no specific Page);
       # the gem-default chain on Weft::Page handles those.
-      def handle_page_chain_failure(error, originating_page_class:, originating_params: {}, originating_wire: nil)
+      def handle_page_chain_failure(error, originating_page_class:, originating_params: nil, originating_wire: nil)
         root = originating_page_class || Weft::Page
         entry = root.recovery_for(error)
         return page_safety_net(error) unless entry
@@ -52,7 +60,7 @@ module Weft
         return htmx_redirect_to_error_page(error) if d1_applies?(entry, error)
 
         target = root.resolve_recovery_target(entry)
-        block_delta = invoke_recovery_block(entry, originating_params, error)
+        block_delta = invoke_recovery_block(entry, originating_params || Weft::Params.new({}), error)
 
         if page_target?(target)
           dispatch_page_recovery(target, block_delta, error, entry, universe: originating_wire)
@@ -106,14 +114,17 @@ module Weft
         end
       end
 
-      def render_error(component_class, resolved_params, error)
+      # +state+ is the bag the request had composed when it broke — what the
+      # recovery block reads. Bags are for blocks; the wire hash below is for
+      # URLs, and stays a plain hash so building one can't force a derivation.
+      def render_error(component_class, state, error)
         entry = component_class.recovery_for(error)
         if entry
           # D1: htmx + :redirect knob + gem-default fallthrough → HX-Redirect.
           return htmx_redirect_to_error_page(error) if d1_applies?(entry, error)
 
           begin
-            return render_recovery(component_class, entry, resolved_params, error)
+            return render_recovery(component_class, entry, state, error)
           rescue StandardError => e
             # The recovery handler itself raised — fall through to the hardcoded
             # safety net rather than recursing. Surface the original error;
@@ -123,7 +134,14 @@ module Weft
         end
 
         status recovery_status(error)
-        render_generic_error(component_class, resolved_params, error)
+        render_generic_error(component_class, error)
+      end
+
+      # The failing component's own declared wire params. Never the bag: this
+      # feeds retry URLs and redirect query strings, where materializing a
+      # derivation would run user code in the middle of error handling.
+      def error_wire_params(component_class)
+        Weft::Resolver.resolve(component_class, filtered_params)
       end
 
       # D1 applies when: the htmx_errors knob is :redirect, the request is htmx,
@@ -147,20 +165,20 @@ module Weft
       # Execute a matched recovery entry: invoke the block, then dispatch to
       # either a Page-redirect (HX-Redirect / 302) or a fragment render
       # depending on the target's type.
-      def render_recovery(component_class, entry, resolved_params, error)
-        block_result = invoke_recovery_block(entry, resolved_params, error)
+      def render_recovery(component_class, entry, state, error)
+        block_result = invoke_recovery_block(entry, state, error)
         target = component_class.resolve_recovery_target(entry)
+        wire = error_wire_params(component_class)
         component_ctx = {
           originating_id: resolved_dom_id(component_class,
-                                          unbuilt_instance(component_class, filtered_params),
-                                          resolved_params),
+                                          unbuilt_instance(component_class, filtered_params), wire),
           originating_tag: component_tag_for(component_class),
-          retry_url: compute_retry_url(component_class, resolved_params),
+          retry_url: compute_retry_url(component_class, wire),
           status: recovery_status(error, entry)
         }
 
         if page_target?(target)
-          redirect_to_recovery_page(target, resolved_params.merge(block_result), error, component_ctx)
+          redirect_to_recovery_page(target, wire.merge(block_result), error, component_ctx)
         else
           render_recovery_component(target, block_result, error, component_ctx: component_ctx)
         end
@@ -240,10 +258,12 @@ module Weft
         query.empty? ? url : "#{url}?#{URI.encode_www_form(query)}"
       end
 
-      def invoke_recovery_block(entry, resolved_params, error)
+      # The block reads the state the request had composed, exactly as the
+      # build that failed would have read it.
+      def invoke_recovery_block(entry, state, error)
         return {} unless entry[:block]
 
-        result = Weft::DSL::Sandbox.run(Weft::Params.new(resolved_params), error, &entry[:block])
+        result = Weft::DSL::Sandbox.run(state, error, &entry[:block])
         result.is_a?(Hash) ? result : {}
       end
 
@@ -274,14 +294,14 @@ module Weft
       # (their params presume the successful build that didn't happen), and no
       # htmx_errors redirect knob (an HTTP-path concern). Returns nil when the
       # chain yields nothing; the caller owns rescue and logging.
-      def render_push_recovery(component_class, resolved_params, error, attempts_remaining:)
+      def render_push_recovery(component_class, state, error, attempts_remaining:)
         entry = component_class.component_recovery_for(error)
         return nil unless entry
 
-        block_delta = invoke_recovery_block(entry, resolved_params, error)
+        block_delta = invoke_recovery_block(entry, state, error)
         target = component_class.resolve_recovery_target(entry)
         component_ctx = {
-          retry_url: compute_retry_url(component_class, resolved_params),
+          retry_url: compute_retry_url(component_class, error_wire_params(component_class)),
           attempts_remaining: attempts_remaining,
           status: recovery_status(error, entry)
         }
@@ -345,9 +365,9 @@ module Weft
         entry&.[](:status) || (error.is_a?(Weft::HTTPError) ? error.status : 500)
       end
 
-      def render_generic_error(component_class, resolved_params, error)
+      def render_generic_error(component_class, error)
         component_name = component_class.name || "Component"
-        retry_url = compute_retry_url(component_class, resolved_params)
+        retry_url = compute_retry_url(component_class, error_wire_params(component_class))
 
         Weft::Context.new({}, nil) do
           error_style = "padding:1rem; border:1px solid #fca5a5; border-radius:6px; " \

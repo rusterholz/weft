@@ -1,5 +1,9 @@
 # frozen_string_literal: true
 
+require "weft/context"
+require "weft/dsl/sandbox"
+require "weft/params/assembly"
+
 module Weft
   class Router
     # OOB-include slice of the Router. Renders companion components declared
@@ -120,9 +124,10 @@ module Weft
         return nil unless entry
 
         dom_id = failed_companion_dom_id(klass, env, overlays)
-        component = build_component_with_wire(klass.resolve_recovery_target(entry), companion_universe(env),
-                                              overlays: companion_recovery_overlays(klass, env, entry,
-                                                                                    error, dom_id))
+        recovery_overlays = companion_recovery_overlays(klass, companion_state(klass, env, overlays),
+                                                        entry, error, dom_id)
+        component = build_component_with_wire(klass.resolve_recovery_target(entry),
+                                              companion_universe(env), overlays: recovery_overlays)
         as_companion(claim_dom_id(component, dom_id))
       rescue StandardError => e
         Weft.logger.error("Companion recovery render failed: #{e.class}: #{e.message}")
@@ -137,17 +142,31 @@ module Weft
                                                 overlays: overlays, branch_bag: env[:branch_bag]))
       end
 
+      # The state the failed build was given — its own wire schema over the
+      # request universe, the inclusion block's delta on top, branching
+      # whatever the primary composed. Rebuilt rather than read off the
+      # instance because a build that raised leaves none.
+      #
+      # Keys the class doesn't declare are laid on afterwards rather than
+      # resolved through the stack, which only visits declared keys — that's
+      # what keeps an inclusion block's ad-hoc delta readable in the recovery
+      # block, the same way it stays readable in the block that produced it.
+      def companion_state(klass, env, overlays)
+        Weft::Params::Assembly.call(klass, companion_universe(env),
+                                    overlays: overlays, branched_from: env[:branch_bag]).
+          overlay(overlays.except(*klass.declared_keys))
+      end
+
       # The recovery target resolves its own schema from the request universe;
       # the entry's block delta and the auto-injected values ride as overlays,
       # exactly as on the primary's recovery path. No status is set — the
       # response's status belongs to the primary.
-      def companion_recovery_overlays(klass, env, entry, error, dom_id)
-        resolved = Weft::Resolver.resolve(klass, companion_universe(env))
+      def companion_recovery_overlays(klass, state, entry, error, dom_id)
         component_ctx = { originating_id: dom_id,
                           originating_tag: component_tag_for(klass),
-                          retry_url: compute_retry_url(klass, resolved),
+                          retry_url: compute_retry_url(klass, error_wire_params(klass)),
                           status: recovery_status(error, entry) }
-        invoke_recovery_block(entry, resolved, error).merge(auto_param_overlay(error, component_ctx))
+        invoke_recovery_block(entry, state, error).merge(auto_param_overlay(error, component_ctx))
       end
 
       # The marker telling htmx to swap this fragment into the slot its id

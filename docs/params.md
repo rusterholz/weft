@@ -55,6 +55,8 @@ When a component wants to control a value rather than inherit it, it declares th
 
 A single key can have more than one door, and they resolve in a fixed order — a handed value beats a request overlay (a hash a verb block returned earlier in the request) beats a wire value beats an inherited value beats a derivation beats a default. The [DSL reference](dsl.md#how-the-doors-combine) lays out that precedence and the useful *dual* combinations; the shape to carry away here is that all four doors land in the same `params`, read the same way (`params.name`).
 
+Three of the four are open to every verb block too — an action callable, a `transfers`, `includes` or `recovers` block all read the same `param`, `derives` and `defines` a `build` would. Only `receives` is missing there, and it has to be: a hand-off comes from a call site, and a request arriving over the wire has none. When a block needs such a key, give it a second door.
+
 ## What a component keeps for itself
 
 Here is the pivot that makes the whole system hold together: **only a component's own declared `param`s are serialized.** When Weft renders a component, it bakes that component's wire params into the things that will make the *next* request on its behalf —
@@ -72,6 +74,8 @@ This is the payoff. Because a rendered component carries its own wire params, it
 
 - A **refresh** is a GET to the component's own route, its own params in the query string. Weft routes straight to that component, resolves those params from the wire — the first step again — and re-renders.
 - An **action** is a POST (or DELETE) to the component's route, its params in the payload. The callable runs, then the component re-renders — and the re-render, nested components and OOB companions included, resolves against the *same request wire*, with the callable's returned hash overlaid on top. One universe per request, amended by the verbs that run in it: no matter how rendering flows inside a request (an action re-render, a `transfers` hand-off, an error recovery), a component that reads a wire param keeps reading it, without any outer component relaying it.
+
+The callable and the render that follows it are two points on **one chain**, not two independent resolutions. Weft composes the component's params from the wire, hands that to the callable, layers whatever the callable returned on top, and passes the result on to the render — which branches it the same way a child branches its parent's. So a callable reads the same `derives` its `build` does, and a derivation it forces is already a value by the time the render, and the companions riding alongside, read the same key. One lookup, one response.
 
 So "render with enough to get where it needs" is literal: whatever a component will need to reconstruct itself on the next request, it must hold as its own `param`s at render time, because that is what gets serialized into the refresh URL and the action payload. A self-refreshing card embedded as `status_card(status: "hot")` keeps refreshing correctly *only* if it declares `param :status` — otherwise the refresh request carries no status and the standalone re-render has nothing to go on.
 

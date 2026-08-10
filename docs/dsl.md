@@ -46,7 +46,7 @@ A component's inputs all reach it through `params`, and there are four ways to d
 - **[`derives`](#derives--lazy-server-side-derivations)** — lazy server-side derivations: values the component works out for itself, on demand.
 - **[`defines`](#defines--static-values)** — static values a subclass pins; sugar over `derives`.
 
-Whichever door a value comes through, you read it the same way — `params.name`, or `params[:name]` — and `build` and action callables see the same resolved values. For the bigger picture — how params travel in from a request, down the render tree, and back out into the next refresh or action — see [How params flow](params.md).
+Whichever door a value comes through, you read it the same way — `params.name`, or `params[:name]`. Every verb block sees the same doors `build` does, with one structural exception: `receives` values come from a *call site*, and an action arriving over the wire has no caller, so a callable can't see them. (Need one in an action? Give the key a second door — a `param` or a `defines` — and it stands on its own.) For the bigger picture — how params travel in from a request, down the render tree, and back out into the next refresh or action — see [How params flow](params.md).
 
 ### `param` — wire state
 
@@ -150,9 +150,11 @@ A key can have more than one door, and Weft resolves the value from a fixed orde
 1. a **received** hand-off (`receives`)
 2. a **request overlay** — a hash returned from a verb block earlier in this request (an action callable, a `transfers` or `includes` block, a `recovers` adjustment). An overlay entry speaks *as* the wire for its key: its value replaces the wire's — including rich objects, which pre-empt a matching `derives` so nothing refetches what the request already loaded — and an explicit `nil` *clears*, masking the wire so resolution falls below it
 3. the component's **own wire** value (`param`)
-4. an **inherited** value from an ancestor in the render tree
+4. an **inherited** value — from an ancestor in the render tree, or from whatever the request had already composed by the time this component rendered
 5. the component's **own derivation** (`derives` / `defines`)
-6. the declared **default**
+6. the component's **own declared default**
+
+The first five are values the bag *holds*. The sixth is a fallback the bag *asks for* when a read finds nothing, and that difference shows at every boundary: a default belongs to the class that declared it and never travels, so a nested child — or the target of a `transfers` — falls back to its own, not to the one above it.
 
 That order is what makes *duals* work — declaring a key through two doors so it resolves whether it's handed over or has to fetch itself:
 
@@ -160,11 +162,15 @@ That order is what makes *duals* work — declaring a key through two doors so i
 - **`derives` + `receives`** — handed the value when embedded, self-fetching when standalone. A `derives` dual also satisfies the refresh-safety lint.
 - **`param` + `derives`** — use the wire value if present, otherwise derive one.
 
-When an inherited value (level 3) shadows the component's *own, different* derivation (level 4) for the same key, Weft logs a one-time warning: the ancestor's value wins, and a silent shadow of your own `derives` is worth knowing about. (A derivation shared through a mixin — same block object — stays quiet; it's genuine divergence that warns.)
+A derivation that never runs is worth hearing about, so Weft logs a one-time warning for each of the two ways that happens: when an **inherited value** carries a *different* derivation for the same key (the value from above wins, and your block is dead), and when a **verb block in this request** returned the key (an overlay outranks derivations, so the block supplied what yours would have). Neither is an error — both are shapes you may well want — but a silently dead `derives` shouldn't have to be discovered.
+
+Sharing one derivation between components silences the first: a common superclass, or the same block object mixed in, is agreement rather than divergence, and that's the fix when two components legitimately mean the same value.
 
 ### Inheritance and the render tree
 
 Within one render, each component starts from a copy of its nearest ancestor component's (or page's) resolved params: it sees everything *above* it in the tree, nothing *beside* it. A bare `shipments_card` embedded in a page that declares `param :order_id` reads `params.order_id` without declaring anything itself.
+
+Two things do *not* travel down. Declared **defaults** stay with the class that declared them, so a child with `param :view, default: "open"` inside a parent with `param :view, default: "all"` shows `open` — a fallback is a private answer to "nobody told me," not an opinion to broadcast. And **hand-offs** (`receives`) are per-call-site by nature. Everything else rides, including values an ancestor's derivation already computed: a derivation forced above you is a value by the time you inherit it, so nothing refetches.
 
 Two shapes of consumption both work, and both are idiomatic:
 
@@ -231,10 +237,23 @@ performs :name, method: :post, swap: :outer_html, target: nil do |params| ... en
 
 ### The callable contract
 
-Action callables receive one argument — the component's resolved `params` — and their return value directs what happens next:
+Action callables receive one argument — the component's resolved `params`, the same bag its `build` reads. A callable can read the component's own `derives` and `defines`, so the lookup a component already declares doesn't get written a second time inside every action:
+
+```ruby
+param :order_id
+derives(:order) { |p| Oms::Order.find(p.order_id) }
+
+performs :advance do |params|
+  Oms::AdvanceOrder.call(params.order)   # the same order the render below will show
+end
+```
+
+A derivation the callable forces stays forced for the rest of the response, so that's one query serving the action, the re-render, and any companions riding along — you don't have to hand the record forward to avoid a refetch.
+
+The return value directs what happens next:
 
 - **`nil`** (or any ignored value): re-render with the original params. The common case — the callable did its side effect; the fresh render reflects it.
-- **a `Hash`**: an overlay on the request. The returned keys override wire values for *everything* the response renders — the component, its nested children, its OOB companions — an explicit `nil` clears a value, and a rich object (a record the callable already loaded) pre-empts matching `derives` down the tree. Use this to change state on the way through: `performs :filter do |params| { page: 1 } end`. Because *any* hash return is an overlay, watch your last expression — `Hash#delete` and `merge!` return hashes, and a callable ending on one silently applies it. End a side-effect-only callable with an explicit `nil`.
+- **a `Hash`**: an overlay on the request. The returned keys override wire values for *everything* the response renders — the component, its nested children, its OOB companions — an explicit `nil` clears a value, and a rich object pre-empts matching `derives` down the tree. Use this to change state on the way through: `performs :filter do |params| { page: 1 } end`. Because *any* hash return is an overlay, watch your last expression — `Hash#delete` and `merge!` return hashes, and a callable ending on one silently applies it. End a side-effect-only callable with an explicit `nil`.
 - **a `Weft::Redirect`**: navigate away instead of re-rendering. Build one with `Weft.redirect`:
 
 ```ruby
@@ -258,7 +277,9 @@ transfers :edit, to: EditableOrderHeader do |params|
 end
 ```
 
-Identical to `performs` in signature and contract, except the response renders the `to:` component instead of the declaring one — for actions whose natural result is a different piece of UI (a read-only header becoming an edit form). The returned hash overlays the request for the target's render: override its wire values, or hand it rich objects that pre-empt its own `derives`. The target renders with its own declarations sovereign — the declarer's defaults and derivations never leak into it — and it's the *target's* [`includes`](#includes--companions-in-the-same-response) companions that ride the response: after the swap, the target is the component in charge. The target only needs to *render*; it does not need its own route (see [routability vs. render targets](routing.md#routable-vs-render-target)).
+Identical to `performs` in signature and contract, except the response renders the `to:` component instead of the declaring one — for actions whose natural result is a different piece of UI (a read-only header becoming an edit form). The returned hash overlays the request for the target's render: override its wire values, or hand it rich objects that pre-empt its own `derives`.
+
+The target inherits the state the request has composed, exactly as a nested child inherits its parent's — so a record the callable loaded is already there and needn't be handed over. Its own **defaults** stay sovereign (they don't travel), and it's the *target's* [`includes`](#includes--companions-in-the-same-response) companions that ride the response: after the swap, the target is the component in charge. To override something it inherited, return the key; an explicit `nil` clears it. The target only needs to *render*; it does not need its own route (see [routability vs. render targets](routing.md#routable-vs-render-target)).
 
 ### `dismisses` — remove from the DOM
 

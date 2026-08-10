@@ -13,7 +13,7 @@ module Oms
     derives(:order) { |p| Oms::Order.includes(:line_items).find(p.order_id) }
 
     dismisses :cancel do |params|
-      Oms::Order.find(params.order_id).destroy
+      params.order.destroy
     end
 
     def build(attributes = {})

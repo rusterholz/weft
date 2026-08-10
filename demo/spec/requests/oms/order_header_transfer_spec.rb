@@ -121,5 +121,13 @@ RSpec.describe "Order header edit round trip", type: :request do
     it "announces the status change, and only the status change" do
       expect(response.headers["HX-Trigger"]).to eq("order-updated")
     end
+
+    # The callable reads the same `derives(:order)` the header renders from,
+    # so the order is loaded once for the whole response rather than once by
+    # the action and again by the render it precedes.
+    it "loads the order once for the callable and the re-render together" do
+      selects = count_selects("oms_orders") { response }
+      expect(selects).to eq(1)
+    end
   end
 end

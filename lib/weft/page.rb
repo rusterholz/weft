@@ -156,7 +156,7 @@ module Weft
     # chrome from a record looked up by param.
     def initialize(*)
       super
-      @params = assembled_params if declared_keys.any?
+      @params = assembled_params if self.class.declared_keys.any?
     end
 
     def build(attributes = {})

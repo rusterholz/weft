@@ -30,20 +30,15 @@ RSpec.describe Oms::EditableOrderHeader, type: :component do
     expect(described_class.actions[%i[cancel post]].renders).to eq(Oms::OrderHeader)
   end
 
-  it "writes the new name and hands the updated order forward" do
-    action = described_class.actions[%i[save post]]
-    returned = Weft::DSL::Sandbox.run(
-      Weft::Params.new(order_id: order.id, customer_name: "Globex"), &action.callable
-    )
+  it "writes the new name" do
+    run_action(described_class, :save, order_id: order.id, customer_name: "Globex")
+
     expect(order.reload.customer_name).to eq("Globex")
-    expect(returned[:order]).to be_a(Oms::Order)
-    expect(returned[:order].customer_name).to eq("Globex")
   end
 
   it "refuses a blank name" do
-    action = described_class.actions[%i[save post]]
     expect do
-      Weft::DSL::Sandbox.run(Weft::Params.new(order_id: order.id, customer_name: "  "), &action.callable)
+      run_action(described_class, :save, order_id: order.id, customer_name: "  ")
     end.to raise_error(ActiveRecord::RecordInvalid)
     expect(order.reload.customer_name).to eq("Acme Corp")
   end

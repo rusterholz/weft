@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require "weft/dsl/sandbox"
+require "weft/error"
+
 module Weft
   # Value object representing a component's resolved input bag.
   # Provides method-style access with a clear collision-resolution rule:
@@ -37,9 +40,15 @@ module Weft
     # the Router wraps bags for action callables and recovery blocks).
     # +provenance+ maps derives-born keys to their block's source_location —
     # retained through forcing so divergence stays detectable.
-    def initialize(data, provenance = {})
+    # +defaults+ are the declaring class's own fallbacks, consulted when a
+    # read finds nothing. They are never stored as values, so they never ride
+    # a branch: a default belongs to whoever declared it, and a component
+    # deeper in the tree — or downstream of a hand-off — falls back to its
+    # own, not to the one above it.
+    def initialize(data, provenance = {}, defaults: {})
       @data = data
       @provenance = provenance
+      @defaults = defaults
       @forcing = []
     end
 
@@ -62,39 +71,45 @@ module Weft
     # entries stay resolved-absent, provenance rides. The plain-context
     # hand-off fallback lands received values through this.
     def overlay(values)
-      self.class.new(@data.merge(values), @provenance)
+      self.class.new(@data.merge(values), @provenance, defaults: @defaults)
     end
 
+    # nil means no source had this key — so the read falls to the declared
+    # fallback, exactly as it falls past a nil at any other level of the stack.
     def [](key)
       value = @data[key]
-      value.is_a?(Thunk) ? force!(key, value) : value
+      value = force!(key, value) if value.is_a?(Thunk)
+      value.nil? ? @defaults[key] : value
     end
 
     def key?(key)
-      @data.key?(key)
+      @data.key?(key) || @defaults.key?(key)
     end
 
-    def to_h
-      materialize!
-      @data
-    end
+    def to_h = materialized
 
     def respond_to_missing?(name, include_private = false)
-      @data.key?(name) || @data.respond_to?(name, include_private) || super
+      key?(name) || @data.respond_to?(name, include_private) || super
     end
 
     def method_missing(name, *args, **kwargs, &block)
-      if @data.key?(name) && args.empty? && kwargs.empty? && !block
+      if key?(name) && args.empty? && kwargs.empty? && !block
         self[name]
       elsif @data.respond_to?(name)
-        materialize!
-        @data.public_send(name, *args, **kwargs, &block)
+        materialized.public_send(name, *args, **kwargs, &block)
       else
         super
       end
     end
 
     private
+
+    # The bag as a plain hash: every thunk run, every unsupplied key standing
+    # at its declared fallback.
+    def materialized
+      materialize!
+      @defaults.merge(@data) { |_key, fallback, value| value.nil? ? fallback : value }
+    end
 
     # Run a thunk with the bag as its argument (derivations chain by reading
     # sibling keys) and memoize the result in place. A failed derivation is

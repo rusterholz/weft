@@ -7,19 +7,19 @@ module Oms
   # bodies, which is fine in both load orders: `class Oms::OrderHeader`
   # defines the constant before its body runs, so whichever loads first, the
   # other resolves to a class object that `transfers` only needs to store.
-  class EditableOrderHeader < Weft::Component
+  class EditableOrderHeader < Oms::OrderRegion
     builder_method :editable_order_header
 
-    param :order_id, type: :string
     param :customer_name, type: :string
     param :error_message, type: :string
 
-    derives(:order) { |p| Oms::Order.find(p.order_id) }
-
+    # No return value: the order this reads is the same object the header
+    # renders a moment later, because the state composed here is what the
+    # hand-off carries forward. Handing it back explicitly would be handing
+    # it what it already has.
     transfers :save, to: Oms::OrderHeader do |params|
-      order = Oms::Order.find(params.order_id)
-      order.update!(customer_name: params.customer_name.to_s.strip)
-      { order: order }
+      params.order.update!(customer_name: params.customer_name.to_s.strip)
+      nil
     end
 
     transfers :cancel, to: Oms::OrderHeader

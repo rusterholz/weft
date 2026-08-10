@@ -63,6 +63,7 @@ The service knows nothing about components or HTML; the component knows nothing 
 
 - **End the callable with the hash you mean.** A callable's return value merges into the params for the re-render *if it's a hash* — anything else is discarded (see [the callable contract](dsl.md#the-callable-contract)). Delegating to a service and then returning your own hash, as above, keeps the wire state deliberate even when the service's return value changes.
 - **The service returns plain Ruby values** (`:posted`, `:blank`, a record, a result object — whatever fits). When the component needs to branch on the outcome, branch in the callable and translate to params; the service still shouldn't know what a DOM id is.
+- **Feed the service from your declarations, not a second lookup.** A callable reads the same `derives` its `build` does, so `CommentPoster.call(post: params.post)` uses the post the component already knows how to find — one declaration, and one query for the whole response. Writing `Post.find(params.post_id)` inside the callable duplicates a rule that will drift.
 
 ## Databases
 
