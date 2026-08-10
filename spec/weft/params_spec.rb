@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 RSpec.describe Weft::Params do
-  subject(:params) { described_class.new(status: "shipped", count: 42, label: nil) }
+  subject(:params) { described_class.new({ status: "shipped", count: 42, label: nil }) }
 
   describe "#[]" do
     it "returns values by symbol key" do
@@ -15,6 +15,35 @@ RSpec.describe Weft::Params do
 
     it "returns nil for unknown keys" do
       expect(params[:nonexistent]).to be_nil
+    end
+  end
+
+  describe "declared defaults as read-time fallbacks" do
+    subject(:params) { described_class.new({ view: nil, page: 2 }, {}, defaults: { view: "all", page: 1 }) }
+
+    it "answers with the default when no source supplied the key" do
+      expect(params[:view]).to eq("all")
+      expect(params.view).to eq("all")
+    end
+
+    it "leaves a supplied value alone" do
+      expect(params[:page]).to eq(2)
+    end
+
+    it "counts a defaulted key as present" do
+      expect(params.key?(:view)).to be(true)
+    end
+
+    it "materializes defaults into to_h" do
+      expect(params.to_h).to eq(view: "all", page: 2)
+    end
+
+    it "does not hand defaults to a branch — a fallback belongs to whoever declared it" do
+      expect(params.branch_data).to eq(page: 2)
+    end
+
+    it "carries its defaults through an overlay" do
+      expect(params.overlay(page: 9)[:view]).to eq("all")
     end
   end
 
@@ -72,7 +101,7 @@ RSpec.describe Weft::Params do
     end
 
     it "a non-colliding hash method still works when no param shadows it" do
-      no_count = described_class.new(status: "shipped")
+      no_count = described_class.new({ status: "shipped" })
       # count isn't declared, so Hash#count takes effect
       expect(no_count.count).to eq(1)
     end
@@ -112,7 +141,7 @@ RSpec.describe Weft::Params do
 
     it "occupies its key without running" do
       runs = 0
-      bag = described_class.new(order: thunk { |_p| runs += 1 })
+      bag = described_class.new({ order: thunk { |_p| runs += 1 } })
 
       expect(bag.key?(:order)).to be(true)
       expect(runs).to eq(0)
@@ -120,10 +149,10 @@ RSpec.describe Weft::Params do
 
     it "forces on first read and memoizes" do
       runs = 0
-      bag = described_class.new(order: thunk do |_p|
+      bag = described_class.new({ order: thunk do |_p|
         runs += 1
         "found"
-      end)
+      end })
 
       expect(bag.order).to eq("found")
       expect(bag[:order]).to eq("found")
@@ -132,17 +161,17 @@ RSpec.describe Weft::Params do
 
     it "hands the bag itself to the block, so derivations can chain lazily" do
       runs = []
-      bag = described_class.new(
-        order_id: 42,
-        order: thunk do |p|
-          runs << :order
-          "order-#{p.order_id}"
-        end,
-        summary: thunk do |p|
-          runs << :summary
-          "sum(#{p.order})"
-        end
-      )
+      bag = described_class.new({
+                                  order_id: 42,
+                                  order: thunk do |p|
+                                    runs << :order
+                                    "order-#{p.order_id}"
+                                  end,
+                                  summary: thunk do |p|
+                                    runs << :summary
+                                    "sum(#{p.order})"
+                                  end
+                                })
 
       expect(bag.summary).to eq("sum(order-42)")
       expect(runs).to eq(%i[summary order])
@@ -150,7 +179,7 @@ RSpec.describe Weft::Params do
 
     it "forces blocks in a sandbox self with no component state in reach" do
       bag = described_class.new(
-        selfish: described_class::Thunk.new(proc { |_p| some_component_method })
+        { selfish: described_class::Thunk.new(proc { |_p| some_component_method }) }
       )
 
       expect { bag.selfish }.to raise_error(NameError, /some_component_method/)
@@ -158,8 +187,8 @@ RSpec.describe Weft::Params do
 
     it "gives each derivation a fresh sandbox, so scratch ivars don't leak between them" do
       bag = described_class.new(
-        writes: described_class::Thunk.new(proc { |_p| @stash = 1 }),
-        reads: described_class::Thunk.new(proc { |_p| instance_variable_defined?(:@stash) })
+        { writes: described_class::Thunk.new(proc { |_p| @stash = 1 }),
+          reads: described_class::Thunk.new(proc { |_p| instance_variable_defined?(:@stash) }) }
       )
 
       expect(bag.writes).to eq(1)
@@ -168,25 +197,24 @@ RSpec.describe Weft::Params do
 
     it "raises a clear error on circular derivation instead of overflowing" do
       bag = described_class.new(
-        a: thunk(&:b),
-        b: thunk(&:a)
+        { a: thunk(&:b), b: thunk(&:a) }
       )
 
       expect { bag.a }.to raise_error(Weft::InvalidUsage, /circular/i)
     end
 
     it "surfaces a failing derivation at read time, not registration" do
-      bag = described_class.new(order: thunk { |_p| raise "boom" })
+      bag = described_class.new({ order: thunk { |_p| raise "boom" } })
 
       expect(bag.key?(:order)).to be(true)
       expect { bag.order }.to raise_error(RuntimeError, "boom")
     end
 
     it "materializes everything for to_h and Hash-API delegation" do
-      bag = described_class.new(status: "hot", order: thunk { |_p| "forced" })
+      bag = described_class.new({ status: "hot", order: thunk { |_p| "forced" } })
 
       expect(bag.to_h).to eq(status: "hot", order: "forced")
-      expect(described_class.new(n: thunk { |_p| 5 }).map { |k, v| [k, v] }).to eq([[:n, 5]])
+      expect(described_class.new({ n: thunk { |_p| 5 } }).map { |k, v| [k, v] }).to eq([[:n, 5]])
     end
   end
 end

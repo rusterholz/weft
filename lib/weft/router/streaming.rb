@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require "weft/params/assembly"
+require "weft/resolver"
+
 module Weft
   class Router
     # SSE streaming slice of the Router. Handles `/component_path/<stream_suffix>`
@@ -107,7 +110,8 @@ module Weft
       # counts against the budget, and the close logic must still run.
       def push_recovery_frame(out, component_class, error, attempts_remaining)
         resolved = Weft::Resolver.resolve(component_class, filtered_params)
-        html = render_push_recovery(component_class, resolved, error, attempts_remaining: attempts_remaining)
+        state = Weft::Params::Assembly.for_request(component_class, filtered_params)
+        html = render_push_recovery(component_class, state, error, attempts_remaining: attempts_remaining)
         out << format_sse_event(component_class.weft_dom_id_for(resolved), html) if html
       rescue Errno::EPIPE, IOError
         raise

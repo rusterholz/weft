@@ -305,6 +305,10 @@ RSpec.describe Weft::Router do
       expect(last_response.body).not_to include("page-5")
     end
 
+    # A default is the fallback of whoever declared it, consulted when a read
+    # finds nothing — never a value the declarer hands downstream. So it
+    # survives the hand-off even though the target inherits everything else
+    # the request composed.
     it "keeps a transfer target's own defaults sovereign over the declarer's" do
       target = Class.new(Weft::Component) do
         def self.name = "OpenModeCard"
@@ -324,6 +328,54 @@ RSpec.describe Weft::Router do
       post "/_components/all_mode_panel/show"
 
       expect(last_response.body).to include("view-open")
+    end
+
+    it "keeps a nested child's own default sovereign over its parent's" do # rubocop:disable RSpec/ExampleLength
+      inner = Class.new(Weft::Component) do
+        def self.name = "InnerViewCard"
+        param :view, type: :string, default: "open"
+
+        def build(attributes = {})
+          super
+          div { text_node "child-#{params.view}" }
+        end
+      end
+      Class.new(Weft::Component) do
+        def self.name = "OuterViewPanel"
+        param :view, type: :string, default: "all"
+
+        define_method(:build) do |attributes = {}|
+          super(attributes)
+          div { text_node "parent-#{params.view}" }
+          insert_tag(inner)
+        end
+      end
+
+      get "/_components/outer_view_panel"
+
+      expect(last_response.body).to include("parent-all")
+      expect(last_response.body).to include("child-open")
+    end
+
+    it "still lets a declarer's derived value cross the hand-off" do
+      target = Class.new(Weft::Component) do
+        def self.name = "InheritedOrderCard"
+
+        def build(attributes = {})
+          super
+          div { text_node "card-#{params.order}" }
+        end
+      end
+      Class.new(Weft::Component) do
+        def self.name = "OrderHandOffPanel"
+        param :order_id, type: :string
+        derives(:order) { |p| "ORDER(#{p.order_id})" }
+        transfers(:show, to: target) { |params| params.order and nil }
+      end
+
+      post "/_components/order_hand_off_panel/show", order_id: "o-5"
+
+      expect(last_response.body).to include("card-ORDER(o-5)")
     end
 
     it "pre-empts the target's derivation with a rich delta value" do # rubocop:disable RSpec/ExampleLength
@@ -369,6 +421,212 @@ RSpec.describe Weft::Router do
       expect(last_response.status).to eq(422)
       expect(last_response.body).to include("draft-o-4")
       expect(last_response.body).to include("badge-acct-5")
+    end
+  end
+
+  describe "the bag a verb block sees" do
+    it "hands a callable its class's derivations" do
+      seen = []
+      Class.new(Weft::Component) do
+        def self.name = "DerivingTouchPanel"
+        param :order_id, type: :string
+        derives(:order) { |p| "ORDER(#{p.order_id})" }
+        performs(:touch) { |params| seen << params.order and nil }
+      end
+
+      post "/_components/deriving_touch_panel/touch", order_id: "o-1"
+
+      expect(seen).to eq(["ORDER(o-1)"])
+    end
+
+    it "hands a callable its class's defined values" do
+      seen = []
+      Class.new(Weft::Component) do
+        def self.name = "DefiningTouchPanel"
+        defines label: "Drivers"
+        performs(:touch) { |params| seen << params.label and nil }
+      end
+
+      post "/_components/defining_touch_panel/touch"
+
+      expect(seen).to eq(["Drivers"])
+    end
+
+    it "never runs a derivation the callable leaves unread" do
+      ran = []
+      Class.new(Weft::Component) do
+        def self.name = "LazyTouchPanel"
+        param :order_id, type: :string
+        derives(:untouched) { |_p| ran << :ran }
+        performs(:touch) { |_params| nil }
+      end
+
+      post "/_components/lazy_touch_panel/touch", order_id: "o-2"
+
+      expect(ran).to be_empty
+    end
+
+    it "lets a wire value outrank a same-key derivation" do
+      seen = []
+      Class.new(Weft::Component) do
+        def self.name = "WireOverDerivePanel"
+        param :status, type: :string
+        derives(:status) { |_p| "derived" }
+        performs(:touch) { |params| seen << params.status and nil }
+      end
+
+      post "/_components/wire_over_derive_panel/touch", status: "from-wire"
+
+      expect(seen).to eq(["from-wire"])
+    end
+
+    it "prefers a derivation to the same key's declared default" do
+      seen = []
+      Class.new(Weft::Component) do
+        def self.name = "DeriveOverDefaultPanel"
+        param :label, type: :string, default: "from-default"
+        derives(:label) { |_p| "from-derive" }
+        performs(:touch) { |params| seen << params.label and nil }
+      end
+
+      post "/_components/derive_over_default_panel/touch"
+
+      expect(seen).to eq(["from-derive"])
+    end
+
+    it "keeps hand-offs out of a callable's view" do
+      seen = []
+      Class.new(Weft::Component) do
+        def self.name = "HandOffTouchPanel"
+        param :order_id, type: :string
+        receives :handed, default: "given"
+        performs(:touch) { |params| seen << params.key?(:handed) and nil }
+      end
+
+      post "/_components/hand_off_touch_panel/touch", order_id: "o-3"
+
+      expect(seen).to eq([false])
+    end
+
+    it "walks the recovery chain when a derivation raises inside a callable" do
+      Class.new(Weft::Component) do
+        def self.name = "MissingRecordPanel"
+        param :order_id, type: :string
+        derives(:order) { |_p| raise Weft::NotFound, "no such order" }
+        performs(:touch) { |params| params.order and nil }
+      end
+
+      post "/_components/missing_record_panel/touch", order_id: "gone"
+
+      expect(last_response.status).to eq(404)
+    end
+
+    it "carries a value the callable forced into the render it precedes" do
+      ran = []
+      Class.new(Weft::Component) do
+        def self.name = "ForcedOncePanel"
+        param :order_id, type: :string
+        derives(:order) { |p| ran << :ran and "ORDER(#{p.order_id})" }
+        performs(:touch) { |params| params.order and nil }
+
+        def build(attributes = {})
+          super
+          div { text_node params.order }
+        end
+      end
+
+      post "/_components/forced_once_panel/touch", order_id: "o-9"
+
+      expect(last_response.body).to include("ORDER(o-9)")
+      expect(ran.size).to eq(1)
+    end
+  end
+
+  describe "recovery sees the state the request had composed" do
+    it "hands a recovery block the doors build sees" do
+      seen = []
+      Class.new(Weft::Component) do
+        def self.name = "DerivingFailurePanel"
+        param :order_id, type: :string
+        derives(:order) { |p| "ORDER(#{p.order_id})" }
+        performs(:touch) { |_params| raise "callable boom" }
+        recovers(from: StandardError) { |params, _e| seen << params.order and {} }
+      end
+
+      post "/_components/deriving_failure_panel/touch", order_id: "o-6"
+
+      expect(seen).to eq(["ORDER(o-6)"])
+    end
+
+    it "hands the recovery chain the callable's overlay when the build is what failed" do
+      seen = []
+      Class.new(Weft::Component) do
+        def self.name = "LateFailurePanel"
+        param :order_id, type: :string
+        performs(:touch) { |_params| { note: "from-callable" } }
+        recovers(from: StandardError) { |params, _e| seen << params.note and {} }
+
+        def build(attributes = {})
+          super
+          raise "build boom"
+        end
+      end
+
+      post "/_components/late_failure_panel/touch", order_id: "o-7"
+
+      expect(seen).to eq(["from-callable"])
+    end
+
+    it "walks the rendering component's chain when a transfer's build fails" do # rubocop:disable RSpec/ExampleLength
+      recovery = Class.new(Weft::Component) do
+        def self.name = "TargetsOwnRecovery"
+
+        def build(attributes = {})
+          super
+          div { text_node "target-recovery" }
+        end
+      end
+      target = Class.new(Weft::Component) do
+        def self.name = "FailingTransferTarget"
+        recovers from: StandardError, with: recovery
+
+        def build(attributes = {})
+          super
+          raise "target boom"
+        end
+      end
+      Class.new(Weft::Component) do
+        def self.name = "HandingOffPanel"
+        recovers from: StandardError, with: Weft::Defaults::NotFoundComponent
+        transfers(:go, to: target)
+      end
+
+      post "/_components/handing_off_panel/go"
+
+      expect(last_response.body).to include("target-recovery")
+    end
+
+    it "hands a failing companion's recovery block the state its own build saw" do # rubocop:disable RSpec/ExampleLength
+      seen = []
+      companion = Class.new(Weft::Component) do
+        def self.name = "StatefulFlakyCompanion"
+        param :slot, type: :string
+        recovers(from: StandardError) { |params, _e| seen << params.note and {} }
+
+        def build(attributes = {})
+          super
+          raise "companion boom"
+        end
+      end
+      Class.new(Weft::Component) do
+        def self.name = "CompanionStateHost"
+        performs(:touch) { nil }
+        includes(companion, on: :touch) { |_p| { note: "from-includes" } }
+      end
+
+      post "/_components/companion_state_host/touch", slot: "a"
+
+      expect(seen).to eq(["from-includes"])
     end
   end
 

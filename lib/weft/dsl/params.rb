@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "weft/error"
-require "weft/resolver"
+require "weft/params/assembly"
 
 module Weft
   module DSL
@@ -92,6 +92,12 @@ module Weft
           end
         end
 
+        # Every key this class declares, whichever door it came through —
+        # what a bag assembled for this class will hold entries for.
+        def declared_keys
+          params.keys | received_params.keys | derived_params.keys
+        end
+
         # All declared derivations (own + inherited), preserving declaration
         # order. A child redeclaring a parent's key replaces the block, like
         # a method override.
@@ -138,12 +144,6 @@ module Weft
         @warned_collisions ||= Set.new
       end
 
-      # One-time divergent-derivation warnings, keyed [class, key].
-      # See #warn_shadowed_derivations.
-      def self.warned_divergences
-        @warned_divergences ||= Set.new
-      end
-
       # Instance access to the resolved bag.
       # Returns a Weft::Params object with method-style and hash access.
       attr_reader :params
@@ -176,55 +176,15 @@ module Weft
       end
 
       def resolve_bag(received:, validate:)
-        wire = Weft::Resolver.resolve_present(self.class, wire_source)
-        inherited, inherited_provenance = inherited_bag
-        bag = inherited.dup
-        declared_keys.each { |key| bag[key] = stack_value(key, received, wire, inherited) }
+        bag = Weft::Params::Assembly.call(self.class, wire_source,
+                                          hand_offs: received,
+                                          overlays: context_overlays, branched_from: inherited_bag)
         validate_hand_offs!(bag) if validate
-        warn_shadowed_derivations(received, wire, inherited, inherited_provenance)
-        Weft::Params.new(bag, bag_provenance(bag, inherited, inherited_provenance))
-      end
-
-      def declared_keys
-        self.class.params.keys | self.class.received_params.keys | self.class.derived_params.keys
-      end
-
-      # The per-key source stack, top wins: hand-off > overlay > own wire >
-      # inherited > own derivation (registered lazily) > default. nil never
-      # wins a level — it means that source didn't have it. A thunk always
-      # "produces," so a same-key default is unreachable behind a derives.
-      # The overlay (request-scoped verb-block deltas) speaks AS the wire
-      # when it holds a key: its value replaces the wire's, and a nil clears
-      # — masking the wire so resolution falls below it.
-      def stack_value(key, received, wire, inherited)
-        return received[key] unless received[key].nil?
-
-        overlays = context_overlays
-        wire_level = overlays.key?(key) ? overlays[key] : wire[key]
-        [wire_level, inherited[key], derived_thunk(key), default_for(key)].
-          find { |v| !v.nil? }
+        bag
       end
 
       def context_overlays
         arbre_context.respond_to?(:overlays) ? arbre_context.overlays : {}
-      end
-
-      def derived_thunk(key)
-        meta = self.class.derived_params[key]
-        Weft::Params::Thunk.new(meta[:block]) if meta
-      end
-
-      # source_location per derives-born key still occupying the bag:
-      # inherited provenance survives wherever the inherited entry itself
-      # survived (forced or not — that's why it isn't recomputed from
-      # thunks), plus this class's own registrations.
-      def bag_provenance(bag, inherited, inherited_provenance)
-        provenance = inherited_provenance.select { |key, _| bag[key].equal?(inherited[key]) }
-        self.class.derived_params.each do |key, meta|
-          provenance[key] = meta[:source_location] if
-            bag[key].is_a?(Weft::Params::Thunk) && !provenance.key?(key)
-        end
-        provenance
       end
 
       # Checks required_hand_off? before reading the key: a required hand-off
@@ -234,35 +194,6 @@ module Weft
         self.class.received_params.each_key do |key|
           raise_not_received!(key) if required_hand_off?(key) && bag[key].nil?
         end
-      end
-
-      # When an inherited value wins level 3 over this class's own derivation
-      # AND was itself derived by a different block, the local derivation is
-      # silently dead — surface that once per (class, key). Values inherited
-      # through other doors (wire, hand-off) are the stack working as
-      # designed; a shared proc (one derivation mixed into many classes) is
-      # agreement, not divergence.
-      def warn_shadowed_derivations(received, wire, inherited, inherited_provenance)
-        self.class.derived_params.each_key do |key|
-          next unless received[key].nil? && wire[key].nil? && !inherited[key].nil?
-          next if context_overlays.key?(key) # the overlay won, by design — not a divergence
-
-          warn_divergence(key, inherited_provenance[key])
-        end
-      end
-
-      def warn_divergence(key, upstream)
-        meta = self.class.derived_params[key]
-        return if upstream.nil? || upstream == meta[:source_location]
-        return unless Weft::DSL::Params.warned_divergences.add?([self.class, key])
-
-        Weft.logger.warn(divergence_message(key, meta, upstream))
-      end
-
-      def divergence_message(key, meta, upstream)
-        "#{self.class.name}: inherited #{key.inspect} (derived at #{upstream.join(':')}) shadows " \
-          "this class's own derivation (#{meta[:source_location].join(':')}) — the ancestor's " \
-          "value wins. Use distinct keys or share one derivation if that isn't intended."
       end
 
       def wire_source
@@ -276,29 +207,16 @@ module Weft
       # [data, provenance]; the copy is thunk-preserving (never forces the
       # ancestor's lazy entries) and nil-dropping. A root with no tree
       # ancestor falls back to the context's branch bag — how an OOB
-      # companion inherits from the primary it rides alongside.
+      # companion inherits from the primary it rides alongside, and how the
+      # state a request has already composed reaches the component it renders.
       def inherited_bag
         el = arbre_context.current_arbre_element
         while el
-          return [el.params.branch_data, el.params.provenance] if el.is_a?(Weft::DSL::Params) && el.params
+          return el.params if el.is_a?(Weft::DSL::Params) && el.params
 
           el = el.parent
         end
-        context_branch_bag
-      end
-
-      def context_branch_bag
-        bag = arbre_context.respond_to?(:branch_bag) ? arbre_context.branch_bag : nil
-        bag ? [bag.branch_data, bag.provenance] : [{}, {}]
-      end
-
-      # The wire door's default wins for dual keys — its meta always carries
-      # one, and the wire door sits above the hand-off's fallback in the stack.
-      def default_for(key)
-        wire_meta = self.class.params[key]
-        return wire_meta[:default] if wire_meta
-
-        self.class.received_params[key]&.[](:default)
+        arbre_context.respond_to?(:branch_bag) ? arbre_context.branch_bag : nil
       end
 
       # A hand-off is required when `receives` is its only door and no

@@ -453,6 +453,39 @@ RSpec.describe Weft::Component do
       expect(Weft.logger).to have_received(:warn).with(/ForcedShadowed.*:order/m)
     end
 
+    it "still warns about a divergent inherited derivation when an overlay took the key" do
+      parent_class = Class.new(described_class) { def self.name = "OverlaidUpstream" }
+      parent_class.derives(:order) { |_p| "upstream" }
+      child_class = Class.new(described_class) { def self.name = "OverlaidShadowed" }
+      child_class.derives(:order) { |_p| "local" }
+      parent_class.define_method(:build) do |attributes = {}|
+        super(attributes)
+        insert_tag(child_class)
+      end
+
+      Weft::Context.new({}, nil, overlays: { order: "from-a-verb-block" }) { insert_tag(parent_class) }.to_s
+
+      expect(Weft.logger).to have_received(:warn).with(/OverlaidShadowed.*:order.*shadows/m)
+    end
+
+    it "warns when a verb block's overlay outranks this class's own derivation" do
+      klass = Class.new(described_class) { def self.name = "OverruledDeriver" }
+      klass.derives(:label) { |_p| "derived" }
+
+      Weft::Context.new({}, nil, overlays: { label: "from-a-verb-block" }) { insert_tag(klass) }.to_s
+
+      expect(Weft.logger).to have_received(:warn).with(/OverruledDeriver.*:label.*outranks/m)
+    end
+
+    it "stays silent when an overlay clears a key rather than supplying one" do
+      klass = Class.new(described_class) { def self.name = "ClearedDeriver" }
+      klass.derives(:label) { |_p| "derived" }
+
+      Weft::Context.new({}, nil, overlays: { label: nil }) { insert_tag(klass) }.to_s
+
+      expect(Weft.logger).not_to have_received(:warn)
+    end
+
     it "stays silent for a shared derivation (same proc via a mixin)" do
       shared = proc { |_p| "current-user" }
       parent_class = Class.new(described_class) { def self.name = "SharingParent" }

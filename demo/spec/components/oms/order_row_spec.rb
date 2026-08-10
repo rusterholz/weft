@@ -56,8 +56,7 @@ RSpec.describe Oms::OrderRow, type: :component do
   end
 
   it "destroys the order when the cancel action runs" do
-    action = described_class.actions[%i[cancel delete]]
-    Weft::DSL::Sandbox.run(Weft::Params.new(order_id: order.id), &action.callable)
+    run_action(described_class, :cancel, :delete, order_id: order.id)
 
     expect(Oms::Order.exists?(order.id)).to be(false)
   end

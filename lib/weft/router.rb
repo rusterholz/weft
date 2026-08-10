@@ -132,10 +132,11 @@ module Weft
     # Render a component as HTML. inner: true returns children only
     # (for SSE innerHTML swap where the wrapper element must persist).
     def render_component(component_class, inner: false)
-      component = build_component_with_wire(component_class, filtered_params)
+      state = Weft::Params::Assembly.for_request(component_class, filtered_params)
+      component = build_component_with_wire(component_class, filtered_params, branch_bag: state)
       inner ? component.content : component.to_s
     rescue StandardError => e
-      render_error(component_class, Weft::Resolver.resolve(component_class, filtered_params), e)
+      render_error(component_class, state || Weft::Params.new({}), e)
     end
 
     # Build a component instance from the current request params.
@@ -168,7 +169,7 @@ module Weft
     rescue StandardError => e
       handle_page_chain_failure(e,
                                 originating_page_class: page_class,
-                                originating_params: Weft::Resolver.resolve(page_class, merged_params),
+                                originating_params: Weft::Params::Assembly.for_request(page_class, merged_params),
                                 originating_wire: merged_params)
     end
 
