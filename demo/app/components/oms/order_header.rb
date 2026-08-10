@@ -1,17 +1,13 @@
 # frozen_string_literal: true
 
 module Oms
-  class OrderHeader < Weft::Component
+  class OrderHeader < Oms::OrderRegion
     builder_method :order_header
 
-    param :order_id, type: :string
-
-    derives(:order) { |p| Oms::Order.find(p.order_id) }
-
     # Hands the region to the edit form. Blockless: opening the editor has
-    # nothing to say about the order, and an action callable can't read this
-    # class's `derives` anyway — those are evaluated during a render, so
-    # there is no already-loaded order here to pass along.
+    # nothing to say about the order that the editor can't work out for
+    # itself — it shares this region's derivation, so it arrives knowing how
+    # to find the order without being told.
     transfers :edit, to: Oms::EditableOrderHeader
 
     # Advancing packs or dispatches shipments, so the shipments card is stale
@@ -32,7 +28,7 @@ module Oms
     triggers "order-editing", on: :edit
 
     performs :advance do |params|
-      order = Oms::Order.find(params.order_id)
+      order = params.order
       case order.status
       when "submitted"
         Oms::PrepareOrder.call(order)

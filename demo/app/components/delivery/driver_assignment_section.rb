@@ -16,9 +16,10 @@ module Delivery
     # sections are really subscribing to.
     triggers "delivery-completed", on: :complete_delivery
 
+    # `params.shipment` walks the same two-step derivation the build reads:
+    # driver from the wire, then that driver's current shipment.
     performs :complete_delivery do |params|
-      driver = Delivery::Driver.find(params.driver_id)
-      shipment = Logistics::Shipment.find_by(id: driver.current_shipment_id)
+      shipment = params.shipment
       Logistics::CompleteDelivery.call(shipment) if shipment&.status == "in_transit"
     end
 
