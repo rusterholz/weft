@@ -23,28 +23,45 @@ end
 
 **In this document:**
 
-- [Params](#params) — the four doors: [`param`](#param--wire-state), [`receives`](#receives--caller-hand-offs), [`derives`](#derives--lazy-server-side-derivations), [`defines`](#defines--static-values), [how they combine](#how-the-doors-combine), [inheritance](#inheritance-and-the-render-tree)
-- [Verbs](#verbs)
-  - [`refreshes` — the client re-fetches](#refreshes--the-client-re-fetches)
-  - [`pushes` — the server sends updates](#pushes--the-server-sends-updates)
-  - [`performs` — user-initiated actions](#performs--user-initiated-actions) and [the callable contract](#the-callable-contract)
-  - [`transfers` — actions that render something else](#transfers--actions-that-render-something-else)
-  - [`dismisses` — remove from the DOM](#dismisses--remove-from-the-dom)
-  - [`triggers` — announce to the rest of the page](#triggers--announce-to-the-rest-of-the-page)
-  - [`includes` — companions in the same response](#includes--companions-in-the-same-response)
-  - [`recovers` — declare error behavior](#recovers--declare-error-behavior)
-  - [Other class-body declarations](#other-class-body-declarations)
-- [Element kwargs](#element-kwargs) — [the two ranks and their rules](#the-kwarg-rules); [`action:`](#action), [`navigate:`](#navigate), [`loads:`](#loads), [`trigger:`](#trigger), [`push_url:`](#push_url), [`confirm:`](#confirm) — plus the [swap](#swap-values), [trigger](#trigger-values), and [target](#targets) value tables
-- [Presets](#presets)
+- [Params](#params): the different ways data gets into your component on each request (analogous to Rails' `params`).
+  - [`param`](#param--wire-state) - path component params, query string params, form data, and POST content; all of which together is called "wire state"
+  - [`derives`](#derives--lazy-server-side-derivations) - enriched values that can be determined from the wire state, such as a database model loaded by an ID in the query string
+  - [`defines`](#defines--static-values) - a variant of `derives` for when a value is known at load time
+  - [`receives`](#receives--caller-hand-offs) - rich values handed straight over by whoever renders the component, such as a database model the caller already has in hand
+  - [How These Ways Combine](#how-the-doors-combine) - when and why to use them in combination
+  - [Inheritance](#inheritance-and-the-render-tree) - how wire state is made available at each layer when components are composed together
+- [Behavioral Verbs](#verbs): the user-facing behaviors that your component exposes or provides.
+  - [`performs`](#performs--user-initiated-actions) - user-initiated actions which re-render the component afterwards, like submitting a form
+  - [`transfers`](#transfers--actions-that-render-something-else) - a variant of `performs` that replaces this component with another
+  - [`dismisses`](#dismisses--remove-from-the-dom) - a variant of `performs` that removes this component from the DOM
+  - [`refreshes`](#refreshes--the-client-re-fetches) - re-render this component periodically or on specific **client-side** events
+  - [`pushes`](#pushes--the-server-sends-updates) - re-render this component periodically or on specific **server-side** events
+  - [`recovers`](#recovers--declare-error-behavior) - what your component should do if it encounters an error
+  - [`triggers`](#triggers--announce-to-the-rest-of-the-page) - announce a **client-side** event to the other components on the page
+  - [`includes`](#includes--companions-in-the-same-response) - what other components need to redraw when this one does
+  - [The Callable Contract](#the-callable-contract) - how to attach logic to each of these behaviors
+  - [Other Class-Body Declarations](#other-class-body-declarations)
+- [Element Kwargs](#element-kwargs): how the behaviors get attached to your component's UI elements.
+  - [`action:`](#action) - attach any of the actions defined with `performs`, `transfers`, or `dismisses` to any HTML element
+  - [`navigate:`](#navigate) - a variant of `action` that needs no declaration: re-fetch this same component with some of its wire state changed, which is the idiom for filtering, sorting, and pagination
+  - [`loads:`](#loads) - fetch a *different* component and place it somewhere on the page, such as a detail pane that fills in when a row is clicked
+  - [Interaction vs. Modifier Kwargs](#the-kwarg-rules)
+  - And the modifiers themselves:
+    - [`trigger:`](#trigger) - which browser event fires the request, when the default (usually a click) isn't the one you want
+    - [`push_url:`](#push_url) - update the browser's address bar when the request completes, so the new state is shareable and the back button still means something
+    - [`confirm:`](#confirm) - ask for confirmation in a browser dialog first, and make no request at all if the answer is no
+    - [`swap:`](#swap-values) - how the response lands in the DOM: replacing the target, filling it, or inserting around it
+    - [`target:`](#targets) - which element the response lands in, for the times it shouldn't be the component itself
+  - Kwarg [Presets](#presets) - named groups of settings which let you reuse a common or custom behavior across your whole app
 
 ## Params
 
 A component's inputs all reach it through `params`, and there are four ways to declare them — four *doors* into the same bag, each suited to a different kind of value:
 
 - **[`param`](#param--wire-state)** — wire state: values small enough to travel in a URL (an id, a page number, a filter).
-- **[`receives`](#receives--caller-hand-offs)** — caller hand-offs: rich objects a call site already holds and passes straight in (a record, a computed collection).
 - **[`derives`](#derives--lazy-server-side-derivations)** — lazy server-side derivations: values the component works out for itself, on demand.
 - **[`defines`](#defines--static-values)** — static values a subclass pins; sugar over `derives`.
+- **[`receives`](#receives--caller-hand-offs)** — caller hand-offs: rich objects a call site already holds and passes straight in (a record, a computed collection).
 
 Whichever door a value comes through, you read it the same way — `params.name`, or `params[:name]`. Every verb block sees the same doors `build` does, with one structural exception: `receives` values come from a *call site*, and an action arriving over the wire has no caller, so a callable can't see them. (Need one in an action? Give the key a second door — a `param` or a `defines` — and it stands on its own.) For the bigger picture — how params travel in from a request, down the render tree, and back out into the next refresh or action — see [How params flow](params.md).
 
@@ -88,21 +105,6 @@ That id decides more than where a fragment lands. Because an out-of-band swap is
 
 Declaring a param has a routing consequence: a component with params (or any verb below) is considered independently addressable and gets its own route. See [Routing](routing.md).
 
-### `receives` — caller hand-offs
-
-```ruby
-receives :order
-receives :page_num, default: 1
-```
-
-Some values can't ride a URL — an `ActiveRecord` object, a pre-built collection, anything rich. `receives` declares that a call site hands the value over directly: `order_row(order: order)` fills `params.order`. The kwarg is consumed as the hand-off, so it never becomes an HTML attribute on the wrapper, and the value never serializes into a URL.
-
-A hand-off is **required by default**: a call site that omits it raises `Weft::NotReceived`, with the backtrace pointing at the call site rather than deep inside the framework. Declaring a default makes it optional — `receives :page_num, default: 1`, and an explicit `default: nil` counts too (the presence of the keyword is what makes it optional, not the value).
-
-Hand-offs are server-side: declaring one doesn't make a component routable, since there's no way to reconstruct an `Order` from a URL. A component that lives only inside a parent — always handed its data, never served standalone — can say so with **`dependent!`** (an alias of [`abstract!`](routing.md)): "my parent passes this in every time; serving me on my own makes no sense."
-
-If a component *is* routable and declares a required hand-off with no wire counterpart, Weft warns at route validation — such a component renders fine embedded but would raise `Weft::NotReceived` on every standalone refresh. Give it a wire dual (below) or mark it `dependent!`.
-
 ### `derives` — lazy server-side derivations
 
 ```ruby
@@ -142,6 +144,21 @@ end
 ```
 
 The catch is in the name: the values are fixed **when the class body runs**, not per render. Anything computed — a query, a count, a clock — must stay in `derives`, because an interpolated value here would freeze at load time. If it isn't a literal constant, it's a `derives`.
+
+### `receives` — caller hand-offs
+
+```ruby
+receives :order
+receives :page_num, default: 1
+```
+
+Some values can't ride a URL — an `ActiveRecord` object, a pre-built collection, anything rich. `receives` declares that a call site hands the value over directly: `order_row(order: order)` fills `params.order`. The kwarg is consumed as the hand-off, so it never becomes an HTML attribute on the wrapper, and the value never serializes into a URL.
+
+A hand-off is **required by default**: a call site that omits it raises `Weft::NotReceived`, with the backtrace pointing at the call site rather than deep inside the framework. Declaring a default makes it optional — `receives :page_num, default: 1`, and an explicit `default: nil` counts too (the presence of the keyword is what makes it optional, not the value).
+
+Hand-offs are server-side: declaring one doesn't make a component routable, since there's no way to reconstruct an `Order` from a URL. A component that lives only inside a parent — always handed its data, never served standalone — can say so with **`dependent!`** (an alias of [`abstract!`](routing.md)): "my parent passes this in every time; serving me on my own makes no sense."
+
+If a component *is* routable and declares a required hand-off with no wire counterpart, Weft warns at route validation — such a component renders fine embedded but would raise `Weft::NotReceived` on every standalone refresh. Give it a wire dual (below) or mark it `dependent!`.
 
 ### How the doors combine
 
@@ -183,6 +200,52 @@ Subclasses can also **redeclare** an inherited key. Redeclaring through the *sam
 
 Verbs are **class-body declarations**: they state what a component *does* — once, at the class level, the way `param` and its siblings declare what it *consumes*. The other layer, [element kwargs](#element-kwargs), wires individual elements to these behaviors from inside `build`; a `performs` declared here is inert until some element carries `action:` naming it (forms and buttons usually).
 
+### `performs` — user-initiated actions
+
+```ruby
+performs :advance do |params|
+  order = Oms::Order.find(params.order_id)
+  Oms::AdvanceOrder.call(order)
+end
+```
+
+Declares an action: the Router generates a route for it, and elements wire to it with the `action:` kwarg (below). When the request arrives, [the callable](#the-callable-contract) runs, then the component re-renders and the response replaces it in the page.
+
+The full signature:
+
+```ruby
+performs :name, method: :post, swap: :outer_html, target: nil do |params| ... end
+```
+
+- **`method:`** — the HTTP method (default `:post`). A *named* action routes at `<component path>/<name>`; a *nameless* one (`performs method: :delete do ... end`) routes at the component's own path, distinguished by method. A nameless GET action is special: it intercepts the component's own render route, running the callable before every over-the-wire render.
+- **`swap:`** — how the response lands in the DOM (default `:outer_html`, replacing the component). See the [swap table](#swap-values).
+- **`target:`** — a CSS selector for where the response lands (default: the component itself, by DOM id).
+
+### `transfers` — actions that render something else
+
+```ruby
+transfers :edit, to: EditableOrderHeader do |params|
+  { mode: "full" }
+end
+```
+
+Identical to `performs` in signature and [contract](#the-callable-contract), except the response renders the `to:` component instead of the declaring one — for actions whose natural result is a different piece of UI (a read-only header becoming an edit form). The returned hash overlays the request for the target's render: override its wire values, or hand it rich objects that pre-empt its own `derives`.
+
+The target inherits the state the request has composed, exactly as a nested child inherits its parent's — so a record the callable loaded is already there and needn't be handed over. Its own **defaults** stay sovereign (they don't travel), and it's the *target's* [`includes`](#includes--companions-in-the-same-response) companions that ride the response: after the swap, the target is the component in charge. To override something it inherited, return the key; an explicit `nil` clears it. The target only needs to *render*; it does not need its own route (see [routability vs. render targets](routing.md#routable-vs-render-target)).
+
+### `dismisses` — remove from the DOM
+
+```ruby
+dismisses :close                        # no side effects
+dismisses :archive do |params|           # with side effects
+  Item.find(params.item_id).archive!
+end
+```
+
+Sugar for `performs` with `method: :delete, swap: :delete`: on success, the component is removed from the page entirely. The callable, if given, runs for side effects, and the success response carries no body — htmx removes the element on its own, and Weft never re-renders a component whose record was just deleted, so `build` needs no guard against the vanished state. Out-of-band [`includes`](#includes--companions-in-the-same-response) companions still ride the response. Like `performs`, it accepts a `target:` for the occasional removal that should land elsewhere.
+
+If the callable raises, Weft overrides the destructive swap (via `HX-Reswap`) so the error rendering appears where the component was, rather than the element silently vanishing — and the error fragment [adopts the component's own tag](error-handling.md#auto-injected-recovery-params), so a failed row delete produces an error `<tr>`, not a `<div>` wedged into a table.
+
 ### `refreshes` — the client re-fetches
 
 ```ruby
@@ -214,85 +277,17 @@ A failing push walks the component's [`recovers` chain](error-handling.md#error-
 
 Pages include the htmx SSE extension script automatically when any component declares `pushes` (the [`include_sse_ext`](configuration.md#include_sse_ext) setting).
 
-### `performs` — user-initiated actions
+### `recovers` — declare error behavior
 
 ```ruby
-performs :advance do |params|
-  order = Oms::Order.find(params.order_id)
-  Oms::AdvanceOrder.call(order)
+recovers from: Weft::Unprocessable do |params, error|
+  { error_message: error.message }
 end
+recovers from: Weft::Unauthorized, with: LoginPage
+recovers from: ActiveRecord::RecordNotFound, with: NotFoundPage, status: 404
 ```
 
-Declares an action: the Router generates a route for it, and elements wire to it with the `action:` kwarg (below). When the request arrives, the callable runs, then the component re-renders and the response replaces it in the page.
-
-The full signature:
-
-```ruby
-performs :name, method: :post, swap: :outer_html, target: nil do |params| ... end
-```
-
-- **`method:`** — the HTTP method (default `:post`). A *named* action routes at `<component path>/<name>`; a *nameless* one (`performs method: :delete do ... end`) routes at the component's own path, distinguished by method. A nameless GET action is special: it intercepts the component's own render route, running the callable before every over-the-wire render.
-- **`swap:`** — how the response lands in the DOM (default `:outer_html`, replacing the component). See the [swap table](#swap-values).
-- **`target:`** — a CSS selector for where the response lands (default: the component itself, by DOM id).
-
-### The callable contract
-
-Action callables receive one argument — the component's resolved `params`, the same bag its `build` reads. A callable can read the component's own `derives` and `defines`, so the lookup a component already declares doesn't get written a second time inside every action:
-
-```ruby
-param :order_id
-derives(:order) { |p| Oms::Order.find(p.order_id) }
-
-performs :advance do |params|
-  Oms::AdvanceOrder.call(params.order)   # the same order the render below will show
-end
-```
-
-A derivation the callable forces stays forced for the rest of the response, so that's one query serving the action, the re-render, and any companions riding along — you don't have to hand the record forward to avoid a refetch.
-
-The return value directs what happens next:
-
-- **`nil`** (or any ignored value): re-render with the original params. The common case — the callable did its side effect; the fresh render reflects it.
-- **a `Hash`**: an overlay on the request. The returned keys override wire values for *everything* the response renders — the component, its nested children, its OOB companions — an explicit `nil` clears a value, and a rich object pre-empts matching `derives` down the tree. Use this to change state on the way through: `performs :filter do |params| { page: 1 } end`. Because *any* hash return is an overlay, watch your last expression — `Hash#delete` and `merge!` return hashes, and a callable ending on one silently applies it. End a side-effect-only callable with an explicit `nil`.
-- **a `Weft::Redirect`**: navigate away instead of re-rendering. Build one with `Weft.redirect`:
-
-```ruby
-performs :create do |params|
-  order = Oms::CreateOrder.call(params.to_h)
-  Weft.redirect(OrderDetailPage, order_id: order.id)
-end
-```
-
-`Weft.redirect` takes a `Weft::Page` subclass plus params (interpolated into the page's path pattern), or a plain URL string. The Router handles transport: htmx requests get an `HX-Redirect` header, traditional form submissions get a 302.
-
-Like every verb block — the action callable here, and the blocks for `transfers`, `recovers`, and `includes` — the callable runs against a [sandboxed `self`](#derives--lazy-server-side-derivations): `params` and lexical constants are in reach and `Kernel` is available, but nothing component-specific is. Do your side effects through the objects you call (`Oms::AdvanceOrder.call(order)`), never through a method on the component.
-
-If the callable raises, the error walks the component's recovery chain — see [Error handling](error-handling.md).
-
-### `transfers` — actions that render something else
-
-```ruby
-transfers :edit, to: EditableOrderHeader do |params|
-  { mode: "full" }
-end
-```
-
-Identical to `performs` in signature and contract, except the response renders the `to:` component instead of the declaring one — for actions whose natural result is a different piece of UI (a read-only header becoming an edit form). The returned hash overlays the request for the target's render: override its wire values, or hand it rich objects that pre-empt its own `derives`.
-
-The target inherits the state the request has composed, exactly as a nested child inherits its parent's — so a record the callable loaded is already there and needn't be handed over. Its own **defaults** stay sovereign (they don't travel), and it's the *target's* [`includes`](#includes--companions-in-the-same-response) companions that ride the response: after the swap, the target is the component in charge. To override something it inherited, return the key; an explicit `nil` clears it. The target only needs to *render*; it does not need its own route (see [routability vs. render targets](routing.md#routable-vs-render-target)).
-
-### `dismisses` — remove from the DOM
-
-```ruby
-dismisses :close                        # no side effects
-dismisses :archive do |params|           # with side effects
-  Item.find(params.item_id).archive!
-end
-```
-
-Sugar for `performs` with `method: :delete, swap: :delete`: on success, the component is removed from the page entirely. The callable, if given, runs for side effects, and the success response carries no body — htmx removes the element on its own, and Weft never re-renders a component whose record was just deleted, so `build` needs no guard against the vanished state. Out-of-band [`includes`](#includes--companions-in-the-same-response) companions still ride the response. Like `performs`, it accepts a `target:` for the occasional removal that should land elsewhere.
-
-If the callable raises, Weft overrides the destructive swap (via `HX-Reswap`) so the error rendering appears where the component was, rather than the element silently vanishing — and the error fragment [adopts the component's own tag](error-handling.md#auto-injected-recovery-params), so a failed row delete produces an error `<tr>`, not a `<div>` wedged into a table.
+Declares how this component or page responds when a render or action raises. `from:` matches by exception class, HTTP status code, status range, or an array of those; `with:` names what renders instead; `status:` declares what a non-Weft error means on the wire, so your app's own exceptions recover with honest semantics (the branded 404 above). The gem ships default recoveries, so this is opt-in refinement. The complete model — matching, chain order, auto-injected params — is in [Error handling](error-handling.md).
 
 ### `triggers` — announce to the rest of the page
 
@@ -338,17 +333,39 @@ Unfiltered inclusions ride every response the component renders in: its own acti
 
 **A companion is a courtesy, not a contract.** If a companion raises, the response still belongs to the component the request was about: its render, its status, and its headers are untouched, and the failing companion shows *its own* recovery in *its own* slot. That's what keeps an action honest — a stale card that can't re-render is a display problem, not grounds for reporting a committed change as a failure. See [when a companion fails](error-handling.md#when-a-companion-fails).
 
-### `recovers` — declare error behavior
+### The callable contract
+
+Action callables receive one argument — the component's resolved `params`, the same bag its `build` reads. A callable can read the component's own `derives` and `defines`, so the lookup a component already declares doesn't get written a second time inside every action:
 
 ```ruby
-recovers from: Weft::Unprocessable do |params, error|
-  { error_message: error.message }
+param :order_id
+derives(:order) { |p| Oms::Order.find(p.order_id) }
+
+performs :advance do |params|
+  Oms::AdvanceOrder.call(params.order)   # the same order the render below will show
 end
-recovers from: Weft::Unauthorized, with: LoginPage
-recovers from: ActiveRecord::RecordNotFound, with: NotFoundPage, status: 404
 ```
 
-Declares how this component or page responds when a render or action raises. `from:` matches by exception class, HTTP status code, status range, or an array of those; `with:` names what renders instead; `status:` declares what a non-Weft error means on the wire, so your app's own exceptions recover with honest semantics (the branded 404 above). The gem ships default recoveries, so this is opt-in refinement. The complete model — matching, chain order, auto-injected params — is in [Error handling](error-handling.md).
+A derivation the callable forces stays forced for the rest of the response, so that's one query serving the action, the re-render, and any companions riding along — you don't have to hand the record forward to avoid a refetch.
+
+The return value directs what happens next:
+
+- **`nil`** (or any ignored value): re-render with the original params. The common case — the callable did its side effect; the fresh render reflects it.
+- **a `Hash`**: an overlay on the request. The returned keys override wire values for *everything* the response renders — the component, its nested children, its OOB companions — an explicit `nil` clears a value, and a rich object pre-empts matching `derives` down the tree. Use this to change state on the way through: `performs :filter do |params| { page: 1 } end`. Because *any* hash return is an overlay, watch your last expression — `Hash#delete` and `merge!` return hashes, and a callable ending on one silently applies it. End a side-effect-only callable with an explicit `nil`.
+- **a `Weft::Redirect`**: navigate away instead of re-rendering. Build one with `Weft.redirect`:
+
+```ruby
+performs :create do |params|
+  order = Oms::CreateOrder.call(params.to_h)
+  Weft.redirect(OrderDetailPage, order_id: order.id)
+end
+```
+
+`Weft.redirect` takes a `Weft::Page` subclass plus params (interpolated into the page's path pattern), or a plain URL string. The Router handles transport: htmx requests get an `HX-Redirect` header, traditional form submissions get a 302.
+
+Like every verb block — the action callable here, and the blocks for `transfers`, `recovers`, and `includes` — the callable runs against a [sandboxed `self`](#derives--lazy-server-side-derivations): `params` and lexical constants are in reach and `Kernel` is available, but nothing component-specific is. Do your side effects through the objects you call (`Oms::AdvanceOrder.call(order)`), never through a method on the component.
+
+If the callable raises, the error walks the component's recovery chain — see [Error handling](error-handling.md).
 
 ### Other class-body declarations
 
@@ -390,23 +407,6 @@ Inside `build` (and inside blocks nested under it), any element accepts Weft kwa
 
 - **Interaction kwargs** say what request the element makes — [`action:`](#action), [`navigate:`](#navigate), [`loads:`](#loads), or any [preset](#presets). One per element, and the *value shape* is part of the claim: a Symbol `action:` is Weft's, while a String `action:` on a form is plain HTML.
 - **Modifier kwargs** adjust the wiring the interaction generates. `target:` and `swap:` override where the response lands and how it swaps — whatever the interaction, and whatever its declaration or preset would have used. [`trigger:`](#trigger), [`push_url:`](#push_url), and [`confirm:`](#confirm) do the same and *also* work standalone, on an element that makes no request of its own, because htmx lets those attributes inherit from a containing element.
-
-### The kwarg rules
-
-A kwarg that is unmistakably Weft's but can't make sense **raises `Weft::InvalidUsage`** at render time rather than leaking into your HTML — a mistyped action name, a `navigate:` key the component doesn't declare, a `with:` with nothing to feed. A **`nil` value always means "not this time"** (`tooltip: maybe_class`) and renders nothing. Everything else — `class:`, `data:`, raw `hx-*` strings, a real HTML `target:` on a link — passes through to the element untouched.
-
-| Kwarg | Rank | Weft's when… | Otherwise |
-| --- | --- | --- | --- |
-| `action:` | interaction | the value is a Symbol naming a declared action | String values are plain HTML (`form action: "/path"`); an unmatched Symbol raises |
-| `navigate:` | interaction | the value is a Hash of param overrides | any other value raises; so does re-fetching a non-routable component |
-| `loads:` | interaction | the value is a component Class | any other value raises; so does a non-routable target |
-| preset names (`tooltip:`, …) | interaction | the value is a Class or URL String | any other value raises; so does a non-routable Class target |
-| `target:` | modifier | an interaction kwarg is present | plain HTML (`target: "_blank"` on a link works as ever) |
-| `swap:` | modifier | an interaction kwarg is present | passes through as an attribute, with a one-time warning |
-| `trigger:` | modifier | always | — |
-| `push_url:` | modifier | always | — |
-| `confirm:` | modifier | always | — |
-| `with:` | feeds `loads:`/presets | `loads:` or a preset is alongside | raises |
 
 ### `action:`
 
@@ -455,6 +455,23 @@ Loads a *different* component into a chosen DOM location on click (or whatever `
 
 The target must be [routable](routing.md#what-routes--and-what-doesnt) — the click fetches it at its own URL. A non-routable target (here or as a preset's Class value) raises `Weft::InvalidUsage` at render time rather than wiring a fetch that could only 404; a purely presentational target opts in with `routable!`.
 
+### The kwarg rules
+
+A kwarg that is unmistakably Weft's but can't make sense **raises `Weft::InvalidUsage`** at render time rather than leaking into your HTML — a mistyped action name, a `navigate:` key the component doesn't declare, a `with:` with nothing to feed. A **`nil` value always means "not this time"** (`tooltip: maybe_class`) and renders nothing. Everything else — `class:`, `data:`, raw `hx-*` strings, a real HTML `target:` on a link — passes through to the element untouched.
+
+| Kwarg | Rank | Weft's when… | Otherwise |
+| --- | --- | --- | --- |
+| `action:` | interaction | the value is a Symbol naming a declared action | String values are plain HTML (`form action: "/path"`); an unmatched Symbol raises |
+| `navigate:` | interaction | the value is a Hash of param overrides | any other value raises; so does re-fetching a non-routable component |
+| `loads:` | interaction | the value is a component Class | any other value raises; so does a non-routable target |
+| preset names (`tooltip:`, …) | interaction | the value is a Class or URL String | any other value raises; so does a non-routable Class target |
+| `target:` | modifier | an interaction kwarg is present | plain HTML (`target: "_blank"` on a link works as ever) |
+| `swap:` | modifier | an interaction kwarg is present | passes through as an attribute, with a one-time warning |
+| `trigger:` | modifier | always | — |
+| `push_url:` | modifier | always | — |
+| `confirm:` | modifier | always | — |
+| `with:` | feeds `loads:`/presets | `loads:` or a preset is alongside | raises |
+
 ### `trigger:`
 
 ```ruby
@@ -463,6 +480,17 @@ div(loads: Preview, with: { id: id }, swap: :fill, target: :self,
 ```
 
 Sets when the element's request fires. Accepts the semantic symbols in the [trigger table](#trigger-values) or any raw [htmx trigger string](https://htmx.org/params/hx-trigger/) for full control (`"mouseenter once from:closest .card"`). Works standalone or alongside `action:` / `navigate:` / `loads:` / a preset. One thing to expect when inspecting output: a raw string's special characters render HTML-escaped (`keyup[altKey&&key=='A']` emits as `hx-trigger="keyup[altKey&amp;&amp;key=='A']"`) — that's correct HTML, and htmx reads it as written.
+
+### Trigger values
+
+| Semantic | htmx equivalent | Fires… |
+| --- | --- | --- |
+| `:click` | `click` | on click |
+| `:click_once` | `click once` | on the first click, then never again |
+| `:change` | `change` | when the value changes (selects, checkboxes) |
+| `:hover` | `mouseenter once` | on first hover |
+| `:visible` | `revealed` | when scrolled into view |
+| `:input` | `input changed delay:300ms` | as the user types, debounced |
 
 ### `push_url:`
 
@@ -503,17 +531,6 @@ Weft accepts semantic swap names (preferred), the htmx-native names as symbols, 
 | `:after` | `afterend` | Insert after the target |
 | `:remove` | `delete` | Remove the target |
 | `:none` | `none` | Don't swap anything |
-
-### Trigger values
-
-| Semantic | htmx equivalent | Fires… |
-| --- | --- | --- |
-| `:click` | `click` | on click |
-| `:click_once` | `click once` | on the first click, then never again |
-| `:change` | `change` | when the value changes (selects, checkboxes) |
-| `:hover` | `mouseenter once` | on first hover |
-| `:visible` | `revealed` | when scrolled into view |
-| `:input` | `input changed delay:300ms` | as the user types, debounced |
 
 ### Targets
 

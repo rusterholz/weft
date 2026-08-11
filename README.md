@@ -6,28 +6,48 @@ Weft lets you write your application in terms of its interface: components decla
 
 ```ruby
 class DeliveryStatus < Weft::Component
-  param :delivery_id
+  param :delivery_id, type: :integer
+
+  derives(:delivery) { |params| Delivery.find(params.delivery_id) }
+
+  performs(:cancel) { |params| CancelDelivery.call(params.delivery) }
 
   refreshes every: 5.seconds
 
-  performs :cancel do |params|
-    delivery = Delivery.find(params.delivery_id)
-    CancelDelivery.call(delivery)
-  end
-
   def build(attributes = {})
     super
-    delivery = Delivery.find(params.delivery_id)
-    div(class: "delivery-status") do
-      progress value: delivery.progress, max: 100
-      button "Cancel", action: :cancel if delivery.cancelable?
-      span "Arriving #{delivery.eta}"
+    add_class "delivery-status"
+
+    span "Delivery ##{params.delivery_id}"
+    div(class: "delivery-detail") do
+      progress_bar value: params.delivery.progress_percent, max: 100
+      span "Arriving #{params.delivery.eta}"
+      button "Cancel", action: :cancel if params.delivery.cancellable?
     end
   end
 end
 ```
 
-That's a complete, interactive UI component. It polls for updates every 5 seconds. The cancel button invokes a service and re-renders the result. There's no routes file, no controller, no custom JavaScript — just Ruby describing what the UI is and what it does. The UI is the source of truth; the plumbing is implied.
+That's a complete, interactive UI component. The cancel button invokes a service and re-renders the result; the card polls for fresh state every 5 seconds. There's no routes file, no controller, no custom JavaScript — just Ruby describing what the UI is and what it does. The UI is the source of truth; the plumbing is implied.
+
+Here is everything that renders — htmx wiring and all:
+
+```html
+<div id="delivery-status-4471" hx-get="/_components/delivery_status?delivery_id=4471"
+     hx-trigger="every 5s" hx-swap="outerHTML" class="delivery-status">
+  <span>Delivery #4471</span>
+  <div class="delivery-detail">
+    <div id="progress-bar" class="progress">
+      <div class="progress-fill" style="width: 62%"></div>
+    </div>
+    <span>Arriving today, 4:15 PM</span>
+    <button hx-post="/_components/delivery_status/cancel" hx-target="#delivery-status-4471"
+            hx-swap="outerHTML" hx-vals="{&quot;delivery_id&quot;:4471}">Cancel</button>
+  </div>
+</div>
+```
+
+Every attribute above was derived from those four declarations: the routes (`GET /_components/delivery_status` for the component, `POST /_components/delivery_status/cancel` for the action), the DOM id that keeps this delivery individually addressable, the polling on the wrapper, and the button's whole request — where the response lands, how it swaps, and which params ride along with it. `progress_bar` is a child component with declarations of its own, rendered inline, wrapper and all.
 
 Weft is built on [Arbre](https://github.com/activeadmin/arbre) for HTML generation and [htmx](https://htmx.org) for hypermedia interactions. It runs standalone as a lightweight Sinatra-backed server, or mounts as middleware inside any existing Rack app. No build step, no npm, no hydration — just Ruby, HTML, and HTTP.
 
