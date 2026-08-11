@@ -1,7 +1,7 @@
 PATH
   remote: ..
   specs:
-    weft (0.1.0)
+    weft (0.2.0)
       activesupport (>= 6.1)
       arbre (>= 1.7)
       bigdecimal

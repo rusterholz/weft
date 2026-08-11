@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.2.0 (unreleased)
+## v0.2.0 (2026-08-11)
 
 Weft's inputs model grows up: four declared ways to get a component what it needs, values that flow down the render tree, and one universe of state per request. Also typed wire params, one-call app loading, self-healing streams, and 404s you can brand.
 
