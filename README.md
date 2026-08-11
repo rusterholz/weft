@@ -85,8 +85,9 @@ Elements get their own vocabulary — `action:`, `loads:`, `trigger:` kwargs and
 
 | Version | Features | Status |
 |---------|---------|--------|
-| v0.1.0 | First usable release: the verb DSL, auto-routing with collision detection, interaction presets, SSE, error recovery, full documentation set | **Current** |
-| v0.2 | Attribute hydration (resolver reification), child-component ergonomics, SSE error recovery, Zeitwerk integration | Next |
+| v0.1.0 | First usable release: the verb DSL, auto-routing with collision detection, interaction presets, SSE, error recovery, full documentation set | Shipped |
+| v0.2.0 | The inputs model: four declared doors into `params`, typed wire params, values flowing down the render tree, one-call app loading, self-healing streams, brandable 404s | **Current** |
+| v0.3 | The request–response lifecycle: how a request is addressed, carried, observed, and composed into a response | Next |
 
 ## Installation
 

@@ -103,7 +103,7 @@ Weft leans into that split rather than papering over it. An action that raises p
 
 ### When a companion fails
 
-A component can bring [companions](dsl.md#includes) along with a response — other fragments that went stale and ride back on the same request. **A companion is a courtesy, not a contract:** if one raises, the response still belongs to the component the request was about.
+A component can bring [companions](dsl.md#includes--companions-in-the-same-response) along with a response — other fragments that went stale and ride back on the same request. **A companion is a courtesy, not a contract:** if one raises, the response still belongs to the component the request was about.
 
 So the primary render, the status, and the `HX-*` headers are all untouched. The failing companion walks *its own* `recovers` chain, and the result is delivered as a companion in that companion's own DOM slot — the error appears exactly where that fragment would have been and nowhere else, while the rest of the response arrives as though nothing happened. This is what makes an action with side effects honest: a companion that breaks *after* your callable has written to the database can no longer turn a committed change into a reported failure.
 
