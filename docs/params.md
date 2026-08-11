@@ -49,9 +49,9 @@ end
 When a component wants to control a value rather than inherit it, it declares that value — through whichever of the four doors suits the value's nature:
 
 - **`param`** — wire state, small enough to travel in a URL: an id, a page number, a filter. Comes from the request, or is inherited from above.
-- **`receives`** — a rich object a caller hands over directly: a record, a built collection, anything that can't ride a query string.
 - **`derives`** — a value the component computes for itself, lazily, the first time it's read.
 - **`defines`** — a static value a subclass pins; sugar over `derives`.
+- **`receives`** — a rich object a caller hands over directly: a record, a built collection, anything that can't ride a query string.
 
 A single key can have more than one door, and they resolve in a fixed order — a handed value beats a request overlay (a hash a verb block returned earlier in the request) beats a wire value beats an inherited value beats a derivation beats a default. The [DSL reference](dsl.md#how-the-doors-combine) lays out that precedence and the useful *dual* combinations; the shape to carry away here is that all four doors land in the same `params`, read the same way (`params.name`).
 
