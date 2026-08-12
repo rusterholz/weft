@@ -28,9 +28,9 @@ class DeliveryStatus < Weft::Component
 end
 ```
 
-That's a complete, interactive UI component. The cancel button invokes a service and re-renders the result; the card polls for fresh state every 5 seconds. There's no routes file, no controller, no custom JavaScript — just Ruby describing what the UI is and what it does. The UI is the source of truth; the plumbing is implied.
+That's a complete, interactive UI component. The cancel button invokes a service and re-renders the result; the card polls for fresh state every 5 seconds. There's no routes file, no controller, no custom JavaScript, just Ruby describing what the UI is and what it does. The UI is the source of truth; the plumbing is implied.
 
-Here is everything that renders — htmx wiring and all:
+Here is everything that renders, htmx wiring and all:
 
 ```html
 <div id="delivery-status-4471" hx-get="/_components/delivery_status?delivery_id=4471"
@@ -47,39 +47,101 @@ Here is everything that renders — htmx wiring and all:
 </div>
 ```
 
-Every attribute above was derived from those four declarations: the routes (`GET /_components/delivery_status` for the component, `POST /_components/delivery_status/cancel` for the action), the DOM id that keeps this delivery individually addressable, the polling on the wrapper, and the button's whole request — where the response lands, how it swaps, and which params ride along with it. `progress_bar` is a child component with declarations of its own, rendered inline, wrapper and all.
+Every attribute above was derived from those four declarations: the routes (`GET /_components/delivery_status` for the component, `POST /_components/delivery_status/cancel` for the action), the DOM id that keeps this delivery individually addressable, the polling on the wrapper, and the button's whole request: where the response lands, how it swaps, and which params ride along with it. `progress_bar` is a child component with declarations of its own, rendered inline, wrapper and all.
 
-Weft is built on [Arbre](https://github.com/activeadmin/arbre) for HTML generation and [htmx](https://htmx.org) for hypermedia interactions. It runs standalone as a lightweight Sinatra-backed server, or mounts as middleware inside any existing Rack app. No build step, no npm, no hydration — just Ruby, HTML, and HTTP.
+Weft is built on [Arbre](https://github.com/activeadmin/arbre) for HTML generation and [htmx](https://htmx.org) for hypermedia interactions. It runs standalone as a lightweight Sinatra-backed server, or mounts as middleware inside any existing Rack app. No build step, no npm, no hydration -- just Ruby, HTML, and HTTP.
 
-### The verbs
+### Component Vocabulary
 
-Components declare their dynamic behaviors with verbs:
+Components declare their dynamic behaviors with a DSL. Here are some broader examples, showing some plausible components with everything they declare on show:
 
-| Verb | What it does |
-|------|-------------|
-| `refreshes every: 5.seconds` | Client re-fetches on a timer |
-| `refreshes on: "event"` | Client re-fetches when a page event fires |
-| `pushes every: 5.seconds` | Server streams re-renders over SSE |
-| `performs :name` | User-initiated action: runs your callable, re-renders |
-| `transfers :name, to: Other` | Action that renders a different component in this one's place |
-| `dismisses :name` | Action that removes the component from the DOM |
-| `triggers "event"` | Announces this component's actions to the rest of the page |
-| `includes Other` | Companion components ride along in action responses, out-of-band |
-| `recovers from: Err, with: Fallback` | Declares what renders when something raises |
+```ruby
+# LIVE - a tile that keeps itself current, and tells the page when it changes:
+class ShipmentTile < Weft::Component
+  param :shipment_id                                 # wire state: rides the URL
+  derives(:shipment) { |p| Shipment.find(p.shipment_id) }   # looked up on demand, once
 
-Elements get their own vocabulary — `action:`, `loads:`, `trigger:` kwargs and interaction presets like `tooltip:`, `modal:`, `lazy:`, `infinite_scroll:` — all covered in [the DSL reference](docs/dsl.md).
+  pushes every: 10.seconds                           # server streams re-renders over SSE
+  triggers "shipment-moved"                          # ...and announces them to the page
+  recovers from: Carrier::Timeout,                   # a flaky feed degrades; it doesn't crash
+           with: StaleShipmentTile
+
+  performs :expedite do |params|                     # your callable runs, then it re-renders
+    Shipping::Expedite.call(params.shipment)         # the same record the render below shows
+  end
+
+  def build(attributes = {})
+    super
+    h3 params.shipment.tracking_number
+    span params.shipment.status
+    button "Expedite", action: :expedite
+  end
+end
+
+# INTERACTIVE - a row that becomes its own edit form, and hands the slot back on save:
+class OrderRow < Weft::Component
+  param :order_id                                    # its own id, so it can act alone
+  receives :order                                    # the record the table already loaded
+
+  transfers :edit, to: EditableOrderRow              # give this DOM slot to the editor
+  dismisses :cancel                                  # ...or take the row off the page
+  triggers "order-changed", on: :cancel              # that one action makes news
+
+  def build(attributes = {})
+    super
+    td params.order.number
+    td do
+      button "Edit",   action: :edit
+      button "Cancel", action: :cancel, confirm: "Cancel this order?"
+    end
+  end
+end
+
+class EditableOrderRow < Weft::Component
+  param :order_id
+  derives(:order) { |p| Order.find(p.order_id) }
+
+  transfers :save, to: OrderRow do |params|          # save, then hand the DOM slot back
+    Orders::Update.call(params.order, params.to_h)
+  end
+  includes OrderTotalsCard, on: :save                # the totals card rides back too
+
+  def build(attributes = {})
+    super
+    td { input name: "number", value: params.order.number }
+    td { button "Save", action: :save }
+  end
+end
+
+# LAZY LOADING - a feed nobody pays for until it is wanted:
+class ActivityFeed < Weft::Component
+  param :page, default: 1, type: :integer            # coerced off the query string
+  defines heading: "Recent activity"                 # a fixed value a subclass can pin
+
+  refreshes on: "order-changed"                      # the other half of that announcement
+
+  def build(attributes = {})
+    super
+    h2 params.heading
+    div lazy: RecentEventsList                       # fetched when it scrolls into view
+    button "Older", load_more: ActivityFeed, with: { page: params.page + 1 }
+  end
+end
+```
+
+These four classes use all of the DSL verbs, but only two of the interaction presets (`lazy` and `load_more`). The [DSL reference](docs/dsl.md) has the complete set for your perusal, and the [Examples](docs/examples/README.md) contain twenty-one worked patterns along with the wire traffic each one produces.
 
 ## Documentation
 
-- **[Build your first Weft app](docs/tutorial.md)** — the tutorial: empty directory to a working app with pages, components, a validated form action, and live updates.
-- **[Examples](docs/examples/README.md)** — twenty-one worked patterns with captured wire traffic. Coming from htmx? This catalog deliberately covers the ground of htmx's own examples.
-- **[The Weft DSL](docs/dsl.md)** — every verb, element kwarg, and interaction preset.
-- **[How params flow](docs/params.md)** — the data lifecycle: a request comes in, each component pulls what it needs through `param`/`receives`/`derives`/`defines`, and renders with enough of its own wire state to refresh or act on its own.
-- **[Application patterns](docs/app-patterns.md)** — the app around the components: service objects, databases, background jobs, authentication, CSRF, assets, and testing.
-- **[Arbre: the HTML layer](docs/arbre.md)** — the HTML builder inside every `build` method, in depth.
-- **[Routing](docs/routing.md)** — how classes become URLs, what's routable, and collision detection.
-- **[Error handling](docs/error-handling.md)** — the error classes, recovery chains, and branding your error pages.
-- **[Configuration](docs/configuration.md)** — every setting.
+- **[Build your first Weft app](docs/tutorial.md)** -- the tutorial: empty directory to a working app with pages, components, a validated form action, and live updates.
+- **[Examples](docs/examples/README.md)** -- twenty-one worked patterns with captured wire traffic. Coming from htmx? This catalog deliberately covers the ground of htmx's own examples.
+- **[The Weft DSL](docs/dsl.md)** -- every verb, element kwarg, and interaction preset.
+- **[How Params Flow](docs/params.md)** -- the data lifecycle: a request comes in, each component pulls what it needs through `param`/`receives`/`derives`/`defines`, and renders with enough of its own wire state to refresh or act on its own.
+- **[Application Patterns](docs/app-patterns.md)** -- the app around the components: service objects, databases, background jobs, authentication, CSRF, assets, and testing.
+- **[Arbre: the HTML layer](docs/arbre.md)** -- the HTML builder inside every `build` method, in depth.
+- **[Routing](docs/routing.md)** -- how classes become URLs, what's routable, and collision detection.
+- **[Error Handling](docs/error-handling.md)** -- the error classes, recovery chains, and branding your error pages.
+- **[Configuration](docs/configuration.md)** -- every setting.
 
 ## Roadmap & Availability
 
@@ -107,7 +169,7 @@ bundle install
 
 Weft mounts into your Rack app in one of two shapes, depending on whether Weft is the entire application or just a part of one.
 
-### Standalone — Weft is the app
+### Standalone (Weft is the app)
 
 For a fully Weft-powered application, run `Weft::Router` as the Rack app itself:
 
@@ -120,7 +182,7 @@ run Weft::Router
 
 Components and pages auto-route based on their class declarations: components serve HTML fragments under `/_components/<name>`, pages serve full documents at their `page_path` (or a name-derived default). If two routable classes would resolve to the same path, Weft raises on the first request, naming both. [Routing](docs/routing.md) has the full story, and [the tutorial](docs/tutorial.md) walks through a working `config/environment.rb`.
 
-### As middleware — alongside an existing app
+### As Middleware (alongside an existing app)
 
 For adding Weft to an existing Rack app (Sinatra, Rails, anything Rack), mount it as middleware. Unmatched paths fall through to your downstream app:
 
@@ -130,12 +192,12 @@ require_relative "config/environment"
 require_relative "app"   # your existing application
 
 use Weft::Router
-run MyApp
+run MyExistingApp
 ```
 
 ### Configuration
 
-The call you'll want on day one is `Weft.configure_autoloading` — it puts Zeitwerk in charge of loading your app's directories, and with `reload: true` your edits (new files and deletions included) apply without restarting the server:
+The knob you'll likely want to know about on day one is `Weft.configure_autoloading`. This puts Zeitwerk in charge of loading your app's directories, and with `reload: true` your edits (including new files and deletions) will apply without restarting the server:
 
 ```ruby
 Weft.configure_autoloading(
@@ -145,7 +207,7 @@ Weft.configure_autoloading(
 )
 ```
 
-Gem-level settings live on its sibling, `Weft.configure` — static asset bundles, error presentation, routing overrides, logging — all in [the configuration reference](docs/configuration.md).
+Other gem-level settings (static asset bundles, error presentation, routing overrides, logging, more) are set through `Weft.configure`. See the [configuration reference](docs/configuration.md).
 
 ### Customizing error and not-found pages
 
