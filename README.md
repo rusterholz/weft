@@ -51,21 +51,36 @@ Every attribute above was derived from those four declarations: the routes (`GET
 
 Weft is built on [Arbre](https://github.com/activeadmin/arbre) for HTML generation and [htmx](https://htmx.org) for hypermedia interactions. It runs standalone as a lightweight Sinatra-backed server, or mounts as middleware inside any existing Rack app. No build step, no npm, no hydration — just Ruby, HTML, and HTTP.
 
-### The verbs
+### The vocabulary
 
-Components declare their dynamic behaviors with verbs:
+A component's class body is a short list of declarations — what it takes in, and what it can do. Everything else is derived from them: the routes, the request handling, and every `hx-` attribute that ends up on the page.
+
+**What it takes in.** Four doors into the same `params`, one for each kind of value:
+
+| Declaration | What comes through it |
+|------|-------------|
+| `param :order_id, type: :integer` | Wire state, small enough to ride a URL — which is exactly what lets the component go fetch itself again |
+| `derives(:order) { \|p\| Order.find(p.order_id) }` | A value the component works out for itself: at most once per render, and not at all if nothing reads it |
+| `defines label: "Drivers"` | A fixed value a subclass pins, so one component body serves many variants |
+| `receives :order` | A rich object the call site already has in hand — a record, a built collection, anything no query string could carry |
+
+However a value arrives, you read it the same way: `params.order`.
+
+**What it can do.** Verbs, declared once in the class body, then wired to individual elements from inside `build`:
 
 | Verb | What it does |
 |------|-------------|
-| `refreshes every: 5.seconds` | Client re-fetches on a timer |
-| `refreshes on: "event"` | Client re-fetches when a page event fires |
-| `pushes every: 5.seconds` | Server streams re-renders over SSE |
-| `performs :name` | User-initiated action: runs your callable, re-renders |
-| `transfers :name, to: Other` | Action that renders a different component in this one's place |
-| `dismisses :name` | Action that removes the component from the DOM |
-| `triggers "event"` | Announces this component's actions to the rest of the page |
-| `includes Other` | Companion components ride along in action responses, out-of-band |
-| `recovers from: Err, with: Fallback` | Declares what renders when something raises |
+| `performs :cancel` | Runs your callable and re-renders with the result — the everyday button |
+| `transfers :edit, to: EditableHeader` | Hands the slot to a *different* component: a row becoming its own edit form, and back again on save |
+| `dismisses :archive` | Takes the component off the page, with no doomed render of a record you just deleted |
+| `refreshes every: 5.seconds` | The client re-fetches on a timer |
+| `refreshes on: "order-updated"` | …or the moment something else on the page announces news |
+| `pushes every: 5.seconds` | The server streams re-renders over SSE, so updates arrive without being asked for |
+| `triggers "order-updated", on: :advance` | Announces *one* action to the rest of the page, so subscribers refetch for news that concerns them |
+| `includes ShipmentsCard, on: :advance` | Sends a companion back out-of-band, so a single request freshens two places at once |
+| `recovers from: RecordNotFound, with: NotFoundPage, status: 404` | What renders when something raises, and what status it goes out with |
+
+A few more declarations shape a component rather than drive it: `title` names a page in the browser tab (a string, or a block over its params), `adds_children_to` steers a caller's block into the right element, and `abstract!` / `routable!` settle whether a class gets a URL of its own.
 
 Elements get their own vocabulary — `action:`, `loads:`, `trigger:` kwargs and interaction presets like `tooltip:`, `modal:`, `lazy:`, `infinite_scroll:` — all covered in [the DSL reference](docs/dsl.md).
 
