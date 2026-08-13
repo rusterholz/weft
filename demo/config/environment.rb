@@ -21,7 +21,7 @@ require "weft"
 
 # Weft's gem-managed Zeitwerk loader owns constant autoloading for the app
 # dirs — no explicit require chains, no Dir.glob ordering; cross-namespace
-# references (e.g. Logistics::ShipmentsCard's `includes Oms::OrderHeader`)
+# references (e.g. Logistics::ShipmentsCard's `brings Oms::OrderHeader`)
 # resolve lazily on first use. It eager-loads on the spot (Weft routes from
 # its Registry, populated as classes load), which is why this call precedes
 # everything below that references app constants. With reload: true,
