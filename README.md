@@ -62,7 +62,7 @@ class ShipmentTile < Weft::Component
   derives(:shipment) { |p| Shipment.find(p.shipment_id) }   # looked up on demand, once
 
   pushes every: 10.seconds                           # server streams re-renders over SSE
-  triggers "shipment-moved"                          # ...and announces them to the page
+  announces "shipment-moved"                          # ...and announces them to the page
   recovers from: Carrier::Timeout,                   # a flaky feed degrades; it doesn't crash
            with: StaleShipmentTile
 
@@ -85,7 +85,7 @@ class OrderRow < Weft::Component
 
   transfers :edit, to: EditableOrderRow              # give this DOM slot to the editor
   dismisses :cancel                                  # ...or take the row off the page
-  triggers "order-changed", on: :cancel              # that one action makes news
+  announces "order-changed", on: :cancel              # that one action makes news
 
   def build(attributes = {})
     super
@@ -104,7 +104,7 @@ class EditableOrderRow < Weft::Component
   transfers :save, to: OrderRow do |params|          # save, then hand the DOM slot back
     Orders::Update.call(params.order, params.to_h)
   end
-  includes OrderTotalsCard, on: :save                # the totals card rides back too
+  brings OrderTotalsCard, on: :save                # the totals card rides back too
 
   def build(attributes = {})
     super

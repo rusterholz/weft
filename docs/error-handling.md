@@ -61,7 +61,7 @@ Each declaration is an edge: *when this kind of error escapes me, render that in
 
 **The block**, if given, receives `(params, error)` — plus the exception — and returns a hash merged into the params the recovery target renders with (returned keys win). It's for *carrying information onto the error rendering*, like the validation messages above; it never returns HTML.
 
-The `params` it gets are **the state the request had reached when it broke**, with every door open: wire values, derivations, defines. If the failure was in an action callable, that's what the callable was reading; if the callable succeeded and the *render* failed, it's that plus whatever the callable returned; and a companion's recovery block sees what its own `build` saw, its inclusion block's delta included. A derivation the failed code had already forced is still forced, so reading it in the recovery block costs nothing — and one it hadn't will run now, which is worth remembering if it's the kind of lookup that can fail twice.
+The `params` it gets are **the state the request had reached when it broke**, with every door open: wire values, derivations, defines. If the failure was in an action callable, that's what the callable was reading; if the callable succeeded and the *render* failed, it's that plus whatever the callable returned; and a companion's recovery block sees what its own `build` saw, its companion block's delta included. A derivation the failed code had already forced is still forced, so reading it in the recovery block costs nothing — and one it hadn't will run now, which is worth remembering if it's the kind of lookup that can fail twice.
 
 Edges are consulted in a defined order: a class's own declarations first (in declaration order), then its ancestors' — so subclass declarations beat inherited ones, and within a class, first match wins. Put more-specific edges before catch-alls.
 
@@ -103,14 +103,14 @@ Weft leans into that split rather than papering over it. An action that raises p
 
 ### When a companion fails
 
-A component can bring [companions](dsl.md#includes--companions-in-the-same-response) along with a response — other fragments that went stale and ride back on the same request. **A companion is a courtesy, not a contract:** if one raises, the response still belongs to the component the request was about.
+A component can bring [companions](dsl.md#brings--companions-in-the-same-response) along with a response — other fragments that went stale and ride back on the same request. **A companion is a courtesy, not a contract:** if one raises, the response still belongs to the component the request was about.
 
 So the primary render, the status, and the `HX-*` headers are all untouched. The failing companion walks *its own* `recovers` chain, and the result is delivered as a companion in that companion's own DOM slot — the error appears exactly where that fragment would have been and nowhere else, while the rest of the response arrives as though nothing happened. This is what makes an action with side effects honest: a companion that breaks *after* your callable has written to the database can no longer turn a committed change into a reported failure.
 
 Two wrinkles worth knowing:
 
 - **Recovery edges that point at a page class are skipped here**, and the walk continues to the next match. A fragment riding inside a successful response has no business navigating away from it.
-- **If the chain yields nothing, or the recovery render itself raises**, that companion is dropped and the failure is logged with the class and the `includes` declaration site that brought it along. The rest of the response is unaffected either way.
+- **If the chain yields nothing, or the recovery render itself raises**, that companion is dropped and the failure is logged with the class and the `brings` declaration site that brought it along. The rest of the response is unaffected either way.
 
 Companion failures on a [live stream](#error-handling-on-live-streams) behave the same, with one addition: they don't count against the stream's attempts budget. The budget measures the *stream's* health, and a companion's trouble says nothing about it.
 

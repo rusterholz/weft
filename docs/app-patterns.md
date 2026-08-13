@@ -29,7 +29,7 @@ my-app/
 end
 ```
 
-The ordering carries the same rule the tutorial explains: files that *define* things load before files that *reference* them in class bodies (`includes AttendeeList`, `transfers to: Confirmation`). Data and services never reference components, components reference each other and the data layer, pages compose components — so data → services → components → pages loads cleanly. When alphabetical luck within a directory stops being enough, that's the sign your app has outgrown the glob and wants a real autoloader like Zeitwerk.
+The ordering carries the same rule the tutorial explains: files that *define* things load before files that *reference* them in class bodies (`brings AttendeeList`, `transfers to: Confirmation`). Data and services never reference components, components reference each other and the data layer, pages compose components — so data → services → components → pages loads cleanly. When alphabetical luck within a directory stops being enough, that's the sign your app has outgrown the glob and wants a real autoloader like Zeitwerk.
 
 ## Where business logic goes
 

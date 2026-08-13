@@ -28,7 +28,7 @@ Every example is complete and self-contained — a small data stub stands in for
 | [Keyboard Shortcuts](keyboard-shortcuts.md) | Key-driven actions via `trigger:` |
 | [Progress Bar](progress-bar.md) | A job-runner progress bar — `refreshes every:` |
 | [Live Ticker](live-ticker.md) | Server-pushed updates over SSE — `pushes every:` |
-| [Updating Other Content](updating-other-content.md) | One action updating several regions — `includes` + `triggers` |
+| [Updating Other Content](updating-other-content.md) | One action updating several regions — `brings` + `announces` |
 
 ## Coming from htmx?
 

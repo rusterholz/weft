@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.3.0 (unreleased)
+
+### Breaking Changes:
+
+- **Announcements Have Their Own Word** – The verb that sends an event out to the page is now `announces`, which leaves `trigger:` meaning exactly one thing: the browser event that fires an element's request. htmx spells opposite ends of the same round trip `hx-trigger` and `HX-Trigger`; weft no longer inherits that ambiguity, so you can read a class body and know which direction an event travels.
+  - `announces "order-updated", on: :advance` – `on:` filtering, inheritance, and duplicate collapsing all behave as before
+  - The class-level reader is `announced_events`
+  - The `HX-Trigger` response header, the `trigger:` kwarg, and `refreshes on:` are all untouched
+
+- **Companions Are Brought, Not Included** – The verb that sends a companion along with a response is now `brings`, so a component's class body no longer reads like Ruby's `include` or ActiveRecord's `includes` — and the verb finally matches the word the docs use for what it produces.
+  - `brings Oms::OrderHeader, on: :advance` – `on:`, `when:`, and the delta block are unchanged
+  - The class-level reader is `companions`
+
+Both are pure renames: no behavior changed, and the wire format is identical.
+
 ## v0.2.0 (2026-08-11)
 
 Weft's inputs model grows up: four declared ways to get a component what it needs, values that flow down the render tree, and one universe of state per request. Also typed wire params, one-call app loading, self-healing streams, and 404s you can brand.

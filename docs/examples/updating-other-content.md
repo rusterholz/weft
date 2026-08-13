@@ -2,7 +2,7 @@
 
 A form adds a contact, and a contacts table elsewhere on the page — outside the form, not enclosing it, not enclosed by it — updates in the same interaction. One submit, two regions refreshed.
 
-This is Weft's take on [htmx's update-other-content example](https://htmx.org/examples/update-other-content/), which uses the same scenario: a table of contacts with an add-contact form below it. htmx's page is really an essay weighing four manual solutions — expanding the target, out-of-band swaps, event triggers, and a path-dependencies extension — each with its own wiring to write and trade-offs to hold in your head. Weft collapses the choice to declarations: `includes ContactsTable` on the form covers the common case in one line, and a `triggers`/`refreshes on:` pair covers the decoupled case in two. [The full four-way mapping is below.](#htmxs-four-solutions-mapped)
+This is Weft's take on [htmx's update-other-content example](https://htmx.org/examples/update-other-content/), which uses the same scenario: a table of contacts with an add-contact form below it. htmx's page is really an essay weighing four manual solutions — expanding the target, out-of-band swaps, event triggers, and a path-dependencies extension — each with its own wiring to write and trade-offs to hold in your head. Weft collapses the choice to declarations: `brings ContactsTable` on the form covers the common case in one line, and an `announces`/`refreshes on:` pair covers the decoupled case in two. [The full four-way mapping is below.](#htmxs-four-solutions-mapped)
 
 ## The components
 
@@ -31,7 +31,7 @@ class NewContactForm < Weft::Component
   param :name
   param :email
 
-  includes ContactsTable
+  brings ContactsTable
 
   performs :add do |params|
     ADDRESS_BOOK << { name: params.name, email: params.email }
@@ -70,7 +70,7 @@ end
 
 ## How it works
 
-**`includes` declares the relationship once, in the class body.** [`includes ContactsTable`](../dsl.md#includes--companions-in-the-same-response) means: whenever this form responds to an action, render the table too, marked out-of-band. htmx receives one response containing two fragments — the re-rendered form swaps into the form's place as usual, and the table fragment, carrying `hx-swap-oob="true"`, is routed to its own DOM slot by id (`#contacts-table`). One request, one response, two regions updated. This is htmx's out-of-band solution with the response construction, the OOB attribute, and the id bookkeeping all handled for you.
+**`brings` declares the relationship once, in the class body.** [`brings ContactsTable`](../dsl.md#brings--companions-in-the-same-response) means: whenever this form responds to an action, render the table too, marked out-of-band. htmx receives one response containing two fragments — the re-rendered form swaps into the form's place as usual, and the table fragment, carrying `hx-swap-oob="true"`, is routed to its own DOM slot by id (`#contacts-table`). One request, one response, two regions updated. This is htmx's out-of-band solution with the response construction, the OOB attribute, and the id bookkeeping all handled for you.
 
 **The included component needs no route.** In this variant `ContactsTable` declares no params and no verbs, so it isn't independently addressable — `GET /_components/contacts_table` answers 404 — and that's fine: it renders inside the page and travels inside the form's responses. Companions only need to *render* (see [routing](../routing.md#routable-vs-render-target)).
 
@@ -80,7 +80,7 @@ end
 
 ## The decoupled variant
 
-`includes` is directional: the form knows the table exists. Sometimes it shouldn't — the reacting components may be many, elsewhere, or someone else's. Then the form *announces* and interested components *listen*:
+`brings` is directional: the form knows the table exists. Sometimes it shouldn't — the reacting components may be many, elsewhere, or someone else's. Then the form *announces* and interested components *listen*:
 
 ```ruby
 class ContactsTable < Weft::Component
@@ -89,22 +89,22 @@ class ContactsTable < Weft::Component
 end
 
 class NewContactForm < Weft::Component
-  # …exactly as before, but in place of `includes ContactsTable`:
-  triggers "contact-added"
+  # …exactly as before, but in place of `brings ContactsTable`:
+  announces "contact-added"
 end
 ```
 
-[`triggers`](../dsl.md#triggers--announce-to-the-rest-of-the-page) stamps every action response from the form with an `HX-Trigger: contact-added` header; htmx fires that as an event on the page body. [`refreshes on:`](../dsl.md#refreshes--the-client-re-fetches) wires the table's wrapper to listen for it (`from:body`) and re-fetch its own route. The two components never mention each other — any number of components can subscribe to `"contact-added"` without the form changing at all. The trade: each listener re-fetches itself, so a submit costs one extra GET per listener (and the table must now be routable, which its `refreshes` declaration itself ensures).
+[`announces`](../dsl.md#announces--tell-the-rest-of-the-page) stamps every action response from the form with an `HX-Trigger: contact-added` header; htmx fires that as an event on the page body. [`refreshes on:`](../dsl.md#refreshes--the-client-re-fetches) wires the table's wrapper to listen for it (`from:body`) and re-fetch its own route. The two components never mention each other — any number of components can subscribe to `"contact-added"` without the form changing at all. The trade: each listener re-fetches itself, so a submit costs one extra GET per listener (and the table must now be routable, which its `refreshes` declaration itself ensures).
 
-**Choosing between them:** reach for `includes` when the form naturally knows what it changes — everything arrives in the same response, zero extra requests. Reach for `triggers` when the reactions should be open-ended or the components shouldn't know about each other.
+**Choosing between them:** reach for `brings` when the form naturally knows what it changes — everything arrives in the same response, zero extra requests. Reach for `announces` when the reactions should be open-ended or the components shouldn't know about each other.
 
 ## htmx's four solutions, mapped
 
 | htmx's solution | In Weft |
 | --- | --- |
 | 1. Expand the target | Still available — wrap both regions in one component and re-render it whole — but rarely needed once the next two are declarations. |
-| 2. Out-of-band responses | `includes ContactsTable` on the form. |
-| 3. Triggering events | `triggers "contact-added"` on the form, `refreshes on: "contact-added"` on the table. |
+| 2. Out-of-band responses | `brings ContactsTable` on the form. |
+| 3. Triggering events | `announces "contact-added"` on the form, `refreshes on: "contact-added"` on the table. |
 | 4. Path dependencies (extension) | Not needed — solutions 2 and 3 as declarations cover both coupling directions without an extension. |
 
 ## On the wire
@@ -165,5 +165,5 @@ hears the event and issues `GET /_components/contacts_table`, which returns the 
 ## Related
 
 - [Click to Edit](click-to-edit.md) — the form-fields-pair-with-params pattern this example builds on.
-- [`includes`](../dsl.md#includes--companions-in-the-same-response), [`triggers`](../dsl.md#triggers--announce-to-the-rest-of-the-page), and [`refreshes`](../dsl.md#refreshes--the-client-re-fetches) in the DSL reference.
-- `includes` accepts `on: :action_name` to scope a companion to one action, and a block to map the primary component's params onto the companion's — see [the DSL reference](../dsl.md#includes--companions-in-the-same-response).
+- [`brings`](../dsl.md#brings--companions-in-the-same-response), [`announces`](../dsl.md#announces--tell-the-rest-of-the-page), and [`refreshes`](../dsl.md#refreshes--the-client-re-fetches) in the DSL reference.
+- `brings` accepts `on: :action_name` to scope a companion to one action, and a block to map the primary component's params onto the companion's — see [the DSL reference](../dsl.md#brings--companions-in-the-same-response).
