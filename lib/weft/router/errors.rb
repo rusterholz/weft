@@ -290,7 +290,7 @@ module Weft
       # and returns the recovery target's children-only HTML — the client swap
       # is innerHTML into the original component's persistent wrapper, so the
       # frame ships content, not wrapper (like-for-like with a normal push).
-      # No status (headers are long flushed on a live stream), no oob includes
+      # No status (headers are long flushed on a live stream), no companions
       # (their params presume the successful build that didn't happen), and no
       # htmx_errors redirect knob (an HTTP-path concern). Returns nil when the
       # chain yields nothing; the caller owns rescue and logging.

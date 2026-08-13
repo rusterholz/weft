@@ -5,7 +5,7 @@ module Weft
     # The `self` a verb block runs against — a "void context": empty of
     # anything component-specific, so a block cannot reach local state and is
     # portable to any process. Verb blocks (`derives`, `performs`, `transfers`,
-    # `recovers`, `includes`) are `(params) -> value` pure functions: their
+    # `recovers`, `brings`) are `(params) -> value` pure functions: their
     # arguments and return value are explicit, constants resolve lexically, and
     # Kernel stays reachable (raise, format, Integer()).
     #

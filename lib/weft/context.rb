@@ -28,7 +28,7 @@ module Weft
     attr_reader :wire_params
 
     # Request-scoped overlay values — the accumulated verb-block deltas
-    # (action callable returns, includes deltas, recovery injections). In
+    # (action callable returns, companion deltas, recovery injections). In
     # the source stack an overlay entry speaks AS the wire for its key:
     # a value overrides the wire's, a nil clears it (resolution falls
     # below). One universe per request; these are its amendments.
