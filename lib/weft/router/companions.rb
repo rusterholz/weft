@@ -6,41 +6,41 @@ require "weft/params/assembly"
 
 module Weft
   class Router
-    # OOB-include slice of the Router. Renders companion components declared
-    # via `includes` alongside a response, with the `hx-swap-oob` attribute
-    # set so htmx swaps each into its own DOM slot.
+    # Companion slice of the Router. Renders the companion components a
+    # component declares via `brings`, riding alongside its response with the
+    # `hx-swap-oob` attribute set so htmx swaps each into its own DOM slot.
     #
     # Depends on Router internals: `filtered_params`,
     # `build_component_with_wire`, and the Errors slice's identity and
     # recovery helpers (`unbuilt_instance`, `resolved_dom_id`,
     # `invoke_recovery_block`, `auto_param_overlay`, `component_tag_for`,
     # `compute_retry_url`, `recovery_status`).
-    module OOBIncludes
+    module Companions
       private
 
       # The companions riding an SSE frame. A push is nobody's action and no
-      # transfer's destination, so only unfiltered inclusions — "every
+      # transfer's destination, so only unfiltered companions — "every
       # response I render in" — qualify; `on:` and `when:` both name contexts
       # a stream never enters.
       def render_push_companions(component_class, primary_params, render_env:, slots:)
-        render_companions(applicable_inclusions(component_class, :push, nil).
+        render_companions(applicable_companions(component_class, :push, nil).
                             map { |inc| [inc, primary_params, render_env] }, slots)
       end
 
-      # The inclusions of one component that fire in one context.
-      def applicable_inclusions(component_class, context, action_name)
-        component_class.inclusions.select { |inc| inclusion_applies?(inc, context, action_name) }
+      # The companions of one component that fire in one context.
+      def applicable_companions(component_class, context, action_name)
+        component_class.companions.select { |inc| companion_applies?(inc, context, action_name) }
       end
 
-      # The inclusions that name an action outright. A transfer's declaring
-      # component never renders, so its unfiltered inclusions ("every
+      # The companions that name an action outright. A transfer's declaring
+      # component never renders, so its unfiltered companions ("every
       # response I render in") stay silent — but `on:` doesn't narrow that
       # default, it replaces it, and this action is the declarer's own.
-      def explicitly_named_inclusions(component_class, action_name)
-        component_class.inclusions.select { |inc| inc[:on]&.include?(action_name) }
+      def explicitly_named_companions(component_class, action_name)
+        component_class.companions.select { |inc| inc[:on]&.include?(action_name) }
       end
 
-      # Render a planned set of companions: each entry pairs an inclusion
+      # Render a planned set of companions: each entry pairs a companion
       # with the params view its block reads and the environment its
       # component builds in, because companions arriving from different
       # branches of one response fork at different points.
@@ -48,15 +48,15 @@ module Weft
         return "" if plan.empty?
 
         winners = {}
-        plan.filter_map { |inclusion, view, env| companion_fragment(inclusion, view, env, slots, winners) }.
+        plan.filter_map { |companion, view, env| companion_fragment(companion, view, env, slots, winners) }.
           join.html_safe
       end
 
       # One companion's fragment, or nil when it yields none. `winners` records
       # who took each slot, so a collision can name the declaration it lost to.
-      def companion_fragment(inclusion, view, env, slots, winners)
-        fragment = attempt_companion(inclusion, view, env, slots, winners)
-        winners[fragment.id] = inclusion if fragment
+      def companion_fragment(companion, view, env, slots, winners)
+        fragment = attempt_companion(companion, view, env, slots, winners)
+        winners[fragment.id] = companion if fragment
         fragment
       end
 
@@ -68,38 +68,38 @@ module Weft
       # build. Companions differing in an id-bearing param claim different
       # slots and both ride — which is what makes two of a kind, a left eye
       # and a right eye, a legitimate pair rather than a clash.
-      def attempt_companion(inclusion, view, env, slots, winners)
-        overlays = companion_overlays(inclusion, view, env)
+      def attempt_companion(companion, view, env, slots, winners)
+        overlays = companion_overlays(companion, view, env)
         component = nil
         # Where Component#claim_dom_slot!'s throw surfaces — one catch per
         # companion, so standing down affects only this one. The block's
         # trailing nil is the no-contest value; the component itself is
         # captured by assignment so a successful build can't read as an id.
         contested = catch(Weft::Context::SLOT_TAKEN) do
-          component = build_component_with_wire(inclusion[:component_class], companion_universe(env),
+          component = build_component_with_wire(companion[:component_class], companion_universe(env),
                                                 overlays: overlays, branch_bag: env[:branch_bag],
                                                 slots: slots)
           nil
         end
         return as_companion(component) unless contested
 
-        warn_companion_collision(contested, winners[contested], inclusion)
+        warn_companion_collision(contested, winners[contested], companion)
         nil
       rescue StandardError => e
         # A delta block that raised leaves no overlays of its own; the
         # companion falls back to what it inherited from the response.
-        recovered_companion(inclusion, env, overlays || env[:overlays] || {}, e)
+        recovered_companion(companion, env, overlays || env[:overlays] || {}, e)
       end
 
       # Each companion is an OOB-delivered child: it renders against the
       # same request universe, branches the primary's bag (rich values
       # included) exactly like a child built in the primary's own build,
       # and layers its own block delta — blockless is an empty delta.
-      def companion_overlays(inclusion, view, env)
+      def companion_overlays(companion, view, env)
         inherited = env[:overlays] || {}
-        return inherited unless inclusion[:block]
+        return inherited unless companion[:block]
 
-        delta = Weft::DSL::Sandbox.run(view, &inclusion[:block])
+        delta = Weft::DSL::Sandbox.run(view, &companion[:block])
         delta.is_a?(Hash) ? inherited.merge(delta) : inherited
       end
 
@@ -117,9 +117,9 @@ module Weft
       # The recovery renders without the slot register: it inherits the failed
       # companion's claim rather than competing with it, since a build that
       # raised after claiming its slot still holds one.
-      def recovered_companion(inclusion, env, overlays, error)
-        klass = inclusion[:component_class]
-        log_companion_failure(inclusion, error)
+      def recovered_companion(companion, env, overlays, error)
+        klass = companion[:component_class]
+        log_companion_failure(companion, error)
         entry = klass.component_recovery_for(error)
         return nil unless entry
 
@@ -143,13 +143,13 @@ module Weft
       end
 
       # The state the failed build was given — its own wire schema over the
-      # request universe, the inclusion block's delta on top, branching
+      # request universe, the companion block's delta on top, branching
       # whatever the primary composed. Rebuilt rather than read off the
       # instance because a build that raised leaves none.
       #
       # Keys the class doesn't declare are laid on afterwards rather than
       # resolved through the stack, which only visits declared keys — that's
-      # what keeps an inclusion block's ad-hoc delta readable in the recovery
+      # what keeps a companion block's ad-hoc delta readable in the recovery
       # block, the same way it stays readable in the block that produced it.
       def companion_state(klass, env, overlays)
         Weft::Params::Assembly.call(klass, companion_universe(env),
@@ -177,10 +177,10 @@ module Weft
         component
       end
 
-      def log_companion_failure(inclusion, error)
+      def log_companion_failure(companion, error)
         Weft.logger.error(
-          "#{inclusion[:component_class].name} companion declared at " \
-          "#{inclusion[:source_location].join(':')} failed to render: #{error.class}: #{error.message}"
+          "#{companion[:component_class].name} companion declared at " \
+          "#{companion[:source_location].join(':')} failed to render: #{error.class}: #{error.message}"
         )
       end
 
@@ -201,17 +201,17 @@ module Weft
         )
       end
 
-      def inclusion_applies?(inclusion, context, action_name)
-        return true if inclusion[:on].nil? && inclusion[:when].nil?
+      def companion_applies?(companion, context, action_name)
+        return true if companion[:on].nil? && companion[:when].nil?
 
-        filtered_contexts(inclusion, action_name).include?(context)
+        filtered_contexts(companion, action_name).include?(context)
       end
 
-      # The contexts this filtered inclusion fires in — on: and when: union.
-      def filtered_contexts(inclusion, action_name)
+      # The contexts this filtered companion fires in — on: and when: union.
+      def filtered_contexts(companion, action_name)
         contexts = []
-        contexts << :action if inclusion[:on]&.include?(action_name)
-        contexts << :transfer if inclusion[:when]&.include?(:transferred)
+        contexts << :action if companion[:on]&.include?(action_name)
+        contexts << :transfer if companion[:when]&.include?(:transferred)
         contexts
       end
     end

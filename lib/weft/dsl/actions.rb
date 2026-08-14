@@ -26,7 +26,7 @@ module Weft
 
         # Sugar for performs with swap: :delete. Removes the component from
         # the DOM on success. The callable (if given) runs for side effects;
-        # the success response carries no body (OOB includes still ride).
+        # the success response carries no body (companions still ride).
         #
         #   dismisses :close                          # no side effects
         #   dismisses :remove do |params|             # with side effects

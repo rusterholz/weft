@@ -21,7 +21,7 @@ module Logistics
     derives(:title) { |p| "Shipments (#{p.shipments.size})" }
 
     pushes every: 5
-    includes Oms::OrderHeader
+    brings Oms::OrderHeader
 
     def build(attributes = {})
       super

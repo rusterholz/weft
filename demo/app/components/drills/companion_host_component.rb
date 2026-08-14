@@ -12,7 +12,7 @@ module Drills
 
     performs(:break_companion) { |params| { runs: params.runs + 1 } }
 
-    includes Drills::FlakyCompanion, on: :break_companion do
+    brings Drills::FlakyCompanion, on: :break_companion do
       { breaking: true }
     end
 

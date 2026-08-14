@@ -55,7 +55,7 @@ When a component wants to control a value rather than inherit it, it declares th
 
 A single key can have more than one door, and they resolve in a fixed order — a handed value beats a request overlay (a hash a verb block returned earlier in the request) beats a wire value beats an inherited value beats a derivation beats a default. The [DSL reference](dsl.md#how-the-doors-combine) lays out that precedence and the useful *dual* combinations; the shape to carry away here is that all four doors land in the same `params`, read the same way (`params.name`).
 
-Three of the four are open to every verb block too — an action callable, a `transfers`, `includes` or `recovers` block all read the same `param`, `derives` and `defines` a `build` would. Only `receives` is missing there, and it has to be: a hand-off comes from a call site, and a request arriving over the wire has none. When a block needs such a key, give it a second door.
+Three of the four are open to every verb block too — an action callable, a `transfers`, `brings` or `recovers` block all read the same `param`, `derives` and `defines` a `build` would. Only `receives` is missing there, and it has to be: a hand-off comes from a call site, and a request arriving over the wire has none. When a block needs such a key, give it a second door.
 
 ## What a component keeps for itself
 

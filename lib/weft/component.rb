@@ -8,10 +8,10 @@ require "weft/context/interception"
 require "weft/context/traversal"
 require "weft/dsl/actions"
 require "weft/dsl/containers"
-require "weft/dsl/inclusions"
+require "weft/dsl/companions"
 require "weft/dsl/params"
 require "weft/dsl/recoveries"
-require "weft/dsl/triggers"
+require "weft/dsl/announcements"
 require "weft/dsl/updates"
 require "weft/error"
 require "weft/registry"
@@ -28,8 +28,8 @@ module Weft
 
     include Weft::DSL::Params
     include Weft::DSL::Recoveries
-    include Weft::DSL::Triggers
-    include Weft::DSL::Inclusions
+    include Weft::DSL::Announcements
+    include Weft::DSL::Companions
     include Weft::DSL::Updates
     include Weft::DSL::Actions
     include Weft::DSL::Containers
@@ -196,7 +196,7 @@ module Weft
       return unless slots && parent.equal?(arbre_context)
       return if slots.add?(id)
 
-      # Caught by Weft::Router::OOBIncludes#attempt_companion, which turns this
+      # Caught by Weft::Router::Companions#attempt_companion, which turns this
       # into a warning naming both declarations.
       throw Weft::Context::SLOT_TAKEN, id
     end
@@ -208,11 +208,11 @@ module Weft
     end
 
     def apply_refresh_attrs
-      triggers = self.class.refresh_triggers
-      return if triggers.empty?
+      refresh_triggers = self.class.refresh_triggers
+      return if refresh_triggers.empty?
 
       set_attribute "hx-get", refresh_url
-      set_attribute "hx-trigger", triggers.join(", ")
+      set_attribute "hx-trigger", refresh_triggers.join(", ")
       set_attribute "hx-swap", "outerHTML"
     end
 

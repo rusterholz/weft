@@ -7,8 +7,8 @@ module Weft
     # Mixin for classes that declare OOB-swapped sibling components.
     # Included into Weft::Component.
     #
-    # See Weft::Component#includes for the DSL surface.
-    module Inclusions
+    # See Weft::Component#brings for the DSL surface.
+    module Companions
       def self.included(base)
         base.extend(ClassMethods)
       end
@@ -21,16 +21,16 @@ module Weft
         # Declare that another component should be OOB-swapped alongside
         # this component's responses.
         #
-        #   includes OrderHeader                          # every response
-        #   includes OrderHeader, on: :advance            # own action(s) only
-        #   includes OrderHeader, on: %i[advance retreat]
-        #   includes OrderHeader, when: :transferred      # transfer arrivals only
-        #   includes OrderHeader, on: :save, when: :transferred   # union: either
-        #   includes OrderHeader do |params|              # companion delta
+        #   brings OrderHeader                          # every response
+        #   brings OrderHeader, on: :advance            # own action(s) only
+        #   brings OrderHeader, on: %i[advance retreat]
+        #   brings OrderHeader, when: :transferred      # transfer arrivals only
+        #   brings OrderHeader, on: :save, when: :transferred   # union: either
+        #   brings OrderHeader do |params|              # companion delta
         #     { order_id: params.order_id, compact: true }
         #   end
         #
-        # Unfiltered inclusions ride every response this component renders in:
+        # Unfiltered companions ride every response this component renders in:
         # its own actions, SSE pushes, and transfer arrivals. Filters
         # enumerate contexts — `on:` names this component's OWN actions
         # (never a transferring component's), `when: :transferred` fires when
@@ -40,24 +40,24 @@ module Weft
         #
         # (`when` rides **options because it's a Ruby reserved word — call
         # sites are unaffected, only this signature is.)
-        def includes(component_class, on: nil, **options, &block)
+        def brings(component_class, on: nil, **options, &block)
           when_filter = options.delete(:when)
           raise ArgumentError, "unknown keywords: #{options.keys.inspect}" unless options.empty?
 
           site = caller_locations(1, 1).first
-          own_inclusions << { component_class: component_class,
+          own_companions << { component_class: component_class,
                               on: on.nil? ? nil : Array(on),
                               when: validated_when(when_filter),
                               block: block,
                               source_location: [site.path, site.lineno] }
         end
 
-        # All declared inclusions (own + inherited).
-        def inclusions
-          if superclass.respond_to?(:inclusions)
-            superclass.inclusions + own_inclusions
+        # All declared companions (own + inherited).
+        def companions
+          if superclass.respond_to?(:companions)
+            superclass.companions + own_companions
           else
-            own_inclusions.dup
+            own_companions.dup
           end
         end
 
@@ -70,15 +70,15 @@ module Weft
           unknown = contexts - WHEN_VALUES
           unless unknown.empty?
             raise Weft::InvalidDefinition,
-                  "includes when: #{unknown.map(&:inspect).join(', ')} names no known context — " \
+                  "brings when: #{unknown.map(&:inspect).join(', ')} names no known context — " \
                   "recognized: #{WHEN_VALUES.map(&:inspect).join(', ')}"
           end
 
           contexts
         end
 
-        def own_inclusions
-          @own_inclusions ||= []
+        def own_companions
+          @own_companions ||= []
         end
       end
     end

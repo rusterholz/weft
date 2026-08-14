@@ -59,7 +59,7 @@ RSpec.describe "Order header edit round trip", type: :request do
       expect(response.body).to include("Globex").twice
     end
 
-    it "leaves the shipments card home — its inclusion is filtered to :advance" do
+    it "leaves the shipments card home — that companion is filtered to :advance" do
       expect(oob_ids(response.body)).not_to include("logistics-shipments-card-#{order.id}")
     end
 
@@ -112,7 +112,7 @@ RSpec.describe "Order header edit round trip", type: :request do
       expect(oob_ids(response.body)).to include("logistics-shipments-card-#{order.id}")
     end
 
-    it "leaves the details card home — its inclusion is filtered to transfer arrivals" do
+    it "leaves the details card home — that companion is filtered to transfer arrivals" do
       expect(oob_ids(response.body)).not_to include("oms-order-details-card-#{order.id}")
     end
 

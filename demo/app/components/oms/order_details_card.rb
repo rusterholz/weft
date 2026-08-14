@@ -3,7 +3,7 @@
 module Oms
   # The order's customer and address, as a card of its own so it can ride
   # an out-of-band swap: editing the customer name on the header lands here
-  # too (`includes Oms::OrderDetailsCard, when: :transferred`). Its own
+  # too (`brings Oms::OrderDetailsCard, when: :transferred`). Its own
   # `derives` only fires on a standalone render — as a companion it inherits
   # the order the header already loaded.
   class OrderDetailsCard < DropshipUI::Card

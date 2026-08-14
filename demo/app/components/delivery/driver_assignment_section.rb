@@ -14,7 +14,7 @@ module Delivery
     # This section has one action today, so naming it changes nothing — but
     # it says which action the event belongs to, which is what the other two
     # sections are really subscribing to.
-    triggers "delivery-completed", on: :complete_delivery
+    announces "delivery-completed", on: :complete_delivery
 
     # `params.shipment` walks the same two-step derivation the build reads:
     # driver from the wire, then that driver's current shipment.

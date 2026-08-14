@@ -621,12 +621,12 @@ RSpec.describe Weft::Router do
       Class.new(Weft::Component) do
         def self.name = "CompanionStateHost"
         performs(:touch) { nil }
-        includes(companion, on: :touch) { |_p| { note: "from-includes" } }
+        brings(companion, on: :touch) { |_p| { note: "from-brings" } }
       end
 
       post "/_components/companion_state_host/touch", slot: "a"
 
-      expect(seen).to eq(["from-includes"])
+      expect(seen).to eq(["from-brings"])
     end
   end
 
@@ -703,12 +703,12 @@ RSpec.describe Weft::Router do
     end
   end
 
-  describe "class-level triggers" do
+  describe "class-level announcements" do
     let!(:triggering_class) do # rubocop:disable RSpec/LetSetup
       Class.new(Weft::Component) do
         def self.name = "TriggerTest"
         param :id
-        triggers "item-updated"
+        announces "item-updated"
         performs(:save) { nil }
       end
     end
@@ -720,12 +720,12 @@ RSpec.describe Weft::Router do
       expect(last_response.headers["HX-Trigger"]).to eq("item-updated")
     end
 
-    it "supports multiple triggers" do
+    it "supports multiple announcements" do
       Class.new(Weft::Component) do
         def self.name = "MultiTrigger"
         param :id
-        triggers "event-a"
-        triggers "event-b"
+        announces "event-a"
+        announces "event-b"
         performs(:go) { nil }
       end
 
@@ -747,8 +747,8 @@ RSpec.describe Weft::Router do
         Class.new(Weft::Component) do
           def self.name = "FilteredTrigger"
           param :id
-          triggers "advanced", on: :advance
-          triggers "always-fires"
+          announces "advanced", on: :advance
+          announces "always-fires"
           performs(:advance) { nil }
           performs(:touch) { nil }
         end
@@ -776,7 +776,7 @@ RSpec.describe Weft::Router do
         Class.new(Weft::Component) do
           def self.name = "ArrayTrigger"
           param :id
-          triggers "moved", on: %i[advance retreat]
+          announces "moved", on: %i[advance retreat]
           performs(:advance) { nil }
           performs(:retreat) { nil }
         end
@@ -796,7 +796,7 @@ RSpec.describe Weft::Router do
         declarer = Class.new(Weft::Component) do
           def self.name = "TriggerDeparture"
           param :id
-          triggers "handed-over", on: :hand_off
+          announces "handed-over", on: :hand_off
         end
         declarer.transfers(:hand_off, to: target)
 
@@ -1204,7 +1204,7 @@ RSpec.describe Weft::Router do
           span "live data"
         end
       end
-      healthy.includes(boom)
+      healthy.brings(boom)
       out = frame_sink
       allow(router).to receive(:stream).and_yield(out)
 
@@ -1401,7 +1401,7 @@ RSpec.describe Weft::Router do
     end
   end
 
-  describe "OOB includes in action responses" do
+  describe "OOB companions in action responses" do
     let!(:included_class) do
       Class.new(Weft::Component) do
         def self.name = "IncludedHeader"
@@ -1425,7 +1425,7 @@ RSpec.describe Weft::Router do
       end
     end
 
-    before { including_class.includes(included_class) }
+    before { including_class.brings(included_class) }
 
     it "appends OOB-swapped component to action responses" do
       post "/_components/including_card/refresh_all", order_id: "42"
@@ -1435,7 +1435,7 @@ RSpec.describe Weft::Router do
       expect(last_response.body).to include("header-for-42")
     end
 
-    it "respects on: filter — includes only for matching actions" do
+    it "respects on: filter — rides only for matching actions" do
       filtered_class = included_class
       source = Class.new(Weft::Component) do
         def self.name = "FilteredInc"
@@ -1443,7 +1443,7 @@ RSpec.describe Weft::Router do
         performs(:advance) { nil }
         performs(:noop) { nil }
       end
-      source.includes(filtered_class, on: :advance)
+      source.brings(filtered_class, on: :advance)
 
       post "/_components/filtered_inc/advance", order_id: "7"
       expect(last_response.body).to include('hx-swap-oob="true"')
@@ -1459,7 +1459,7 @@ RSpec.describe Weft::Router do
         param :id
         performs(:go) { nil }
       end
-      source.includes(mapped_class) { |params| { order_id: params[:id] } }
+      source.brings(mapped_class) { |params| { order_id: params[:id] } }
 
       post "/_components/mapped_inc/go", id: "99"
 
@@ -1467,16 +1467,16 @@ RSpec.describe Weft::Router do
       expect(last_response.body).to include('hx-swap-oob="true"')
     end
 
-    it "passes callable-returned keys through the accumulated bag to inclusion blocks" do
+    it "passes callable-returned keys through the accumulated bag to companion blocks" do
       sink = included_class
       source = Class.new(Weft::Component) do
         def self.name = "BagSource"
         param :order_id
         # :note is not declared — it only exists on the accumulated bag because
-        # the callable returned it. The inclusion block must still see it.
+        # the callable returned it. The companion block must still see it.
         performs(:go) { |_params| { note: "from-callable" } }
       end
-      source.includes(sink) { |params| { order_id: params[:note] } }
+      source.brings(sink) { |params| { order_id: params[:note] } }
 
       post "/_components/bag_source/go", order_id: "1"
 
@@ -1485,7 +1485,7 @@ RSpec.describe Weft::Router do
     end
   end
 
-  describe "includes ownership and filters" do
+  describe "companion ownership and filters" do
     let!(:companion_class) do
       Class.new(Weft::Component) do
         def self.name = "SideCounter"
@@ -1510,19 +1510,19 @@ RSpec.describe Weft::Router do
       end
     end
 
-    it "fires the render target's inclusions on a transfers response, not the declarer's" do # rubocop:disable RSpec/ExampleLength
+    it "fires the render target's companions on a transfers response, not the declarer's" do # rubocop:disable RSpec/ExampleLength
       mine = companion_class
       theirs = other_companion_class
       target = Class.new(Weft::Component) do
         def self.name = "ArrivalCard"
         param :order_id
       end
-      target.includes(mine)
+      target.brings(mine)
       declarer = Class.new(Weft::Component) do
         def self.name = "DepartureCard"
         param :order_id
       end
-      declarer.includes(theirs)
+      declarer.brings(theirs)
       declarer.transfers(:hand_over, to: target)
 
       post "/_components/departure_card/hand_over", order_id: "9"
@@ -1538,7 +1538,7 @@ RSpec.describe Weft::Router do
         param :order_id
         performs(:submit) { nil }
       end
-      target.includes(mine, on: :submit)
+      target.brings(mine, on: :submit)
       declarer = Class.new(Weft::Component) do
         def self.name = "NamespacedDeclarer"
         param :order_id
@@ -1552,14 +1552,14 @@ RSpec.describe Weft::Router do
       expect(last_response.body).to include("side-3")
     end
 
-    it "fires when: :transferred inclusions only on transfer arrivals" do # rubocop:disable RSpec/ExampleLength
+    it "fires when: :transferred companions only on transfer arrivals" do # rubocop:disable RSpec/ExampleLength
       mine = companion_class
       target = Class.new(Weft::Component) do
         def self.name = "TransferScopedTarget"
         param :order_id
         performs(:poke) { nil }
       end
-      target.includes(mine, when: :transferred)
+      target.brings(mine, when: :transferred)
       declarer = Class.new(Weft::Component) do
         def self.name = "TransferScopedDeclarer"
         param :order_id
@@ -1581,7 +1581,7 @@ RSpec.describe Weft::Router do
         performs(:refresh) { nil }
         performs(:noop) { nil }
       end
-      target.includes(mine, on: :refresh, when: :transferred)
+      target.brings(mine, on: :refresh, when: :transferred)
       declarer = Class.new(Weft::Component) do
         def self.name = "UnionDeclarer"
         param :order_id
@@ -1607,7 +1607,7 @@ RSpec.describe Weft::Router do
         performs(:retreat) { nil }
         performs(:hold) { nil }
       end
-      source.includes(mine, on: %i[advance retreat])
+      source.brings(mine, on: %i[advance retreat])
 
       post "/_components/array_filter_card/advance", order_id: "8"
       expect(last_response.body).to include("side-8")
@@ -1626,15 +1626,15 @@ RSpec.describe Weft::Router do
         param :order_id
         performs(:advance) { nil }
       end
-      source.includes(mine)
-      source.includes(mine, on: :advance)
+      source.brings(mine)
+      source.brings(mine, on: :advance)
 
       post "/_components/double_includer/advance", order_id: "9"
 
       expect(last_response.body.scan("side-9").size).to eq(1)
     end
 
-    it "fires the declarer's on:-filtered inclusion on its own transfers action" do
+    it "fires the declarer's on:-filtered companion on its own transfers action" do
       mine = companion_class
       target = Class.new(Weft::Component) do
         def self.name = "HandoffArrival"
@@ -1644,7 +1644,7 @@ RSpec.describe Weft::Router do
         def self.name = "HandoffDeparture"
         param :order_id
       end
-      declarer.includes(mine, on: :hand_off)
+      declarer.brings(mine, on: :hand_off)
       declarer.transfers(:hand_off, to: target)
 
       post "/_components/handoff_departure/hand_off", order_id: "7"
@@ -1652,7 +1652,7 @@ RSpec.describe Weft::Router do
       expect(last_response.body).to include("side-7")
     end
 
-    it "hands the declarer's inclusion block the declarer's picture, not the target's" do
+    it "hands the declarer's companion block the declarer's picture, not the target's" do
       mine = companion_class
       target = Class.new(Weft::Component) do
         def self.name = "LabelledArrival"
@@ -1663,7 +1663,7 @@ RSpec.describe Weft::Router do
         def self.name = "LabelledDeparture"
         param :order_id
       end
-      declarer.includes(mine, on: :hand_off) { |params| { order_id: params[:label] || "declarer-side" } }
+      declarer.brings(mine, on: :hand_off) { |params| { order_id: params[:label] || "declarer-side" } }
       declarer.transfers(:hand_off, to: target)
 
       post "/_components/labelled_departure/hand_off", order_id: "7"
@@ -1694,8 +1694,8 @@ RSpec.describe Weft::Router do
         def self.name = "SlotDeparture"
         param :order_id
       end
-      target.includes(noted, when: :transferred) { { note: "from-target" } }
-      declarer.includes(noted, on: :hand_off) { { note: "from-declarer" } }
+      target.brings(noted, when: :transferred) { { note: "from-target" } }
+      declarer.brings(noted, on: :hand_off) { { note: "from-declarer" } }
       declarer.transfers(:hand_off, to: target)
 
       post "/_components/slot_departure/hand_off", order_id: "7"
@@ -1726,8 +1726,8 @@ RSpec.describe Weft::Router do
         param :order_id
         performs(:advance) { nil }
       end
-      source.includes(counted)
-      source.includes(counted, on: :advance)
+      source.brings(counted)
+      source.brings(counted, on: :advance)
 
       post "/_components/twice_includer/advance", order_id: "9"
 
@@ -1761,7 +1761,7 @@ RSpec.describe Weft::Router do
           span "the-primary"
         end
       end
-      source.includes(thief, on: :advance)
+      source.brings(thief, on: :advance)
 
       post "/_components/host_card/advance", order_id: "3"
 
@@ -1778,8 +1778,8 @@ RSpec.describe Weft::Router do
         param :order_id
         performs(:advance) { nil }
       end
-      source.includes(mine)
-      source.includes(mine, on: :advance)
+      source.brings(mine)
+      source.brings(mine, on: :advance)
 
       post "/_components/colliding_includer/advance", order_id: "9"
 
@@ -1802,8 +1802,8 @@ RSpec.describe Weft::Router do
         param :order_id
         performs(:blink) { nil }
       end
-      face.includes(eye, on: :blink) { { side: "right" } }
-      face.includes(eye, on: :blink) { { side: "left" } }
+      face.brings(eye, on: :blink) { { side: "right" } }
+      face.brings(eye, on: :blink) { { side: "left" } }
 
       post "/_components/face_card/blink", order_id: "1"
 
@@ -1837,7 +1837,7 @@ RSpec.describe Weft::Router do
           span "steady-#{params.order_id}"
         end
       end
-      klass.includes(companion, on: :advance)
+      klass.brings(companion, on: :advance)
       klass
     end
 
@@ -1876,7 +1876,7 @@ RSpec.describe Weft::Router do
         param :order_id
         performs(:advance) { nil }
       end
-      relocating.includes(boom_companion, on: :advance) { { order_id: "elsewhere" } }
+      relocating.brings(boom_companion, on: :advance) { { order_id: "elsewhere" } }
 
       post "/_components/relocating_host/advance", order_id: "7"
 
@@ -1911,7 +1911,7 @@ RSpec.describe Weft::Router do
           div { text_node "keeper-#{params.order.label}" }
         end
       end
-      primary.includes(companion)
+      primary.brings(companion)
 
       post "/_components/order_keeper/touch", order_id: "o-1"
 
@@ -1945,8 +1945,8 @@ RSpec.describe Weft::Router do
         def self.name = "DeltaSplitter"
         performs(:go) { nil }
       end
-      primary.includes(seen) { |_p| { foo: "1" } }
-      primary.includes(other) { |_p| { bar: "2" } }
+      primary.brings(seen) { |_p| { foo: "1" } }
+      primary.brings(other) { |_p| { bar: "2" } }
 
       post "/_components/delta_splitter/go"
 
@@ -1969,14 +1969,14 @@ RSpec.describe Weft::Router do
         param :order_id
         performs(:go) { nil }
       end
-      primary.includes(companion)
+      primary.brings(companion)
 
       post "/_components/narrow_primary/go", order_id: "1", corporate_account_id: "acct-2"
 
       expect(last_response.body).to include("reader-acct-2")
     end
 
-    it "treats a blockless inclusion exactly like an empty-hash block" do # rubocop:disable RSpec/ExampleLength
+    it "treats a blockless companion exactly like an empty-hash block" do # rubocop:disable RSpec/ExampleLength
       blockless_sink = Class.new(Weft::Component) do
         def self.name = "BlocklessSink"
         param :order_id
@@ -2000,8 +2000,8 @@ RSpec.describe Weft::Router do
         param :order_id
         performs(:go) { |_p| { order_id: "overridden" } }
       end
-      primary.includes(blockless_sink)
-      primary.includes(blockful_sink) { |_p| {} }
+      primary.brings(blockless_sink)
+      primary.brings(blockful_sink) { |_p| {} }
 
       post "/_components/equivalence_primary/go", order_id: "wire"
 
@@ -2011,7 +2011,7 @@ RSpec.describe Weft::Router do
   end
 
   describe "verb blocks run against a sandbox self, not the component class" do
-    # performs/transfers/recovers/includes blocks execute in a fresh
+    # performs/transfers/recovers/brings blocks execute in a fresh
     # Weft::DSL::Sandbox, so `self` reaches no component or class state. A block
     # that reports `self.class.name` names the sandbox — before the flip, a
     # class-body proc's self was the component class, so `self.class` was `Class`.
@@ -2053,7 +2053,7 @@ RSpec.describe Weft::Router do
       expect(last_response.body).to include("Weft::DSL::Sandbox")
     end
 
-    it "runs an includes block in the sandbox" do # rubocop:disable RSpec/ExampleLength
+    it "runs a brings block in the sandbox" do # rubocop:disable RSpec/ExampleLength
       sink = Class.new(Weft::Component) do
         def self.name = "SandboxIncluded"
         param :label, default: "none"
@@ -2068,7 +2068,7 @@ RSpec.describe Weft::Router do
         param :id
         performs(:go) { nil }
       end
-      source.includes(sink) { |_params| { label: self.class.name } }
+      source.brings(sink) { |_params| { label: self.class.name } }
 
       post "/_components/sandbox_including/go", id: "1"
 
@@ -2117,7 +2117,7 @@ RSpec.describe Weft::Router do
       expect(store).to be_empty
     end
 
-    it "sends only OOB include fragments when inclusions apply" do # rubocop:disable RSpec/ExampleLength
+    it "sends only OOB include fragments when companions apply" do # rubocop:disable RSpec/ExampleLength
       sink = Class.new(Weft::Component) do
         def self.name = "DismissOobSink"
         param :id
@@ -2137,7 +2137,7 @@ RSpec.describe Weft::Router do
           span(class: "primary") { text_node "primary body" }
         end
       end
-      source.includes(sink)
+      source.brings(sink)
 
       delete "/_components/dismiss_oob_source/remove", id: "1"
 
@@ -2170,7 +2170,7 @@ RSpec.describe Weft::Router do
         param :id
         dismisses(:remove) { nil }
       end
-      klass.triggers "row-removed"
+      klass.announces "row-removed"
 
       delete "/_components/dismiss_triggers/remove", id: "1"
 

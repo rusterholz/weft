@@ -53,9 +53,9 @@ RSpec.describe Logistics::ShipmentsCard, type: :component do
     expect(html).not_to include('title="Shipments')
   end
 
-  it "declares includes Oms::OrderHeader for OOB swap" do
-    inclusions = described_class.inclusions
-    expect(inclusions.size).to eq(1)
-    expect(inclusions.first[:component_class]).to eq(Oms::OrderHeader)
+  it "declares brings Oms::OrderHeader for OOB swap" do
+    companions = described_class.companions
+    expect(companions.size).to eq(1)
+    expect(companions.first[:component_class]).to eq(Oms::OrderHeader)
   end
 end

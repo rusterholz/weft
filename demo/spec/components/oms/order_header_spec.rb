@@ -50,7 +50,7 @@ RSpec.describe Oms::OrderHeader, type: :component do
   end
 
   it "refreshes the shipments card on its own advance, and the details card on an edit arrival" do
-    by_class = described_class.inclusions.to_h { |inc| [inc[:component_class], inc] }
+    by_class = described_class.companions.to_h { |c| [c[:component_class], c] }
 
     expect(by_class[Logistics::ShipmentsCard][:on]).to eq([:advance])
     expect(by_class[Logistics::ShipmentsCard][:when]).to be_nil
@@ -58,7 +58,7 @@ RSpec.describe Oms::OrderHeader, type: :component do
     expect(by_class[Oms::OrderDetailsCard][:on]).to be_nil
   end
 
-  it "stays silent on the wire until per-action triggers exist" do
-    expect(described_class.trigger_events).to be_empty
+  it "stays silent on the wire until per-action announcements exist" do
+    expect(described_class.announced_events).to be_empty
   end
 end

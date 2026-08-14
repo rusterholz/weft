@@ -21,11 +21,11 @@ module Weft
     # body so each slice's reopened `class Router` finds the Sinatra::Base
     # superclass already declared.
     require_relative "router/streaming"
-    require_relative "router/oob_includes"
+    require_relative "router/companions"
     require_relative "router/actions"
     require_relative "router/errors"
     include Streaming
-    include OOBIncludes
+    include Companions
     include Actions
     include Errors
 
@@ -189,8 +189,8 @@ module Weft
       end
     end
 
-    def apply_trigger_header(component_class, action_name)
-      events = component_class.trigger_events(action_name)
+    def apply_announcement_header(component_class, action_name)
+      events = component_class.announced_events(action_name)
       return if events.empty?
 
       headers["HX-Trigger"] = events.join(", ")

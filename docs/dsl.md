@@ -37,8 +37,8 @@ end
   - [`refreshes`](#refreshes--the-client-re-fetches) - re-render this component periodically or on specific **client-side** events
   - [`pushes`](#pushes--the-server-sends-updates) - re-render this component periodically or on specific **server-side** events
   - [`recovers`](#recovers--declare-error-behavior) - what your component should do if it encounters an error
-  - [`triggers`](#triggers--announce-to-the-rest-of-the-page) - announce a **client-side** event to the other components on the page
-  - [`includes`](#includes--companions-in-the-same-response) - what other components need to redraw when this one does
+  - [`announces`](#announces--tell-the-rest-of-the-page) - tell the other components on the page that something happened, via a **client-side** event
+  - [`brings`](#brings--companions-in-the-same-response) - what other components need to redraw when this one does
   - [The Callable Contract](#the-callable-contract) - how to attach logic to each of these behaviors
   - [Other Class-Body Declarations](#other-class-body-declarations)
 - [Element Kwargs](#element-kwargs): how the behaviors get attached to your component's UI elements.
@@ -101,7 +101,7 @@ Only a component's *own* declared params serialize — into its refresh and stre
 
 The first `param` also anchors the component's DOM identity: the wrapper's element id is the dasherized class name suffixed with the first declared param's value — `StatCard` with `status: "shipped"` renders `id="stat-card-shipped"`, which is how sibling instances stay individually addressable. Declare the identifying param first. The suffix rides only when the value is a non-blank scalar (String, Symbol, number, or boolean): `nil`, `""`, and non-scalar values all derive the same bare class id, so a component's identity is stable across the different ways "no value" can arrive.
 
-That id decides more than where a fragment lands. Because an out-of-band swap is addressed by it, it also decides which [`includes`](#includes--companions-in-the-same-response) companions can coexist in one response: two that resolve to the same id collide, and only one rides. Changing which param you declare first — or what that param holds — can therefore change *which* companions appear, not merely where they go.
+That id decides more than where a fragment lands. Because an out-of-band swap is addressed by it, it also decides which [`brings`](#brings--companions-in-the-same-response) companions can coexist in one response: two that resolve to the same id collide, and only one rides. Changing which param you declare first — or what that param holds — can therefore change *which* companions appear, not merely where they go.
 
 Declaring a param has a routing consequence: a component with params (or any verb below) is considered independently addressable and gets its own route. See [Routing](routing.md).
 
@@ -165,7 +165,7 @@ If a component *is* routable and declares a required hand-off with no wire count
 A key can have more than one door, and Weft resolves the value from a fixed order of sources. Highest wins; `nil` at any level falls through to the next:
 
 1. a **received** hand-off (`receives`)
-2. a **request overlay** — a hash returned from a verb block earlier in this request (an action callable, a `transfers` or `includes` block, a `recovers` adjustment). An overlay entry speaks *as* the wire for its key: its value replaces the wire's — including rich objects, which pre-empt a matching `derives` so nothing refetches what the request already loaded — and an explicit `nil` *clears*, masking the wire so resolution falls below it
+2. a **request overlay** — a hash returned from a verb block earlier in this request (an action callable, a `transfers` or `brings` block, a `recovers` adjustment). An overlay entry speaks *as* the wire for its key: its value replaces the wire's — including rich objects, which pre-empt a matching `derives` so nothing refetches what the request already loaded — and an explicit `nil` *clears*, masking the wire so resolution falls below it
 3. the component's **own wire** value (`param`)
 4. an **inherited** value — from an ancestor in the render tree, or from whatever the request had already composed by the time this component rendered
 5. the component's **own derivation** (`derives` / `defines`)
@@ -231,7 +231,7 @@ end
 
 Identical to `performs` in signature and [contract](#the-callable-contract), except the response renders the `to:` component instead of the declaring one — for actions whose natural result is a different piece of UI (a read-only header becoming an edit form). The returned hash overlays the request for the target's render: override its wire values, or hand it rich objects that pre-empt its own `derives`.
 
-The target inherits the state the request has composed, exactly as a nested child inherits its parent's — so a record the callable loaded is already there and needn't be handed over. Its own **defaults** stay sovereign (they don't travel), and it's the *target's* [`includes`](#includes--companions-in-the-same-response) companions that ride the response: after the swap, the target is the component in charge. To override something it inherited, return the key; an explicit `nil` clears it. The target only needs to *render*; it does not need its own route (see [routability vs. render targets](routing.md#routable-vs-render-target)).
+The target inherits the state the request has composed, exactly as a nested child inherits its parent's — so a record the callable loaded is already there and needn't be handed over. Its own **defaults** stay sovereign (they don't travel), and it's the *target's* [`brings`](#brings--companions-in-the-same-response) companions that ride the response: after the swap, the target is the component in charge. To override something it inherited, return the key; an explicit `nil` clears it. The target only needs to *render*; it does not need its own route (see [routability vs. render targets](routing.md#routable-vs-render-target)).
 
 ### `dismisses` — remove from the DOM
 
@@ -242,7 +242,7 @@ dismisses :archive do |params|           # with side effects
 end
 ```
 
-Sugar for `performs` with `method: :delete, swap: :delete`: on success, the component is removed from the page entirely. The callable, if given, runs for side effects, and the success response carries no body — htmx removes the element on its own, and Weft never re-renders a component whose record was just deleted, so `build` needs no guard against the vanished state. Out-of-band [`includes`](#includes--companions-in-the-same-response) companions still ride the response. Like `performs`, it accepts a `target:` for the occasional removal that should land elsewhere.
+Sugar for `performs` with `method: :delete, swap: :delete`: on success, the component is removed from the page entirely. The callable, if given, runs for side effects, and the success response carries no body — htmx removes the element on its own, and Weft never re-renders a component whose record was just deleted, so `build` needs no guard against the vanished state. Out-of-band [`brings`](#brings--companions-in-the-same-response) companions still ride the response. Like `performs`, it accepts a `target:` for the occasional removal that should land elsewhere.
 
 If the callable raises, Weft overrides the destructive swap (via `HX-Reswap`) so the error rendering appears where the component was, rather than the element silently vanishing — and the error fragment [adopts the component's own tag](error-handling.md#auto-injected-recovery-params), so a failed row delete produces an error `<tr>`, not a `<div>` wedged into a table.
 
@@ -255,7 +255,7 @@ refreshes on: "order-updated"          # re-fetch when an event fires
 refreshes every: 30, on: "saved"       # both
 ```
 
-The component's wrapper element gets the htmx wiring to GET its own route and replace itself with the response (`outerHTML` swap). With `every:`, that happens on a timer. With `on:`, it happens whenever the named event fires — typically emitted by some other component's `triggers` declaration, arriving as an `HX-Trigger` response header and listened for at the body level, so any component on the page can react to any other's events.
+The component's wrapper element gets the htmx wiring to GET its own route and replace itself with the response (`outerHTML` swap). With `every:`, that happens on a timer. With `on:`, it happens whenever the named event fires — typically emitted by some other component's `announces` declaration, arriving as an `HX-Trigger` response header and listened for at the body level, so any component on the page can react to any other's events.
 
 Multiple `refreshes` calls accumulate into a single trigger list. Because the wiring is declared on the class, it's present both in the initial page render *and* in every refreshed fragment — the component keeps refreshing forever, with nothing duplicated by hand.
 
@@ -289,44 +289,44 @@ recovers from: ActiveRecord::RecordNotFound, with: NotFoundPage, status: 404
 
 Declares how this component or page responds when a render or action raises. `from:` matches by exception class, HTTP status code, status range, or an array of those; `with:` names what renders instead; `status:` declares what a non-Weft error means on the wire, so your app's own exceptions recover with honest semantics (the branded 404 above). The gem ships default recoveries, so this is opt-in refinement. The complete model — matching, chain order, auto-injected params — is in [Error handling](error-handling.md).
 
-### `triggers` — announce to the rest of the page
+### `announces` — tell the rest of the page
 
 ```ruby
-triggers "delivery-completed"                # every action
-triggers "order-updated", on: :advance       # that action only — arrays too
+announces "delivery-completed"                # every action
+announces "order-updated", on: :advance       # that action only — arrays too
 ```
 
-Every action response from this component carries the named event in its `HX-Trigger` header. Other components subscribe with `refreshes on: "delivery-completed"` — a decoupled way to say "when this changes, those refresh," without the components knowing about each other. Multiple `triggers` declarations accumulate.
+Every action response from this component carries the named event in its `HX-Trigger` header. Other components subscribe with `refreshes on: "delivery-completed"` — a decoupled way to say "when this changes, those refresh," without the components knowing about each other. Multiple `announces` declarations accumulate.
 
 `on:` maps an event to the actions it belongs to. Without it, an event is welded to *every* action the component has — fine when there's one, rarely what a component with several means. A header that both advances an order and hands the region over to an editor would otherwise announce a status change when someone merely clicked Edit, and every subscriber would refetch for nothing. Naming the action keeps the two apart:
 
 ```ruby
-triggers "order-updated", on: :advance   # the status machine ran
-triggers "order-editing", on: :edit      # responsibility handed to the editor
+announces "order-updated", on: :advance   # the status machine ran
+announces "order-editing", on: :edit      # responsibility handed to the editor
 ```
 
-There is deliberately no `when:` counterpart, though [`includes`](#includes--companions-in-the-same-response) has one. `HX-Trigger` announces what a *callable* did, so a render-context filter has nothing to say about it: "fire when I render as a transfer target" describes a render that ran no callable, and "fire when I transfer away" is already `on: :that_action`.
+There is deliberately no `when:` counterpart, though [`brings`](#brings--companions-in-the-same-response) has one. An announcement reports what a *callable* did, so a render-context filter has nothing to say about it: "fire when I render as a transfer target" describes a render that ran no callable, and "fire when I transfer away" is already `on: :that_action`.
 
 Events follow the *action*, not the rendering: on a [`transfers`](#transfers--actions-that-render-something-else) response the declaring component's events fire — its callable is what ran — while the target's own events wait for the target's own actions. (The same rule is why a `dismisses` response, which renders no body at all, still announces.)
 
-### `includes` — companions in the same response
+### `brings` — companions in the same response
 
 ```ruby
-includes Oms::OrderHeader                       # alongside every response
-includes Oms::OrderHeader, on: :advance         # own action(s) only — arrays too
-includes Oms::OrderHeader, when: :transferred   # only as a transfer target
-includes Oms::OrderHeader do |params|            # adjust this companion's params
+brings Oms::OrderHeader                       # alongside every response
+brings Oms::OrderHeader, on: :advance         # own action(s) only — arrays too
+brings Oms::OrderHeader, when: :transferred   # only as a transfer target
+brings Oms::OrderHeader do |params|            # adjust this companion's params
   { order_id: params.order_id, compact: true }
 end
 ```
 
-Sometimes one interaction changes two things: completing a shipment updates the shipment card *and* the order header above it. `includes` declares that relationship — when this component renders a response, the included component renders too, marked out-of-band (`hx-swap-oob`) so htmx routes it to its own DOM slot by id.
+Sometimes one interaction changes two things: completing a shipment updates the shipment card *and* the order header above it. `brings` declares that relationship — when this component renders a response, the companion renders too, marked out-of-band (`hx-swap-oob`) so htmx routes it to its own DOM slot by id.
 
 A companion is an **OOB-delivered child**: it renders against the same request, and it inherits the primary's params exactly as a child built inside the primary's `build` would — rich values included, so an `Order` the primary already derived is shared, not fetched once per companion. The block, if given, receives the primary's params and returns a *delta* overlaid on that picture for this companion alone (an explicit `nil` clears a value; one companion's delta is invisible to the next). Blockless is simply an empty delta.
 
-Unfiltered inclusions ride every response the component renders in: its own action responses, its SSE pushes, and its arrivals as a [`transfers`](#transfers--actions-that-render-something-else) target. Filters enumerate contexts, and declaring both is a union — either fires:
+Unfiltered companions ride every response the component renders in: its own action responses, its SSE pushes, and its arrivals as a [`transfers`](#transfers--actions-that-render-something-else) target. Filters enumerate contexts, and declaring both is a union — either fires:
 
-- **`on:`** names this component's **own** actions (a symbol or an array). It never matches another component's action names — an action arriving via transfer isn't consulted — and it doesn't apply to pushes. Note that `on:` *replaces* the unfiltered default rather than narrowing it, which is why naming your own [`transfers`](#transfers--actions-that-render-something-else) action works: the companion rides that response even though the target, not you, is what renders. Your *unfiltered* inclusions stay home on a transfer, since "every response I render in" is false when you don't render.
+- **`on:`** names this component's **own** actions (a symbol or an array). It never matches another component's action names — an action arriving via transfer isn't consulted — and it doesn't apply to pushes. Note that `on:` *replaces* the unfiltered default rather than narrowing it, which is why naming your own [`transfers`](#transfers--actions-that-render-something-else) action works: the companion rides that response even though the target, not you, is what renders. Your *unfiltered* companions stay home on a transfer, since "every response I render in" is false when you don't render.
 - **`when: :transferred`** fires only when this component renders as a transfer target: for companions that should ride the arrival, not every response.
 
 **One slot, one fragment.** An out-of-band swap is addressed by DOM id, so two companions resolving to the same id can't both land — the second would swap straight over the first. Weft keeps the first, logs a warning naming both declaration sites, and doesn't render the loser at all: the slot is claimed as each fragment builds, so a companion that has already lost stops before its own `build` body runs. The primary claims its slot first, so a companion can never swap over the fragment the response is actually about. Companions differing in an [identifying param](#params) derive different ids and both ride, which is what makes a left eye and a right eye a pair rather than a clash. The case worth knowing: two declarations whose deltas differ only in a *non*-identifying value look distinct in the source and collide in the DOM. When a transferring component and its target both include the same companion, the target's declaration keeps the slot — the response is the target's.
@@ -363,7 +363,7 @@ end
 
 `Weft.redirect` takes a `Weft::Page` subclass plus params (interpolated into the page's path pattern), or a plain URL string. The Router handles transport: htmx requests get an `HX-Redirect` header, traditional form submissions get a 302.
 
-Like every verb block — the action callable here, and the blocks for `transfers`, `recovers`, and `includes` — the callable runs against a [sandboxed `self`](#derives--lazy-server-side-derivations): `params` and lexical constants are in reach and `Kernel` is available, but nothing component-specific is. Do your side effects through the objects you call (`Oms::AdvanceOrder.call(order)`), never through a method on the component.
+Like every verb block — the action callable here, and the blocks for `transfers`, `recovers`, and `brings` — the callable runs against a [sandboxed `self`](#derives--lazy-server-side-derivations): `params` and lexical constants are in reach and `Kernel` is available, but nothing component-specific is. Do your side effects through the objects you call (`Oms::AdvanceOrder.call(order)`), never through a method on the component.
 
 If the callable raises, the error walks the component's recovery chain — see [Error handling](error-handling.md).
 

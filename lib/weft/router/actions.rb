@@ -15,9 +15,9 @@ module Weft
     # destructive-swap header before delegating.
     #
     # Depends on Router internals: `filtered_params`, `handle_redirect`,
-    # `apply_trigger_header`, `render_error`, `headers`, and the
-    # OOB-include slice's `render_companions` / `applicable_inclusions` /
-    # `explicitly_named_inclusions`.
+    # `apply_announcement_header`, `render_error`, `headers`, and the
+    # companion slice's `render_companions` / `applicable_companions` /
+    # `explicitly_named_companions`.
     module Actions
       private
 
@@ -78,12 +78,12 @@ module Weft
       #
       # Delete-swap actions skip the primary render entirely: htmx discards
       # the body on a delete swap, and the component's record is typically
-      # gone by now. OOB includes still ride (a 200, never a 204 — htmx
+      # gone by now. Companions still ride (a 200, never a 204 — htmx
       # refuses to swap 204s, which would skip the delete itself).
       def render_action_response(action, component_class, state, returned)
         overlay = returned.is_a?(Hash) ? returned : {}
         composed = state.overlay(overlay)
-        apply_trigger_header(component_class, action.name)
+        apply_announcement_header(component_class, action.name)
         slots = Set.new
         primary = build_action_primary(action, overlay, composed, slots)
         (primary ? primary.to_s : "") +
@@ -109,8 +109,8 @@ module Weft
       def target_companions(action, component_class, primary, composed, overlay)
         context = action.renders.equal?(component_class) ? :action : :transfer
         env = { universe: filtered_params, overlays: overlay, branch_bag: primary&.params }
-        view = includes_view(primary, composed, overlay)
-        applicable_inclusions(action.renders, context, action.name).map { |inc| [inc, view, env] }
+        view = companion_view(primary, composed, overlay)
+        applicable_companions(action.renders, context, action.name).map { |inc| [inc, view, env] }
       end
 
       # The declaring component's companions on a transfer. This branch
@@ -120,7 +120,7 @@ module Weft
       # declarer and so no rich values exist on this path.
       def declarer_companions(component_class, action_name, composed, overlay)
         env = { universe: filtered_params, overlays: overlay }
-        explicitly_named_inclusions(component_class, action_name).map { |inc| [inc, composed, env] }
+        explicitly_named_companions(component_class, action_name).map { |inc| [inc, composed, env] }
       end
 
       # Delete-swap actions skip the primary render: htmx discards the body
@@ -142,10 +142,10 @@ module Weft
                                                                    branch_bag: composed, slots: slots)
       end
 
-      # The params view an inclusion block receives: the rendered primary's
+      # The params view a companion block receives: the rendered primary's
       # bag with the overlay applied (undeclared delta keys stay readable).
       # On a delete-swap there is no primary — the composed state stands in.
-      def includes_view(primary, composed, overlay)
+      def companion_view(primary, composed, overlay)
         primary ? primary.params.overlay(overlay) : composed
       end
 

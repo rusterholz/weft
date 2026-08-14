@@ -274,7 +274,7 @@ class RSVPForm < Weft::Component
   param :answer
   param :error_message
 
-  includes AttendeeList
+  brings AttendeeList
 
   performs :submit do |params|
     event = EventStore.find(params.event_id)
@@ -333,7 +333,7 @@ The `hx-*` attributes make the form submit in place. The plain `action` and `met
 
 **Validation is a raise plus a recovery.** The action raises `Weft::Unprocessable`; the `recovers` declaration catches it, and its block returns extra params to merge into the re-render — here, `error_message`, which `build` displays when present. Note that `error_message` is itself a declared param: recovery data flows through the same schema as everything else. The response even carries a semantically-correct 422 status. See [Error handling](error-handling.md) for how far this system goes.
 
-**`includes AttendeeList` updates the list in the same response.** Submitting the form changes data that *another* component displays. This declaration says: whenever RSVPForm responds to an action, render AttendeeList too, marked so it swaps into its own place in the page (by that derived DOM id — this is why the convention exists). One interaction, two regions updated, zero JavaScript.
+**`brings AttendeeList` updates the list in the same response.** Submitting the form changes data that *another* component displays. This declaration says: whenever RSVPForm responds to an action, render AttendeeList too, marked so it swaps into its own place in the page (by that derived DOM id — this is why the convention exists). One interaction, two regions updated, zero JavaScript.
 
 ## 8. Going live
 
@@ -363,7 +363,7 @@ You've built pages that route themselves, components that compose and self-addre
 
 **The reference docs**, when you want the full picture:
 
-- [The Weft DSL](dsl.md) — every verb (`transfers`, `pushes`, `dismisses`, `triggers`…), the element kwargs, and the interaction presets (tooltips, modals, lazy loading) this tutorial didn't touch.
+- [The Weft DSL](dsl.md) — every verb (`transfers`, `pushes`, `dismisses`, `announces`…), the element kwargs, and the interaction presets (tooltips, modals, lazy loading) this tutorial didn't touch.
 - [Arbre: the HTML layer](arbre.md) — the HTML builder underneath every `build` method: its argument conventions, text handling, container patterns, and gotchas beyond `para`.
 - [Routing](routing.md) — how paths derive, what's routable, collision detection.
 - [Error handling](error-handling.md) — the error family, recovery chains, branding your error pages.

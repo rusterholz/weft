@@ -1293,21 +1293,21 @@ RSpec.describe Weft::Component do
       expect(component_class).not_to be_routable
     end
 
-    it "is not routable with only triggers (response modifier, not addressable)" do
+    it "is not routable with only announces (response modifier, not addressable)" do
       component_class = Class.new(described_class) do
         def self.name = "OnlyTriggers"
-        triggers "some-event"
+        announces "some-event"
       end
 
       expect(component_class).not_to be_routable
     end
 
-    it "is not routable with only includes (response modifier, not addressable)" do
+    it "is not routable with only brings (response modifier, not addressable)" do
       target = Class.new(described_class) { def self.name = "IncTarget2" }
       component_class = Class.new(described_class) do
         def self.name = "OnlyIncludes"
       end
-      component_class.includes(target)
+      component_class.brings(target)
 
       expect(component_class).not_to be_routable
     end
@@ -1789,16 +1789,16 @@ RSpec.describe Weft::Component do
     end
   end
 
-  describe "includes DSL" do
-    it "stores inclusions with component class" do
+  describe "brings DSL" do
+    it "stores companions with component class" do
       included = Class.new(described_class) { def self.name = "IncTarget" }
       component_class = Class.new(described_class) do
         def self.name = "IncSource"
       end
-      component_class.includes(included)
+      component_class.brings(included)
 
-      expect(component_class.inclusions.size).to eq(1)
-      expect(component_class.inclusions.first[:component_class]).to eq(included)
+      expect(component_class.companions.size).to eq(1)
+      expect(component_class.companions.first[:component_class]).to eq(included)
     end
 
     it "stores an on: filter, normalized to an array" do
@@ -1806,9 +1806,9 @@ RSpec.describe Weft::Component do
       component_class = Class.new(described_class) do
         def self.name = "IncFilterSource"
       end
-      component_class.includes(included, on: :advance)
+      component_class.brings(included, on: :advance)
 
-      expect(component_class.inclusions.first[:on]).to eq([:advance])
+      expect(component_class.companions.first[:on]).to eq([:advance])
     end
 
     it "accepts an array of action names for on:" do
@@ -1816,9 +1816,9 @@ RSpec.describe Weft::Component do
       component_class = Class.new(described_class) do
         def self.name = "IncMultiOnSource"
       end
-      component_class.includes(included, on: %i[advance retreat])
+      component_class.brings(included, on: %i[advance retreat])
 
-      expect(component_class.inclusions.first[:on]).to eq(%i[advance retreat])
+      expect(component_class.companions.first[:on]).to eq(%i[advance retreat])
     end
 
     it "stores a when: filter, normalized to an array" do
@@ -1826,9 +1826,9 @@ RSpec.describe Weft::Component do
       component_class = Class.new(described_class) do
         def self.name = "IncWhenSource"
       end
-      component_class.includes(included, when: :transferred)
+      component_class.brings(included, when: :transferred)
 
-      expect(component_class.inclusions.first[:when]).to eq([:transferred])
+      expect(component_class.companions.first[:when]).to eq([:transferred])
     end
 
     it "rejects an unknown when: value at declaration" do
@@ -1837,7 +1837,7 @@ RSpec.describe Weft::Component do
         def self.name = "IncBadWhenSource"
       end
 
-      expect { component_class.includes(included, when: :pushed) }.
+      expect { component_class.brings(included, when: :pushed) }.
         to raise_error(Weft::InvalidDefinition, /:transferred/)
     end
 
@@ -1847,7 +1847,7 @@ RSpec.describe Weft::Component do
         def self.name = "IncBadKwSource"
       end
 
-      expect { component_class.includes(included, whenn: :transferred) }.
+      expect { component_class.brings(included, whenn: :transferred) }.
         to raise_error(ArgumentError, /whenn/)
     end
 
@@ -1856,35 +1856,35 @@ RSpec.describe Weft::Component do
       component_class = Class.new(described_class) do
         def self.name = "IncMapSource"
       end
-      component_class.includes(included) { |params| { id: params[:order_id] } }
+      component_class.brings(included) { |params| { id: params[:order_id] } }
 
-      expect(component_class.inclusions.first[:block]).to be_a(Proc)
+      expect(component_class.companions.first[:block]).to be_a(Proc)
     end
 
-    it "inherits inclusions from parent classes" do
+    it "inherits companions from parent classes" do
       included = Class.new(described_class) { def self.name = "InheritedInc" }
       parent = Class.new(described_class) do
         def self.name = "IncParent"
       end
-      parent.includes(included)
+      parent.brings(included)
       child = Class.new(parent) do
         def self.name = "IncChild"
       end
 
-      expect(child.inclusions.size).to eq(1)
-      expect(parent.inclusions.size).to eq(1)
+      expect(child.companions.size).to eq(1)
+      expect(parent.companions.size).to eq(1)
     end
 
-    it "accumulates multiple inclusions" do
+    it "accumulates multiple companions" do
       inc_a = Class.new(described_class) { def self.name = "IncA" }
       inc_b = Class.new(described_class) { def self.name = "IncB" }
       component_class = Class.new(described_class) do
         def self.name = "MultiInc"
       end
-      component_class.includes(inc_a)
-      component_class.includes(inc_b)
+      component_class.brings(inc_a)
+      component_class.brings(inc_b)
 
-      expect(component_class.inclusions.size).to eq(2)
+      expect(component_class.companions.size).to eq(2)
     end
   end
 

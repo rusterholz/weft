@@ -2,7 +2,7 @@
 
 module Drills
   # Renders happily on the page, and fails when it rides along as a companion.
-  # CompanionHostComponent's `includes` block hands it `breaking: true`, which
+  # CompanionHostComponent's `brings` block hands it `breaking: true`, which
   # is the only thing that makes it raise — so the drill can show the same
   # component in both states without a global flag.
   class FlakyCompanion < Weft::Component

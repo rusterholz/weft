@@ -16,16 +16,16 @@ module Oms
     # companions, two different reasons to ride. (The details card also hears
     # about advances, but by subscribing to the event below rather than by
     # riding along — it isn't part of that response.)
-    includes Logistics::ShipmentsCard, on: :advance
-    includes Oms::OrderDetailsCard, when: :transferred
+    brings Logistics::ShipmentsCard, on: :advance
+    brings Oms::OrderDetailsCard, when: :transferred
 
     # Two announcements, each mapped to the action that earns it. Advancing
     # moves the order through the pipeline; opening the editor changes who
     # owns this region and nothing else. Without `on:` a single declaration
     # would fire on both, and everything listening for a status change would
     # refetch every time someone clicked Edit.
-    triggers "order-updated", on: :advance
-    triggers "order-editing", on: :edit
+    announces "order-updated", on: :advance
+    announces "order-editing", on: :edit
 
     performs :advance do |params|
       order = params.order
