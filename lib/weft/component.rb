@@ -3,19 +3,23 @@
 require "arbre"
 require "uri"
 
+require "active_support/core_ext/string/inflections"
+
 require "weft/context"
 require "weft/context/interception"
 require "weft/context/traversal"
 require "weft/dsl/actions"
 require "weft/dsl/containers"
 require "weft/dsl/companions"
+require "weft/dsl/identity"
 require "weft/dsl/params"
 require "weft/dsl/recoveries"
 require "weft/dsl/announcements"
 require "weft/dsl/updates"
 require "weft/error"
 require "weft/registry"
-require "weft/registry/eligibility"
+require "weft/resolver"
+require "weft/addressing"
 require "weft/router/streaming"
 
 module Weft
@@ -24,12 +28,13 @@ module Weft
   # - Convention-based DOM ID and partial URL
   # - Auto-registration with the global Registry
   class Component < Arbre::Component
-    extend Weft::Registry::Eligibility
+    extend Weft::Addressing
 
     include Weft::DSL::Params
     include Weft::DSL::Recoveries
     include Weft::DSL::Announcements
     include Weft::DSL::Companions
+    include Weft::DSL::Identity
     include Weft::DSL::Updates
     include Weft::DSL::Actions
     include Weft::DSL::Containers
@@ -59,7 +64,7 @@ module Weft
       end
 
       # Inferred routability from declared state, ignoring any explicit
-      # override (see Weft::Registry::Eligibility#routable?). A component is
+      # override (see Weft::Addressing#routable?). A component is
       # independently addressable when it declares interactive behavior —
       # params, actions, refresh triggers, or push config. Pure
       # presentational components (none of those) register but are never served.
@@ -87,28 +92,65 @@ module Weft
         end.to_s
       end
 
-      # Value classes whose instances may suffix a DOM id. An allowlist:
-      # arrays, hashes, and rich objects stringify to selector-hostile junk
-      # ("member-roster-[]" breaks querySelector), so only honest scalars ride.
+      # Value classes an identifying param may hold. An allowlist: arrays,
+      # hashes, and rich objects stringify to selector-hostile junk, and an id
+      # derived from one could never be reconstructed from the wire.
       SCALAR_ID_CLASSES = [String, Symbol, Numeric, TrueClass, FalseClass].freeze
 
-      # Compute the would-be DOM ID for an instance of this class given a
-      # plain params hash, without instantiating. Single source of truth for
-      # the convention; the instance method delegates, and the Router falls
-      # back to this when it can't construct an instance to ask.
-      # The primary value suffixes only when it's a non-blank scalar — nil,
-      # "", and non-scalar values all derive the same bare class id, so a
-      # component's identity is stable across the ways "no value" arrives.
+      # Compute the would-be DOM ID for an instance of this class from a params
+      # bag, without instantiating. Single source of truth; the instance method
+      # delegates, and the Router falls back here when it cannot construct an
+      # instance to ask.
+      #
+      # The id is the class stem followed by one slot per declared identifier,
+      # in declaration order. A component that identifies by nothing wears its
+      # stem alone.
       def weft_dom_id_for(params = {})
-        base = name.underscore.tr("/", "-").tr("_", "-")
-        primary_value = params.respond_to?(:values) ? params.values.first : nil
-        identity_suffix?(primary_value) ? "#{base}-#{primary_value}" : base
+        base = addressing_stem.underscore.tr("/", "-").tr("_", "-")
+        return base if identifiers.empty?
+
+        "#{base}-#{identifiers.map { |key| identity_segment(params, key) }.join('-')}"
       end
+
+      # @api private
+      # This class's name as its addresses are built from it — the route path
+      # and the DOM id read the same stem, so the two can no longer drift.
+      # Public only so a custom +component_path+ proc can reuse weft's own
+      # stem rule; not part of the supported surface otherwise.
+      def addressing_stem = stem(name, "Component")
 
       private
 
-      def identity_suffix?(value)
-        SCALAR_ID_CLASSES.any? { |klass| value.is_a?(klass) } && !value.to_s.empty?
+      # One slot of the id. Identifying values are sanitized into a dash-free
+      # alphabet, so the separator can never occur inside a slot and a doubled
+      # separator can only mean an empty one — which is why every declared
+      # identifier keeps its slot even when its value is absent. Two components
+      # differing in a value they both leave blank would otherwise collide, and
+      # since M17 a collision drops a companion rather than merely duplicating
+      # an id.
+      #
+      # The one exception is a uuid-typed value, which keeps its dashes: fixed
+      # width means a known boundary, so it cannot blur into its neighbour.
+      def identity_segment(bag, key)
+        value = identity_value(bag, key)
+        return "" if value.nil?
+
+        rendered = value.to_s
+        return rendered.downcase if uuid_identifier?(key, rendered)
+
+        rendered.parameterize.tr("-", "_")
+      end
+
+      def uuid_identifier?(key, value)
+        params.dig(key, :type) == :uuid && Weft::Resolver.uuid?(value)
+      end
+
+      # Wire hashes arrive string-keyed, assembled bags symbol-keyed; identity
+      # reads the same value either way.
+      def identity_value(bag, key)
+        return nil unless bag.respond_to?(:key?)
+
+        bag.key?(key) ? bag[key] : bag[key.to_s]
       end
 
       # Gem-default name-based path derivation, plus the well-formedness guard.
@@ -120,8 +162,9 @@ module Weft
       def default_component_path
         if routable? && name.to_s.demodulize.delete_suffix("Component").empty?
           raise Weft::InvalidDefinition,
-                "#{name.inspect} has no resolvable default component path. " \
-                "Either rename the class with a meaningful stem (e.g. OrdersPanel), " \
+                "#{name.inspect} is routable but named for its kind, so it would publish " \
+                "#{Weft.configuration.component_path.call(self).inspect} — almost certainly not " \
+                "what you want. Either rename the class with a meaningful stem (e.g. OrdersPanel), " \
                 "set self.component_path = \"/your/path\" explicitly, " \
                 "or mark the class abstract! if it isn't meant to route."
         end

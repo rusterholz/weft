@@ -31,23 +31,23 @@ RSpec.describe Weft::Configuration do
     end
 
     it "derives unnamespaced class paths" do
-      stub_const("StatCard", Class.new)
+      stub_const("StatCard", Class.new(Weft::Component))
       expect(config.component_path.call(StatCard)).to eq("/_components/stat_card")
     end
 
     it "derives namespaced class paths from module nesting" do
-      stub_const("Oms::OrderHeader", Class.new)
+      stub_const("Oms::OrderHeader", Class.new(Weft::Component))
       expect(config.component_path.call(Oms::OrderHeader)).to eq("/_components/oms/order_header")
     end
 
     it "handles deeply nested namespaces" do
-      stub_const("Oms::Fulfillment::ShipmentCard", Class.new)
+      stub_const("Oms::Fulfillment::ShipmentCard", Class.new(Weft::Component))
       path = config.component_path.call(Oms::Fulfillment::ShipmentCard)
       expect(path).to eq("/_components/oms/fulfillment/shipment_card")
     end
 
     it "strips a trailing 'Component' suffix from the class name" do
-      stub_const("Oms::OrderHeaderComponent", Class.new)
+      stub_const("Oms::OrderHeaderComponent", Class.new(Weft::Component))
       expect(config.component_path.call(Oms::OrderHeaderComponent)).to eq("/_components/oms/order_header")
     end
   end
@@ -57,7 +57,7 @@ RSpec.describe Weft::Configuration do
       custom = ->(klass) { "/custom/#{klass.name.split('::').last.gsub(/([a-z])([A-Z])/, '\1_\2').downcase}" }
       config.component_path = custom
 
-      stub_const("Oms::OrderHeader", Class.new)
+      stub_const("Oms::OrderHeader", Class.new(Weft::Component))
       expect(config.component_path.call(Oms::OrderHeader)).to eq("/custom/order_header")
     end
 

@@ -14,6 +14,7 @@ RSpec.describe Weft::Router do
     klass = Class.new(Weft::Component) do
       def self.name = "StatCard"
       param :status, default: "all"
+      identifies_by :status
       param :value, default: 0
 
       def build(attributes = {})
@@ -88,6 +89,7 @@ RSpec.describe Weft::Router do
       Class.new(Weft::Component) do
         def self.name = "Oms::OrderHeader"
         param :order_id
+        identifies_by :order_id
 
         def build(attributes = {})
           super
@@ -812,6 +814,7 @@ RSpec.describe Weft::Router do
       Class.new(Weft::Component) do
         def self.name = "FailingCard"
         param :id
+        identifies_by :id
 
         def build(attributes = {})
           super
@@ -1406,6 +1409,7 @@ RSpec.describe Weft::Router do
       Class.new(Weft::Component) do
         def self.name = "IncludedHeader"
         param :order_id
+        identifies_by :order_id
 
         def build(attributes = {})
           super
@@ -1742,6 +1746,7 @@ RSpec.describe Weft::Router do
       thief = Class.new(Weft::Component) do
         def self.name = "SlotThief"
         param :order_id
+        identifies_by :order_id
 
         # An id override aimed squarely at the primary's slot.
         def weft_dom_id = "host-card-#{params.order_id}"
@@ -1754,6 +1759,7 @@ RSpec.describe Weft::Router do
       source = Class.new(Weft::Component) do
         def self.name = "HostCard"
         param :order_id
+        identifies_by :order_id
         performs(:advance) { nil }
 
         def build(attributes = {})
@@ -1791,6 +1797,7 @@ RSpec.describe Weft::Router do
       eye = Class.new(Weft::Component) do
         def self.name = "EyeCard"
         param :side
+        identifies_by :side
 
         def build(attributes = {})
           super
@@ -1800,6 +1807,7 @@ RSpec.describe Weft::Router do
       face = Class.new(Weft::Component) do
         def self.name = "FaceCard"
         param :order_id
+        identifies_by :order_id
         performs(:blink) { nil }
       end
       face.brings(eye, on: :blink) { { side: "right" } }
@@ -1817,6 +1825,7 @@ RSpec.describe Weft::Router do
       Class.new(Weft::Component) do
         def self.name = "BoomCompanion"
         param :order_id
+        identifies_by :order_id
 
         def build(attributes = {})
           super
@@ -1874,6 +1883,7 @@ RSpec.describe Weft::Router do
       relocating = Class.new(Weft::Component) do
         def self.name = "RelocatingHost"
         param :order_id
+        identifies_by :order_id
         performs(:advance) { nil }
       end
       relocating.brings(boom_companion, on: :advance) { { order_id: "elsewhere" } }

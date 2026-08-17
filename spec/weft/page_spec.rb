@@ -376,13 +376,22 @@ RSpec.describe Weft::Page do
       expect(page_class.resolve_page_path).to eq("/admin/reports")
     end
 
-    it "raises a helpful error resolving a page whose name has no usable stem" do
+    it "raises when a page named for its kind is forced routable" do
+      page_class = Class.new(described_class) do
+        def self.name = "Foo::Page"
+        routable!
+      end
+
+      expect { page_class.resolve_page_path }.
+        to raise_error(Weft::InvalidDefinition, /routable but named for its kind.*abstract!/m)
+    end
+
+    it "derives a path for a non-routable page named for its kind (it never routes)" do
       page_class = Class.new(described_class) do
         def self.name = "Foo::Page"
       end
 
-      expect { page_class.resolve_page_path }.
-        to raise_error(Weft::InvalidDefinition, /no resolvable default page_path.*abstract!/m)
+      expect(page_class.resolve_page_path).to eq("/foo/page")
     end
 
     it "raises when parameterized page omits page_path" do

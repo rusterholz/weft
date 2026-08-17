@@ -309,4 +309,188 @@ RSpec.describe Weft::DSL::Params do
       expect(parent.derived_params[:label][:block].call(nil)).to eq("static")
     end
   end
+
+  describe "param DSL" do
+    it "declares attributes with defaults" do
+      component_class = Class.new(Weft::Component) do
+        def self.name = "TestCard"
+        param :status, default: "active"
+      end
+
+      expect(component_class.params).to eq(status: { default: "active" })
+    end
+
+    it "declares attributes without defaults" do
+      component_class = Class.new(Weft::Component) do
+        def self.name = "TestCard"
+        param :order_id
+      end
+
+      expect(component_class.params).to eq(order_id: { default: nil })
+    end
+
+    it "accepts an optional type: kwarg" do
+      component_class = Class.new(Weft::Component) do
+        def self.name = "TestCard"
+        param :page, default: 1, type: :integer
+      end
+
+      expect(component_class.params[:page]).to eq(default: 1, type: :integer)
+    end
+
+    it "coerces a typed param's wire value by declared type, end to end" do
+      component_class = Class.new(Weft::Component) do
+        def self.name = "TypedWireCard"
+        param :page, type: :integer
+
+        def build(attributes = {})
+          super
+          text_node params.page.class.name
+        end
+      end
+
+      html = Weft::Context.new({}, nil, wire_params: { "page" => "2" }) do
+        insert_tag(component_class)
+      end.to_s
+
+      expect(html).to include("Integer")
+    end
+
+    it "accumulates multiple attributes in declaration order" do
+      component_class = Class.new(Weft::Component) do
+        def self.name = "TestCard"
+        param :order_id
+        param :status, default: "pending"
+      end
+
+      expect(component_class.params.keys).to eq(%i[order_id status])
+    end
+
+    it "inherits parent attributes in subclasses" do
+      parent = Class.new(Weft::Component) do
+        def self.name = "BaseCard"
+        param :status
+      end
+      child = Class.new(parent) do
+        def self.name = "SpecialCard"
+        param :priority, default: "low"
+      end
+
+      expect(child.params.keys).to eq(%i[status priority])
+      # Parent is unaffected
+      expect(parent.params.keys).to eq(%i[status])
+    end
+
+    it "an overriding redeclaration takes effect end to end" do
+      parent = Class.new(Weft::Component) do
+        def self.name = "PagedBase"
+        param :per_page, default: 25
+      end
+      child = Class.new(parent) do
+        def self.name = "WidePager"
+        param :per_page, default: 100
+      end
+      component = Weft::Context.new { insert_tag(child) }.children.first
+
+      expect(component.params.per_page).to eq(100)
+      expect(component.weft_url).to eq("/_components/wide_pager?per_page=100")
+    end
+  end
+
+  describe "receives DSL" do
+    it "does not make a component routable" do
+      component_class = Class.new(Weft::Component) do
+        def self.name = "HandOffOnly"
+        receives :order
+      end
+
+      expect(component_class.routable?).to be(false)
+    end
+  end
+
+  describe "derives DSL" do
+    it "does not make a component routable" do
+      component_class = Class.new(Weft::Component) do
+        def self.name = "DeriveOnly"
+        derives(:order) { |_p| nil }
+      end
+
+      expect(component_class.routable?).to be(false)
+    end
+  end
+
+  describe "serialization projection" do
+    let(:order) { Struct.new(:id, :name).new(9, "Crate") }
+
+    it "serializes own wire params only into weft_url — hand-offs stay server-side" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "ManifestCard"
+        param :status
+        receives :order
+      end
+      handed = order
+      component = Weft::Context.new({}, nil, wire_params: { "status" => "hot" }) do
+        insert_tag(klass, order: handed)
+      end.children.first
+
+      expect(component.weft_url).to eq("/_components/manifest_card?status=hot")
+    end
+
+    it "keeps inherited values out of weft_url" do
+      parent_class = Class.new(Weft::Component) do
+        def self.name = "UrlParent"
+        param :region, default: "west"
+      end
+      child_class = Class.new(Weft::Component) do
+        def self.name = "UrlChild"
+        param :status, default: "open"
+      end
+      parent_class.define_method(:build) do |attributes = {}|
+        super(attributes)
+        insert_tag(child_class)
+      end
+
+      ctx = Weft::Context.new { insert_tag(parent_class) }
+      child = ctx.children.first.children.find { |el| el.is_a?(child_class) }
+
+      # region is readable (inheritance axis) but not part of the refresh contract
+      expect(child.weft_url).to eq("/_components/url_child?status=open")
+    end
+
+    it "serializes a handed value through its wire dual — the refresh keeps it" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "DualCard"
+        param :status
+        receives :status
+      end
+      component = Weft::Context.new { insert_tag(klass, status: "fresh") }.children.first
+
+      expect(component.weft_url).to eq("/_components/dual_card?status=fresh")
+    end
+
+    it "derives weft_dom_id from own wire params only, never a hand-off" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "SlipCard"
+        receives :order
+      end
+      handed = order
+      component = Weft::Context.new { insert_tag(klass, order: handed) }.children.first
+
+      expect(component.weft_dom_id).to eq("slip-card")
+    end
+
+    it "keeps hand-offs out of the SSE stream URL" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "TickerCard"
+        param :symbol
+        receives :feed
+        pushes every: 5
+      end
+      component = Weft::Context.new({}, nil, wire_params: { "symbol" => "WEFT" }) do
+        insert_tag(klass, feed: Object.new)
+      end.children.first
+
+      expect(component.get_attribute("sse-connect")).to eq("/_components/ticker_card/_stream?symbol=WEFT")
+    end
+  end
 end
