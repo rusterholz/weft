@@ -12,6 +12,7 @@ module Drills
     # derives from. Identity has to survive the delta, or the error fragment
     # would be addressed to a slot that has never been on the page.
     param :slot, type: :string, default: "drill"
+    identifies_by :slot
     param :breaking, type: :boolean, default: false
 
     def build(attributes = {})

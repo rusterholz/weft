@@ -6,7 +6,8 @@ module Logistics
   class ShipmentManifest < Weft::Component
     builder_method :shipment_manifest
 
-    param :shipment_id, type: :string
+    param :shipment_id, type: :uuid
+    identifies_by :shipment_id
 
     def build(attributes = {})
       super

@@ -9,6 +9,7 @@ module Drills
     builder_method :companion_host
 
     param :runs, type: :integer, default: 0
+    identifies_by :runs
 
     performs(:break_companion) { |params| { runs: params.runs + 1 } }
 

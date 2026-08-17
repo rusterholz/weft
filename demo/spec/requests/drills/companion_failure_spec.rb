@@ -16,7 +16,7 @@ RSpec.describe "Companion failure drill", type: :request do
   end
 
   it "re-renders the host with its counter advanced" do
-    expect(response.body).to include(%(id="drills-companion-host-component-3"))
+    expect(response.body).to include(%(id="drills-companion-host-3"))
     expect(response.body).to include("has run 3 time(s)")
   end
 

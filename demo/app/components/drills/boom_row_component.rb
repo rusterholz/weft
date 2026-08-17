@@ -18,6 +18,7 @@ module Drills
     # :row leads, so identity rides a slug rather than the display text: the
     # DOM id is a selector, and "Doomed row one" is not one.
     param :row, type: :string, default: "doomed"
+    identifies_by :row
     receives :row
     param :label, type: :string, default: "Doomed row"
     receives :label

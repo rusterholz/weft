@@ -9,7 +9,8 @@ module Oms
   class OrderDetailsCard < DropshipUI::Card
     builder_method :order_details_card
 
-    param :order_id, type: :string
+    param :order_id, type: :uuid
+    identifies_by :order_id
 
     derives(:order) { |p| Oms::Order.find(p.order_id) }
 

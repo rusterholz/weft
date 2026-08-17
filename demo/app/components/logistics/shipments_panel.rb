@@ -7,6 +7,7 @@ module Logistics
     PER_PAGE = 25
 
     param :page, default: 1, type: :integer
+    identifies_by :page
 
     def build(attributes = {})
       super

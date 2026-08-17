@@ -7,7 +7,8 @@ module Logistics
   class ShipmentSummary < Weft::Component
     builder_method :shipment_summary
 
-    param :shipment_id, type: :string
+    param :shipment_id, type: :uuid
+    identifies_by :shipment_id
 
     def build(attributes = {})
       super

@@ -10,6 +10,7 @@ module Oms
     builder_method :order_form
 
     param :customer_name, type: :string
+    identifies_by :customer_name
     param :address_line_1, type: :string # rubocop:disable Naming/VariableNumber
     param :city, type: :string
     param :state, type: :string

@@ -4,7 +4,8 @@ module Delivery
   class DriverAssignmentSection < Weft::Component
     builder_method :driver_assignment_section
 
-    param :driver_id, type: :string
+    param :driver_id, type: :uuid
+    identifies_by :driver_id
 
     derives(:driver) { |p| Delivery::Driver.find(p.driver_id) }
     derives(:shipment) { |p| Logistics::Shipment.find_by(id: p.driver.current_shipment_id) }

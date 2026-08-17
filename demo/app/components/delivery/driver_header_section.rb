@@ -4,7 +4,8 @@ module Delivery
   class DriverHeaderSection < Weft::Component
     builder_method :driver_header_section
 
-    param :driver_id, type: :string
+    param :driver_id, type: :uuid
+    identifies_by :driver_id
 
     derives(:driver) { |p| Delivery::Driver.find(p.driver_id) }
 
