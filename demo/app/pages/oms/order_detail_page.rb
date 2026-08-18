@@ -4,7 +4,7 @@ module Oms
   class OrderDetailPage < ::ApplicationPage
     self.page_path = "/orders/:order_id"
 
-    param :order_id, type: :string
+    param :order_id, type: :uuid
 
     derives(:order) { |p| Oms::Order.includes(:line_items).find(p.order_id) }
 

@@ -4,7 +4,7 @@ module Logistics
   class ShipmentDetailPage < ::ApplicationPage
     self.page_path = "/shipments/:shipment_id"
 
-    param :shipment_id, type: :string
+    param :shipment_id, type: :uuid
 
     derives(:shipment) { |p| Logistics::Shipment.includes(:warehouse).find(p.shipment_id) }
     derives(:order) { |p| Oms::Order.find(p.shipment.order_id) }

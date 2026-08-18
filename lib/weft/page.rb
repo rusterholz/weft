@@ -13,7 +13,7 @@ require "weft/error"
 require "weft/page/assets"
 require "weft/page/head"
 require "weft/registry"
-require "weft/registry/eligibility"
+require "weft/addressing"
 
 module Weft
   # Document shell component. Renders the full HTML skeleton (doctype,
@@ -35,7 +35,7 @@ module Weft
   # abstract! to opt out — typical for an intermediate base class that hosts
   # shared assets and helpers but isn't itself a destination.
   class Page < Arbre::Component
-    extend Weft::Registry::Eligibility
+    extend Weft::Addressing
 
     include Weft::Context::Interception
     include Weft::DSL::Params
@@ -110,8 +110,14 @@ module Weft
         return true if instance_variable_defined?(:@page_path)
         return false if params.any?
 
-        !name.to_s.delete_suffix("Page").demodulize.empty?
+        !kind_named?
       end
+
+      # @api private
+      # This page's name as its path is built from it — the same derivation
+      # Component uses for its own path and DOM id. Public only so a custom
+      # path proc can reuse weft's own stem rule.
+      def addressing_stem = stem(name, "Page")
 
       def inherited(subclass)
         super
@@ -132,22 +138,32 @@ module Weft
       private
 
       def default_page_path
-        if params.any?
-          raise Weft::InvalidDefinition,
-                "#{name} declares params but no explicit page_path. " \
-                "Set self.page_path = \"/your/path/:#{params.keys.first}\""
-        end
+        raise_paramful_page_path! if params.any?
 
-        stem = name.to_s.delete_suffix("Page")
-        if stem.demodulize.empty?
-          raise Weft::InvalidDefinition,
-                "#{name.inspect} has no resolvable default page_path. " \
-                "Either rename the class with a meaningful stem (e.g. DashboardPage), " \
-                "set self.page_path = \"/your/path\" explicitly, " \
-                "or mark the class abstract! if it isn't meant to route."
-        end
+        path = "/#{addressing_stem.underscore}"
+        # A page named for its kind has no stem of its own. That is a fine
+        # reason not to route it (inferred_routable? says so) and a bad reason
+        # to refuse it a path — so only a forced-routable one is an error.
+        raise_kind_named_page_path!(path) if routable? && kind_named?
 
-        "/#{stem.underscore}"
+        path
+      end
+
+      def kind_named? = name.to_s.delete_suffix("Page").demodulize.empty?
+
+      def raise_paramful_page_path!
+        raise Weft::InvalidDefinition,
+              "#{name} declares params but no explicit page_path. " \
+              "Set self.page_path = \"/your/path/:#{params.keys.first}\""
+      end
+
+      def raise_kind_named_page_path!(path)
+        raise Weft::InvalidDefinition,
+              "#{name.inspect} is routable but named for its kind, so it would serve #{path.inspect} " \
+              "— almost certainly not what you want. " \
+              "Either rename the class with a meaningful stem (e.g. DashboardPage), " \
+              "set self.page_path = \"/your/path\" explicitly, " \
+              "or mark the class abstract! if it isn't meant to route."
       end
     end
 

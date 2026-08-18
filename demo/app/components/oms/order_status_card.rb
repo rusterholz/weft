@@ -9,6 +9,7 @@ module Oms
     builder_method :order_status_card
 
     param :status, type: :string
+    identifies_by :status
     receives :status
 
     derives(:label) { |p| p.status.to_s.capitalize }

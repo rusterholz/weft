@@ -4,7 +4,7 @@ module Delivery
   class DriverDetailPage < ::ApplicationPage
     self.page_path = "/drivers/:driver_id"
 
-    param :driver_id, type: :string
+    param :driver_id, type: :uuid
 
     derives(:driver) { |p| Delivery::Driver.find(p.driver_id) }
 

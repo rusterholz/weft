@@ -20,10 +20,24 @@ module Weft
       float: { coerce: :to_f.to_proc, classes: [Float] },
       boolean: { coerce: ->(v) { [true, "true", "1"].include?(v) },
                  classes: [TrueClass, FalseClass] },
-      decimal: { coerce: :to_d.to_proc, classes: [BigDecimal] }
+      decimal: { coerce: :to_d.to_proc, classes: [BigDecimal] },
+      # Downcased because a UUID is case-insensitive: the same record handed
+      # back in either case must be the same component, not two.
+      uuid: { coerce: ->(v) { v.to_s.downcase }, classes: [String] }
     }.freeze
 
+    # Canonical 8-4-4-4-12. Identity renders a uuid-typed value with its
+    # dashes intact, which is safe *because the shape is fixed* — a segment
+    # of known width cannot blur the boundary with the one beside it.
+    UUID_FORMAT = /\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/
+
     class << self
+      # Whether a value is a canonical UUID. Asked at render time rather than
+      # trusted from the declaration, so a uuid-typed param holding something
+      # else degrades to ordinary sanitization instead of emitting a segment
+      # with dashes weft cannot vouch for.
+      def uuid?(value) = value.to_s.match?(UUID_FORMAT)
+
       def resolve(component_class, params)
         component_class.params.each_with_object({}) do |(name, meta), result|
           raw = fetch_raw(params, name)

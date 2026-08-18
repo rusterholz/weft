@@ -7,6 +7,7 @@ RSpec.describe Weft::Context do
     Class.new(Weft::Component) do
       def self.name = "OrderHeader"
       param :order_id
+      identifies_by :order_id
       performs(:advance) { nil }
 
       def build(attributes = {})
@@ -436,6 +437,7 @@ RSpec.describe Weft::Context do
       inner_class = Class.new(Weft::Component) do
         def self.name = "InnerCard"
         param :item_id
+        identifies_by :item_id
         performs(:wombat) { nil }
 
         def build(attributes = {})

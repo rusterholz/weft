@@ -6,7 +6,10 @@ require "active_support/core_ext/string/inflections"
 
 module Weft
   class Configuration
-    DEFAULT_COMPONENT_PATH = ->(klass) { "/_components/#{klass.name.to_s.delete_suffix('Component').underscore}" }
+    # Built from the same stem the DOM id reads, so a component's two addresses
+    # cannot drift. A user-supplied proc may call +addressing_stem+ to inherit
+    # that rule, or ignore it and name paths however it likes.
+    DEFAULT_COMPONENT_PATH = ->(klass) { "/_components/#{klass.addressing_stem.underscore}" }
     VALID_HTMX_ERRORS = %i[fragment redirect].freeze
     VALID_INCLUDE_SSE_EXT = [:auto, true, false].freeze
     CLASS_KNOBS = %i[error_component error_page not_found_page not_found_component].freeze

@@ -7,7 +7,8 @@ module Oms
     # The table hands each row its id and preloaded record; the param keeps
     # the id wire-borne (row DOM identity + the cancel payload), and the
     # derives re-fetches the order on a standalone wire render.
-    param :order_id, type: :string
+    param :order_id, type: :uuid
+    identifies_by :order_id
     receives :order_id
     receives :order
     derives(:order) { |p| Oms::Order.includes(:line_items).find(p.order_id) }

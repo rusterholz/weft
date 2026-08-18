@@ -8,6 +8,7 @@ module Oms
     FILTER_STATUSES = %w[submitted processing shipped fulfilled].freeze
 
     param :status, type: :string
+    identifies_by :status
     param :page, default: 1, type: :integer
 
     def build(attributes = {})

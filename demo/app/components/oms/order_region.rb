@@ -13,7 +13,8 @@ module Oms
   class OrderRegion < Weft::Component
     abstract!
 
-    param :order_id, type: :string
+    param :order_id, type: :uuid
+    identifies_by :order_id
 
     derives(:order) { |p| Oms::Order.find(p.order_id) }
   end
