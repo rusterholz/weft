@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "digest"
+
 require "active_support/core_ext/string/inflections"
 
 module Weft
@@ -17,6 +19,16 @@ module Weft
   # defined per base class (its logic differs: components infer from interactive
   # behavior, pages from having a usable path).
   module Addressing
+    # SHA256's hex width — the most a digested identity slot can ask for.
+    MAX_DIGEST_LENGTH = 64
+
+    # Marks a slot weft generated from a value rather than rendering the value
+    # itself, so the two can never be mistaken for each other. Uppercase is
+    # what makes that structural: the sanitizer downcases everything it emits,
+    # exotic uppercase included. It has to be a prefix rather than a rule about
+    # the token's own alphabet, since an all-digit token carries no case at all.
+    DIGEST_MARKER = "D"
+
     # Whether this class auto-routes. An explicit override via {abstract!} or
     # {routable!} takes precedence; otherwise routability is inferred (see the
     # per-class +inferred_routable?+).
@@ -63,6 +75,19 @@ module Weft
     def stem(class_name, suffix)
       trimmed = class_name.to_s.delete_suffix(suffix)
       trimmed.demodulize.empty? ? class_name.to_s : trimmed
+    end
+
+    # An opaque, stable token standing in for +value+ in a DOM address.
+    #
+    # Reads `inspect`, not `to_s`: `to_s` renders `nil` and `""` identically,
+    # and telling those apart is most of what a digested slot is for. SHA256 is
+    # truncated rather than used whole so the width becomes a knob — which is
+    # what lets a page of a hundred thousand rows buy collision resistance that
+    # a page of ten needn't pay for. `String#hash` cannot stand in: it is seeded
+    # per process, so it agrees with itself under one worker and disagrees
+    # under two.
+    def digest(value, length)
+      "#{DIGEST_MARKER}#{::Digest::SHA256.hexdigest(value.inspect)[0, length]}"
     end
   end
 end

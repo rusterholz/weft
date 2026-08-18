@@ -23,6 +23,69 @@ RSpec.describe Weft::DSL::Params do
       expect(klass.params).to eq(status: { default: "active" })
     end
 
+    it "accepts optional digest: kwarg" do
+      klass = Class.new(base_class) do
+        def self.name = "DigestedAttr"
+        param :label, digest: true
+      end
+
+      expect(klass.params[:label]).to eq(default: nil, digest: true)
+    end
+
+    it "accepts a digest length in place of true" do
+      klass = Class.new(base_class) do
+        def self.name = "WideDigestAttr"
+        param :label, digest: 12
+      end
+
+      expect(klass.params[:label]).to eq(default: nil, digest: 12)
+    end
+
+    it "treats digest: false as no digest at all" do
+      klass = Class.new(base_class) do
+        def self.name = "UndigestedAttr"
+        param :label, digest: false
+      end
+
+      expect(klass.params[:label]).to eq(default: nil)
+    end
+
+    it "composes with type:" do
+      klass = Class.new(base_class) do
+        def self.name = "TypedDigestAttr"
+        param :key, type: :uuid, digest: true
+      end
+
+      expect(klass.params[:key]).to eq(default: nil, type: :uuid, digest: true)
+    end
+
+    it "rejects a digest length of zero" do
+      expect do
+        Class.new(base_class) do
+          def self.name = "ZeroDigestAttr"
+          param :label, digest: 0
+        end
+      end.to raise_error(Weft::InvalidDefinition, /digest/)
+    end
+
+    it "rejects a digest wider than the underlying hash" do
+      expect do
+        Class.new(base_class) do
+          def self.name = "OverwideDigestAttr"
+          param :label, digest: 65
+        end
+      end.to raise_error(Weft::InvalidDefinition, /digest/)
+    end
+
+    it "rejects a digest that is neither a flag nor a length" do
+      expect do
+        Class.new(base_class) do
+          def self.name = "BogusDigestAttr"
+          param :label, digest: "wide"
+        end
+      end.to raise_error(Weft::InvalidDefinition, /digest/)
+    end
+
     it "accepts optional type: kwarg" do
       klass = Class.new(base_class) do
         def self.name = "TypedAttr"

@@ -388,6 +388,37 @@ RSpec.describe Weft::Configuration do
     end
   end
 
+  describe "#digest_length" do
+    it "defaults to 8" do
+      expect(config.digest_length).to eq(8)
+    end
+
+    it "accepts a custom length" do
+      config.digest_length = 12
+      expect(config.digest_length).to eq(12)
+    end
+
+    it "accepts the full width of the underlying hash" do
+      config.digest_length = 64
+      expect(config.digest_length).to eq(64)
+    end
+
+    it "rejects zero" do
+      expect { config.digest_length = 0 }.
+        to raise_error(ArgumentError, /digest_length/)
+    end
+
+    it "rejects a width the hash cannot supply" do
+      expect { config.digest_length = 65 }.
+        to raise_error(ArgumentError, /digest_length/)
+    end
+
+    it "rejects a non-integer value" do
+      expect { config.digest_length = 8.5 }.
+        to raise_error(ArgumentError, /digest_length/)
+    end
+  end
+
   describe "gem-level access via Weft.configure" do
     around do |example|
       original = Weft.configuration

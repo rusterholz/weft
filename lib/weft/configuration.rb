@@ -4,6 +4,8 @@ require "logger"
 
 require "active_support/core_ext/string/inflections"
 
+require "weft/addressing"
+
 module Weft
   class Configuration
     # Built from the same stem the DOM id reads, so a component's two addresses
@@ -20,7 +22,8 @@ module Weft
     private_constant :DEFAULT_COMPONENT_PATH, :VALID_HTMX_ERRORS, :VALID_INCLUDE_SSE_EXT,
                      :CLASS_KNOBS, :LOG_LEVELS
 
-    attr_reader :component_path, :htmx_errors, :include_sse_ext, :log_level, :push_attempts, :stream_suffix
+    attr_reader :component_path, :digest_length, :htmx_errors, :include_sse_ext, :log_level, :push_attempts,
+                :stream_suffix
     attr_accessor :include_htmx, :verbose_error_pages, :router_logging
     attr_writer :error_component, :error_page, :not_found_page, :not_found_component
 
@@ -29,6 +32,7 @@ module Weft
     # +Weft.configure { |c| ... }+ rather than constructing this directly.
     def initialize
       @component_path = DEFAULT_COMPONENT_PATH
+      @digest_length = 8
       @include_htmx = true
       @include_sse_ext = :auto
       @router_logging = false
@@ -86,6 +90,21 @@ module Weft
       end
 
       @push_attempts = value
+    end
+
+    # Characters of hash kept in a digested identity segment (see
+    # `param :key, digest: true`). Longer is more collision-resistant and
+    # more DOM id; the default carries a thousand same-class instances on one
+    # page at a one-in-ten-thousand collision chance. Gem-wide default;
+    # override per param via `digest: 12`.
+    def digest_length=(value)
+      unless value.is_a?(Integer) && value.between?(1, Weft::Addressing::MAX_DIGEST_LENGTH)
+        raise ArgumentError,
+              "digest_length must be an integer between 1 and " \
+              "#{Weft::Addressing::MAX_DIGEST_LENGTH}, got #{value.inspect}"
+      end
+
+      @digest_length = value
     end
 
     # The path segment that marks a component's SSE stream endpoint. The leading
