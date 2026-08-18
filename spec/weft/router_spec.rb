@@ -1818,6 +1818,24 @@ RSpec.describe Weft::Router do
         with(/SideCounter companion declared at .+:\d+ was dropped.+already claimed by .+:\d+\./m)
     end
 
+    it "offers digest mode as the fix when the values themselves cannot differ" do
+      # Two distinct values can sanitize to one string, in which case "give
+      # them different values" is advice the developer has already taken.
+      allow(Weft.logger).to receive(:warn)
+      mine = companion_class
+      source = Class.new(Weft::Component) do
+        def self.name = "AdvisingIncluder"
+        param :order_id
+        performs(:advance) { nil }
+      end
+      source.brings(mine)
+      source.brings(mine, on: :advance)
+
+      post "/_components/advising_includer/advance", order_id: "9"
+
+      expect(Weft.logger).to have_received(:warn).with(/digest: true/)
+    end
+
     it "keeps both fragments when two declarations resolve to different DOM ids" do # rubocop:disable RSpec/ExampleLength
       eye = Class.new(Weft::Component) do
         def self.name = "EyeCard"
