@@ -236,8 +236,12 @@ module Weft
       # lands nowhere, which is the honest outcome when we cannot say where it
       # belongs. Component identity is due a design pass of its own; this is a
       # placeholder until it gets one.
+      #
+      # Built from the stem alone: the throwaway suffix already guarantees
+      # uniqueness, so asking identity for slots it has just failed to fill
+      # would only invent blank ones.
       def unresolved_dom_id(component_class)
-        "#{component_class.weft_dom_id_for}-unresolved-#{SecureRandom.hex(4)}"
+        "#{component_class.weft_dom_id_base}-unresolved-#{SecureRandom.hex(4)}"
       end
 
       # A recovery fragment stands in the failing component's place, so it

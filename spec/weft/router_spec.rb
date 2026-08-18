@@ -880,6 +880,31 @@ RSpec.describe Weft::Router do
       expect(last_response.body).to match(/id="unstable-id-unresolved-[0-9a-f]{8}"/)
     end
 
+    # A throwaway id is not an identity — asking identity for slots it cannot
+    # fill would invent blank ones, doubling the separator and warning about a
+    # collision risk that the throwaway suffix has already ruled out.
+    it "builds the unresolved id from the stem alone, not from empty slots" do
+      allow(Weft.logger).to receive(:warn)
+      unstable = Class.new(Weft::Component) do
+        def self.name = "UnstableKeyed"
+        param :order_id
+        identifies_by :order_id
+
+        def build(attributes = {})
+          super
+          raise "build broke"
+        end
+
+        def weft_dom_id = raise("identity broke")
+      end
+      expect(unstable).to be_routable
+
+      get "/_components/unstable_keyed", order_id: "1"
+
+      expect(last_response.body).to match(/id="unstable-keyed-unresolved-[0-9a-f]{8}"/)
+      expect(Weft.logger).not_to have_received(:warn).with(/rendered blank/)
+    end
+
     it "includes a retry button targeting the failing wrapper" do
       get "/_components/failing_card", id: "1"
 
