@@ -130,6 +130,37 @@ RSpec.describe Weft::Autoloading do
       expect(Weft.registry.lookup("/_components/zw_survivor_card")).not_to be_nil
     end
 
+    it "does not reload when no file has changed" do
+      write_class("ZwQuietCard", "zw_quiet_card")
+      Weft.configure_autoloading(paths: [app_dir], reload: true)
+      original = Object.const_get(:ZwQuietCard)
+
+      3.times { tick }
+
+      # An unconditional reload would hand back a fresh class object each time,
+      # discarding every constant in the app to rediscover the same code.
+      expect(Object.const_get(:ZwQuietCard)).to equal(original)
+    end
+
+    it "reloads once when concurrent requests arrive after a single change" do
+      write_class("ZwRaceCard", "zw_race_card")
+      loader = Weft.configure_autoloading(paths: [app_dir], reload: true)
+      counter = Mutex.new
+      reloads = 0
+      allow(loader).to receive(:reload).and_wrap_original do |original_method, *args|
+        counter.synchronize { reloads += 1 }
+        original_method.call(*args)
+      end
+
+      write_class("ZwRaceCard", "zw_race_card", body: "param :x\n  param :y")
+      Array.new(4) { Thread.new { tick } }.each(&:join)
+
+      # Zeitwerk's reload is not thread-safe: unsynchronized, every thread
+      # unloads the world while its siblings are mid-render, which is how a
+      # constant vanishes out from under a request that never touched a file.
+      expect(reloads).to eq(1)
+    end
+
     it "refreshes stale class knobs after the reload" do
       write_class("ZwKnobCard", "zw_knob_card")
       Weft.configure_autoloading(paths: [app_dir], reload: true)
