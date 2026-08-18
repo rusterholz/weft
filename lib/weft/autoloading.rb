@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "active_support/file_update_checker"
+
 require "weft/error"
 require "weft/router"
 
@@ -54,16 +56,37 @@ module Weft
               "(String => String), got #{inflections.inspect}"
       end
 
-      # The dev-mode request hook: reload constants (evicting via on_unload as
-      # they unload), eager-load so everything re-registers, then rebind any
-      # configuration knob left holding a superseded class.
+      # The dev-mode request hook: when a watched file has changed, reload
+      # constants (evicting via on_unload as they unload), eager-load so
+      # everything re-registers, then rebind any configuration knob left
+      # holding a superseded class.
+      #
+      # Two guards, both load-bearing under a threaded server:
+      #
+      # * **Only when something changed.** Reloading on every request unloads
+      #   and rediscovers the whole application to find the same code, and it
+      #   widens the window below for no reason.
+      # * **One at a time.** Zeitwerk's reload is not thread-safe. Without the
+      #   lock, a request can be mid-render while a sibling unloads the world
+      #   underneath it — the constant it reaches for is briefly undefined, so
+      #   it fails with an `uninitialized constant` naming something it never
+      #   touched. Concurrent reloads can also leave the loader itself
+      #   mid-setup. The check belongs inside the lock too: otherwise every
+      #   thread reads "changed" before any of them has reloaded, and they all
+      #   pile in.
       def install_reload_hook(loader)
-        Router.before do
+        lock = Mutex.new
+        watcher = ActiveSupport::FileUpdateChecker.new([], watched_dirs(loader)) do
           loader.reload
           loader.eager_load
           Weft.configuration.refresh_stale_classes!
         end
+
+        Router.before { lock.synchronize { watcher.execute_if_updated } }
       end
+
+      # Zeitwerk's own root directories, watched for Ruby files.
+      def watched_dirs(loader) = loader.dirs.to_h { |dir| [dir, ["rb"]] }
     end
   end
 end
