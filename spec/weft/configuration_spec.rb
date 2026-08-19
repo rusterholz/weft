@@ -388,6 +388,30 @@ RSpec.describe Weft::Configuration do
     end
   end
 
+  describe "#mint_key" do
+    it "defaults to :_mint" do
+      expect(config.mint_key).to eq(:_mint)
+    end
+
+    it "accepts a custom key so a user who genuinely collides can move weft's" do
+      config.mint_key = :_weft_id
+      expect(config.mint_key).to eq(:_weft_id)
+    end
+
+    it "coerces a string to a symbol, since params are symbol-keyed" do
+      config.mint_key = "_tag"
+      expect(config.mint_key).to eq(:_tag)
+    end
+
+    it "rejects a key that is not name-like" do
+      expect { config.mint_key = "not a name" }.to raise_error(ArgumentError, /mint_key/)
+    end
+
+    it "rejects a non-string, non-symbol key" do
+      expect { config.mint_key = 42 }.to raise_error(ArgumentError, /mint_key/)
+    end
+  end
+
   describe "#digest_length" do
     it "defaults to 8" do
       expect(config.digest_length).to eq(8)

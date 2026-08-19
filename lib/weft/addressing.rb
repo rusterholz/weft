@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "digest"
+require "securerandom"
 
 require "active_support/core_ext/string/inflections"
 
@@ -28,6 +29,40 @@ module Weft
     # exotic uppercase included. It has to be a prefix rather than a rule about
     # the token's own alphabet, since an all-digit token carries no case at all.
     DIGEST_MARKER = "D"
+
+    # Marks a slot weft issued from nothing, as DIGEST_MARKER marks one it
+    # derived from a value. Disjoint from that marker and from the sanitizer's
+    # output alike, so the three kinds of slot can never be read for each other.
+    MINT_MARKER = "M"
+
+    MINT_ENTROPY_BYTES = 4
+    MINT_FORMAT = /\A#{MINT_MARKER}\h{#{MINT_ENTROPY_BYTES * 2}}\z/
+
+    class << self
+      # A token standing in for a component that has no identifying value at
+      # all. Issued once, at first render, and carried back over the wire from
+      # then on — unlike a digest, there is nothing to recompute it from, so
+      # losing it means losing the identity.
+      def mint = "#{MINT_MARKER}#{SecureRandom.hex(MINT_ENTROPY_BYTES)}"
+
+      # Whether +value+ is a token this module issued. A mint arrives from the
+      # wire, where anything can be typed, so it is checked rather than trusted
+      # before it reaches an id attribute.
+      def mint?(value) = value.to_s.match?(MINT_FORMAT)
+
+      # An opaque, stable token standing in for +value+ in a DOM address.
+      #
+      # Reads `inspect`, not `to_s`: `to_s` renders `nil` and `""` identically,
+      # and telling those apart is most of what a digested slot is for. SHA256 is
+      # truncated rather than used whole so the width becomes a knob — which is
+      # what lets a page of a hundred thousand rows buy collision resistance that
+      # a page of ten needn't pay for. `String#hash` cannot stand in: it is seeded
+      # per process, so it agrees with itself under one worker and disagrees
+      # under two.
+      def digest(value, length)
+        "#{DIGEST_MARKER}#{::Digest::SHA256.hexdigest(value.inspect)[0, length]}"
+      end
+    end
 
     # Whether this class auto-routes. An explicit override via {abstract!} or
     # {routable!} takes precedence; otherwise routability is inferred (see the
@@ -75,19 +110,6 @@ module Weft
     def stem(class_name, suffix)
       trimmed = class_name.to_s.delete_suffix(suffix)
       trimmed.demodulize.empty? ? class_name.to_s : trimmed
-    end
-
-    # An opaque, stable token standing in for +value+ in a DOM address.
-    #
-    # Reads `inspect`, not `to_s`: `to_s` renders `nil` and `""` identically,
-    # and telling those apart is most of what a digested slot is for. SHA256 is
-    # truncated rather than used whole so the width becomes a knob — which is
-    # what lets a page of a hundred thousand rows buy collision resistance that
-    # a page of ten needn't pay for. `String#hash` cannot stand in: it is seeded
-    # per process, so it agrees with itself under one worker and disagrees
-    # under two.
-    def digest(value, length)
-      "#{DIGEST_MARKER}#{::Digest::SHA256.hexdigest(value.inspect)[0, length]}"
     end
   end
 end

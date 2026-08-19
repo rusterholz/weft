@@ -22,8 +22,8 @@ module Weft
     private_constant :DEFAULT_COMPONENT_PATH, :VALID_HTMX_ERRORS, :VALID_INCLUDE_SSE_EXT,
                      :CLASS_KNOBS, :LOG_LEVELS
 
-    attr_reader :component_path, :digest_length, :htmx_errors, :include_sse_ext, :log_level, :push_attempts,
-                :stream_suffix
+    attr_reader :component_path, :digest_length, :htmx_errors, :include_sse_ext, :log_level, :mint_key,
+                :push_attempts, :stream_suffix
     attr_accessor :include_htmx, :verbose_error_pages, :router_logging
     attr_writer :error_component, :error_page, :not_found_page, :not_found_component
 
@@ -33,6 +33,7 @@ module Weft
     def initialize
       @component_path = DEFAULT_COMPONENT_PATH
       @digest_length = 8
+      @mint_key = :_mint
       @include_htmx = true
       @include_sse_ext = :auto
       @router_logging = false
@@ -90,6 +91,22 @@ module Weft
       end
 
       @push_attempts = value
+    end
+
+    # The param key weft declares for itself on a `unique!` component, carrying
+    # that component's minted token. Move it if it collides with a key of your
+    # own. Read wherever it is used rather than recorded at declaration, so a
+    # change here reaches classes that are already loaded.
+    def mint_key=(value)
+      unless value.is_a?(Symbol) || value.is_a?(String)
+        raise ArgumentError, "mint_key must be a Symbol or String, got #{value.inspect}"
+      end
+      unless value.to_s.match?(/\A\w+\z/)
+        raise ArgumentError,
+              "mint_key must be a usable param name, got #{value.inspect}"
+      end
+
+      @mint_key = value.to_sym
     end
 
     # Characters of hash kept in a digested identity segment (see

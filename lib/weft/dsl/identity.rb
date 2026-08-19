@@ -94,7 +94,7 @@ module Weft
         def identity_segment(bag, key)
           value = identity_value(bag, key)
           length = digest_length_for(key)
-          return digest(value, length) if length
+          return Weft::Addressing.digest(value, length) if length
 
           sanitize_identifier(value, key)
         end
