@@ -2,6 +2,7 @@
 
 require "active_support/core_ext/string/inflections"
 
+require "weft/error"
 require "weft/resolver"
 
 module Weft
@@ -50,15 +51,65 @@ module Weft
         # A component that declares nothing has no identity of its own: its id
         # is its class name alone. Declare `unique!` to be handed one.
         def identifies_by(*names)
-          @own_identifiers = names
+          declare_identity!(names)
         end
 
-        # The params composing this component's identity (own, else inherited).
-        def identifiers
-          return @own_identifiers if instance_variable_defined?(:@own_identifiers)
-          return superclass.identifiers if superclass.respond_to?(:identifiers)
+        # Assert that this component needs a slot of its own on the page while
+        # having nothing to name it by — a badge some action swaps into, a
+        # panel that exists once per page. Weft issues it a token at first
+        # render and carries that token on the wire from then on.
+        #
+        #   unique!
+        #
+        # Sugar for "declare a mint param and identify by it", and like
+        # `identifies_by` it replaces any identity inherited from above.
+        #
+        # Uniqueness says nothing about routing: this declaration deliberately
+        # does not publish an endpoint, since weft adding a param behind your
+        # back is no reason for a public GET to appear. A component that wants
+        # one declares something that earns it, or says `routable!`.
+        def unique!
+          declare_identity!(:unique)
+        end
 
-          []
+        # Whether this component carries a mint (own declaration, else inherited).
+        def unique? = own_identity == :unique
+
+        # The params composing this component's identity (own, else inherited).
+        # The mint's key is read here rather than recorded at declaration, so
+        # moving {Weft::Configuration#mint_key} reaches loaded classes too.
+        def identifiers
+          case own_identity
+          when :unique then [Weft.configuration.mint_key]
+          when Array then own_identity
+          else []
+          end
+        end
+
+        # Weft declares the mint on the class's behalf. It is a param like any
+        # other — resolution, defaults and serialization all iterate this hash,
+        # and the mint has to serialize or it could not ride back — but it is
+        # marked as weft's own, so it never counts as declared surface.
+        #
+        # Present if and only if the class is unique: a subclass that overrides
+        # `unique!` with `identifies_by` would otherwise keep inheriting the
+        # mint through the ordinary param chain and carry a key it identifies
+        # by nothing.
+        def params
+          declared = super
+          return declared.except(Weft.configuration.mint_key) unless unique?
+
+          declared.merge(Weft.configuration.mint_key => { default: nil, internal: true })
+        end
+
+        # This class's own identity declaration, else the nearest ancestor's.
+        # One slot for both verbs: that is what makes a subclass's declaration
+        # replace its parent's wholesale, whichever verb either used.
+        def own_identity
+          return @own_identity if instance_variable_defined?(:@own_identity)
+          return superclass.own_identity if superclass.respond_to?(:own_identity)
+
+          nil
         end
 
         # Compute the would-be DOM ID for an instance of this class from a params
@@ -85,6 +136,18 @@ module Weft
         def weft_dom_id_base = addressing_stem.underscore.tr("/", "-").tr("_", "-")
 
         private
+
+        # Two identity declarations in one class body are contradictory
+        # assertions, not a precedence puzzle — refuse rather than pick.
+        def declare_identity!(declaration)
+          if instance_variable_defined?(:@own_identity)
+            raise Weft::InvalidDefinition,
+                  "#{name} declares its identity twice — `unique!` and `identifies_by` are " \
+                  "alternatives, and a class states one of them once"
+          end
+
+          @own_identity = declaration
+        end
 
         # One slot of the id: an opaque token if the param declared `digest:`,
         # otherwise the value itself, sanitized. Every declared identifier keeps

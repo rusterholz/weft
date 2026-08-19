@@ -45,26 +45,26 @@ RSpec.describe Weft::Addressing do
     end
   end
 
-    describe ".mint" do
+  describe ".mint" do
     it "issues a marked token" do
-      expect(Weft::Addressing.mint).to match(/\AM\h{8}\z/)
+      expect(described_class.mint).to match(/\AM\h{8}\z/)
     end
 
     it "issues a different token every time — entropy, not a function of anything" do
-      expect(Array.new(50) { Weft::Addressing.mint }.uniq.size).to eq(50)
+      expect(Array.new(50) { described_class.mint }.uniq.size).to eq(50)
     end
 
     it "recognizes its own tokens and rejects everything else" do
-      expect(Weft::Addressing.mint?(Weft::Addressing.mint)).to be(true)
-      expect(Weft::Addressing.mint?("M1a2b3c4d")).to be(true)
-      expect(Weft::Addressing.mint?("m1a2b3c4d")).to be(false)
-      expect(Weft::Addressing.mint?("M1a2b")).to be(false)
-      expect(Weft::Addressing.mint?("<script>")).to be(false)
-      expect(Weft::Addressing.mint?(nil)).to be(false)
+      expect(described_class.mint?(described_class.mint)).to be(true)
+      expect(described_class.mint?("M1a2b3c4d")).to be(true)
+      expect(described_class.mint?("m1a2b3c4d")).to be(false)
+      expect(described_class.mint?("M1a2b")).to be(false)
+      expect(described_class.mint?("<script>")).to be(false)
+      expect(described_class.mint?(nil)).to be(false)
     end
 
     it "cannot be confused with a digested token" do
-      expect(Weft::Addressing.mint?("D1a2b3c4d")).to be(false)
+      expect(described_class.mint?("D1a2b3c4d")).to be(false)
     end
   end
 
