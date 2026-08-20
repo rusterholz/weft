@@ -2,6 +2,7 @@
 
 require "weft/error"
 require "weft/addressing"
+require "weft/configuration"
 require "weft/params/assembly"
 
 module Weft
