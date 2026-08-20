@@ -69,8 +69,12 @@ module Weft
       # presentational components (none of those) register but are never served.
       # Subclasses fall back to this when they have no override of their own, so
       # an abstract parent does not disable concrete children.
+      # Params weft declared on the class's behalf don't count: a component
+      # gets an endpoint because of something its author declared, never
+      # because weft added a key behind their back.
       def inferred_routable?
-        params.any? || actions.any? || refresh_triggers.any? || !push_config.nil?
+        params.reject { |_, meta| meta[:internal] }.any? ||
+          actions.any? || refresh_triggers.any? || !push_config.nil?
       end
 
       def inherited(subclass)

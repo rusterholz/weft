@@ -44,12 +44,31 @@ module Weft
           when_filter = options.delete(:when)
           raise ArgumentError, "unknown keywords: #{options.keys.inspect}" unless options.empty?
 
+          reject_unique_companion!(component_class)
+
           site = caller_locations(1, 1).first
           own_companions << { component_class: component_class,
                               on: on.nil? ? nil : Array(on),
                               when: validated_when(when_filter),
                               block: block,
                               source_location: [site.path, site.lineno] }
+        end
+
+        # A companion is addressed by DOM id, and a `unique!` component's id
+        # comes from a token only that component's own requests carry. Resolved
+        # from this host's params, it would mint a fresh one and target an
+        # element that isn't on the page — and htmx discards an unmatched
+        # out-of-band swap silently, client-side, where nothing can report it.
+        #
+        # `unique!` buys in-page uniqueness and self-refresh stability; being
+        # brought by someone else needs a real identifier.
+        def reject_unique_companion!(component_class)
+          return unless component_class.respond_to?(:unique?) && component_class.unique?
+
+          raise Weft::InvalidDefinition,
+                "#{name} brings #{component_class.name}, which is `unique!` — its id comes from a " \
+                "token only its own requests carry, so this companion would address an element " \
+                "that is not on the page. Give #{component_class.name} an identifying param instead."
         end
 
         # All declared companions (own + inherited).

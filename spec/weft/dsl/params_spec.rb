@@ -23,6 +23,15 @@ RSpec.describe Weft::DSL::Params do
       expect(klass.params).to eq(status: { default: "active" })
     end
 
+    it "rejects a param declared under weft's reserved mint key" do
+      expect do
+        Class.new(base_class) do
+          def self.name = "ReservedKeyAttr"
+          param :_mint
+        end
+      end.to raise_error(Weft::InvalidDefinition, /_mint/)
+    end
+
     it "accepts optional digest: kwarg" do
       klass = Class.new(base_class) do
         def self.name = "DigestedAttr"

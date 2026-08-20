@@ -636,6 +636,49 @@ RSpec.describe Weft::Addressing do
       expect(child).to be_routable
     end
 
+    describe "unique! and routability" do
+      it "does not publish an endpoint for a component whose only param is weft's own" do
+        # Weft adding a param on your behalf is no reason for a public GET to
+        # appear — the routability lint exists to prevent exactly that.
+        badge = Class.new(Weft::Component) do
+          def self.name = "StatusBadge"
+          unique!
+        end
+
+        expect(badge).not_to be_routable
+      end
+
+      it "still routes when something the user declared earns it" do
+        actor = Class.new(Weft::Component) do
+          def self.name = "ActingBadge"
+          unique!
+          performs(:advance) { nil }
+        end
+
+        expect(actor).to be_routable
+      end
+
+      it "still routes when the user declares a param of their own" do
+        keyed = Class.new(Weft::Component) do
+          def self.name = "KeyedBadge"
+          unique!
+          param :status
+        end
+
+        expect(keyed).to be_routable
+      end
+
+      it "routes when asked explicitly" do
+        forced = Class.new(Weft::Component) do
+          def self.name = "ForcedBadge"
+          unique!
+          routable!
+        end
+
+        expect(forced).to be_routable
+      end
+    end
+
     describe "abstract! and routable! overrides" do
       it "abstract! makes a routable class non-routable" do
         component_class = Class.new(Weft::Component) do

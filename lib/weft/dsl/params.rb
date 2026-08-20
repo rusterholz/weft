@@ -30,6 +30,7 @@ module Weft
         #   param :status, default: "active", type: :string
         #   param :customer_name, digest: true
         def param(name, default: nil, type: nil, digest: false)
+          reject_reserved_key!(name)
           validate_type!(name, type, default) unless type.nil?
           validate_digest!(name, digest) if digest
           meta = { default: default }
@@ -132,6 +133,17 @@ module Weft
           raise Weft::InvalidDefinition,
                 "param #{name.inspect} declares type #{type.inspect} but its default " \
                 "#{default.inspect} is #{default.class} — make them agree, or drop one"
+        end
+
+        # Weft declares this key itself on a `unique!` component, so a user's
+        # own declaration would either be overwritten or silently take over
+        # weft's machinery. Move weft's key rather than working around it.
+        def reject_reserved_key!(name)
+          return unless name == Weft.configuration.mint_key
+
+          raise Weft::InvalidDefinition,
+                "param #{name.inspect} is reserved — weft declares it on `unique!` components. " \
+                "Rename this param, or move weft's via `Weft.configuration.mint_key`"
         end
 
         def validate_digest!(name, digest)
