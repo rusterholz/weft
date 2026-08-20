@@ -310,12 +310,12 @@ RSpec.describe Weft::DSL::Identity do
       # back and forth until something forces a new first render.
       instance = render_in_context(badge, wire_params: { "._mint" => "M1a2b3c4d" })
 
-      expect(instance.weft_url).to include("._mint=M1a2b3c4d")
+      expect(instance.weft_component_url).to include("._mint=M1a2b3c4d")
     end
 
     it "round-trips: the id a refresh resolves to is the id it was serving" do
       first = render_in_context(badge)
-      carried = URI.decode_www_form(URI(first.weft_url).query).to_h
+      carried = URI.decode_www_form(URI(first.weft_component_url).query).to_h
 
       expect(render_in_context(badge, wire_params: carried).weft_dom_id).to eq(first.weft_dom_id)
     end
@@ -372,7 +372,7 @@ RSpec.describe Weft::DSL::Identity do
       instance = render_in_context(acting, wire_params: { "._mint" => "M1a2b3c4d" })
       action = Weft::Action.new(name: :advance, method: :post, renders: acting)
 
-      expect(instance.weft_url).to include("._mint=M1a2b3c4d")
+      expect(instance.weft_component_url).to include("._mint=M1a2b3c4d")
       expect(instance.send(:stream_url)).to include("._mint=M1a2b3c4d")
       expect(action.to_htmx_attrs(instance)["hx-vals"]).to include('"._mint":"M1a2b3c4d"')
       expect(action.to_htmx_attrs(instance)["hx-target"]).to eq("#acting-badge-M1a2b3c4d")
@@ -392,7 +392,7 @@ RSpec.describe Weft::DSL::Identity do
       expect(instance.params[:_mint]).to eq("theirs")
       expect(instance.weft_mint).to eq("M1a2b3c4d")
       expect(instance.weft_dom_id).to eq("clash-M1a2b3c4d")
-      expect(instance.weft_url).to include("_mint=theirs").and include("._mint=M1a2b3c4d")
+      expect(instance.weft_component_url).to include("_mint=theirs").and include("._mint=M1a2b3c4d")
     end
 
     it "never rides someone else's request" do
@@ -403,7 +403,7 @@ RSpec.describe Weft::DSL::Identity do
       instance = render_in_context(badge, wire_params: { "._mint" => "M1a2b3c4d" })
 
       expect(instance.send(:serializable_params)).to be_empty
-      expect(instance.weft_addressed_params).to eq("._mint" => "M1a2b3c4d")
+      expect(instance.weft_addressing_params).to eq("._mint" => "M1a2b3c4d")
     end
 
     it "does not mint for a component that never asked" do

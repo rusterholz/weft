@@ -195,9 +195,9 @@ module Weft
         end
 
         # The block is documented as receiving *params*, so it gets a bag however
-        # the caller reached us — the class path still hands raw hashes in
-        # places, and a block reading `params.order_id` off one would otherwise
-        # silently see nothing.
+        # the caller reached us. Weft's own callers all pass assembled bags now;
+        # this covers everyone else, since `weft_dom_id_for` is public and a
+        # plain hash is the obvious thing to hand it.
         def identity_bag(bag)
           return bag if bag.is_a?(Weft::Params)
 

@@ -467,7 +467,7 @@ RSpec.describe Weft::DSL::Params do
       component = Weft::Context.new { insert_tag(child) }.children.first
 
       expect(component.params.per_page).to eq(100)
-      expect(component.weft_url).to eq("/_components/wide_pager?per_page=100")
+      expect(component.weft_component_url).to eq("/_components/wide_pager?per_page=100")
     end
   end
 
@@ -496,7 +496,7 @@ RSpec.describe Weft::DSL::Params do
   describe "serialization projection" do
     let(:order) { Struct.new(:id, :name).new(9, "Crate") }
 
-    it "serializes own wire params only into weft_url — hand-offs stay server-side" do
+    it "serializes own wire params only into weft_component_url — hand-offs stay server-side" do
       klass = Class.new(Weft::Component) do
         def self.name = "ManifestCard"
         param :status
@@ -507,10 +507,10 @@ RSpec.describe Weft::DSL::Params do
         insert_tag(klass, order: handed)
       end.children.first
 
-      expect(component.weft_url).to eq("/_components/manifest_card?status=hot")
+      expect(component.weft_component_url).to eq("/_components/manifest_card?status=hot")
     end
 
-    it "keeps inherited values out of weft_url" do
+    it "keeps inherited values out of weft_component_url" do
       parent_class = Class.new(Weft::Component) do
         def self.name = "UrlParent"
         param :region, default: "west"
@@ -528,7 +528,7 @@ RSpec.describe Weft::DSL::Params do
       child = ctx.children.first.children.find { |el| el.is_a?(child_class) }
 
       # region is readable (inheritance axis) but not part of the refresh contract
-      expect(child.weft_url).to eq("/_components/url_child?status=open")
+      expect(child.weft_component_url).to eq("/_components/url_child?status=open")
     end
 
     it "serializes a handed value through its wire dual — the refresh keeps it" do
@@ -539,7 +539,7 @@ RSpec.describe Weft::DSL::Params do
       end
       component = Weft::Context.new { insert_tag(klass, status: "fresh") }.children.first
 
-      expect(component.weft_url).to eq("/_components/dual_card?status=fresh")
+      expect(component.weft_component_url).to eq("/_components/dual_card?status=fresh")
     end
 
     it "derives weft_dom_id from own wire params only, never a hand-off" do

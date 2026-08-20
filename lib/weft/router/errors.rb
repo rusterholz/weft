@@ -144,6 +144,15 @@ module Weft
         Weft::Resolver.resolve(component_class, filtered_params)
       end
 
+      # Identity's fallback bag, for when construction raised before an instance
+      # existed. A bag rather than the wire hash above, because an
+      # `identifies_by` block is entitled to the same params `build` would have
+      # seen — a derived value included. Assembly registers derivations without
+      # running them, so this forces user code only if the id actually reads one.
+      def error_identity_bag(component_class)
+        Weft::Params::Assembly.for_request(component_class, filtered_params)
+      end
+
       # D1 applies when: the htmx_errors knob is :redirect, the request is htmx,
       # the matched entry came from a gem-default (Symbol with:), and the error
       # is not a routing miss (D3 — Weft::NotFound short-circuits the knob).
@@ -171,7 +180,8 @@ module Weft
         wire = error_wire_params(component_class)
         component_ctx = {
           originating_id: resolved_dom_id(component_class,
-                                          unbuilt_instance(component_class, filtered_params), wire),
+                                          unbuilt_instance(component_class, filtered_params),
+                                          error_identity_bag(component_class)),
           originating_tag: component_tag_for(component_class),
           retry_url: compute_retry_url(component_class, wire),
           status: recovery_status(error, entry)
@@ -210,9 +220,8 @@ module Weft
       end
 
       # The DOM id a component wears, asked of an unbuilt instance first and
-      # falling back to the class-level derivation from an already-resolved
-      # params hash — that covers a construction that raises before the
-      # instance exists.
+      # falling back to the class-level derivation from an assembled bag —
+      # that covers a construction that raises before the instance exists.
       #
       # Identity that raises when *asked* does not fall through to the
       # class-level derivation, on purpose: a raising `weft_dom_id` is an
@@ -231,11 +240,15 @@ module Weft
       # Identity can itself raise — a `weft_dom_id` reading a record deleted
       # between renders — and the id it would have had is unrecoverable.
       #
-      # TEMPORARY: an unresolvable identity gets a unique throwaway, so it can
-      # never collide with or displace another fragment. Such a fragment simply
-      # lands nowhere, which is the honest outcome when we cannot say where it
-      # belongs. Component identity is due a design pass of its own; this is a
-      # placeholder until it gets one.
+      # An unresolvable identity gets a unique throwaway, so it can never
+      # collide with or displace another fragment. Such a fragment simply lands
+      # nowhere, which is the honest outcome when we cannot say where it
+      # belongs.
+      #
+      # This is the one place identity is deliberately asked nothing: everywhere
+      # else derivation takes an assembled bag, and here there is no bag worth
+      # assembling, because the question "which element is this?" has already
+      # failed. Intentional, not a placeholder.
       #
       # Built from the stem alone: the throwaway suffix already guarantees
       # uniqueness, so asking identity for slots it has just failed to fill

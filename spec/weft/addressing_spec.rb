@@ -739,7 +739,7 @@ RSpec.describe Weft::Addressing do
     end
   end
 
-  describe "#weft_url" do
+  describe "#weft_component_url" do
     it "returns the component path with current params" do
       component_class = Class.new(Weft::Component) do
         def self.name = "Panel"
@@ -752,7 +752,7 @@ RSpec.describe Weft::Addressing do
       end
       component = ctx.children.first
 
-      expect(component.weft_url).to eq("/_components/panel?status=shipped&page=2")
+      expect(component.weft_component_url).to eq("/_components/panel?status=shipped&page=2")
     end
 
     it "overrides specific params" do
@@ -767,7 +767,7 @@ RSpec.describe Weft::Addressing do
       end
       component = ctx.children.first
 
-      expect(component.weft_url(page: 3)).to eq("/_components/panel?status=shipped&page=3")
+      expect(component.weft_component_url(page: 3)).to eq("/_components/panel?status=shipped&page=3")
     end
 
     it "omits nil values from the URL" do
@@ -782,7 +782,7 @@ RSpec.describe Weft::Addressing do
       end
       component = ctx.children.first
 
-      expect(component.weft_url).to eq("/_components/panel?page=1")
+      expect(component.weft_component_url).to eq("/_components/panel?page=1")
     end
   end
 end

@@ -823,6 +823,21 @@ RSpec.describe Weft::Router do
       end
     end
 
+    # The stamp is the Router's, not an opt-in: a recovery target stands in the
+    # failing component's place, and a swap addressed anywhere else lands
+    # somewhere else. Nothing here declares an identity param.
+    let(:derived_stand_in) do
+      Class.new(Weft::Component) do
+        def self.name = "DerivedStandIn"
+        abstract!
+
+        def build(attributes = {})
+          super
+          span "stood in"
+        end
+      end
+    end
+
     it "returns 500 and renders the gem-default ErrorComponent when rendering fails" do
       get "/_components/failing_card", id: "1"
 
@@ -837,9 +852,28 @@ RSpec.describe Weft::Router do
       expect(last_response.body).to include('id="failing-card-1"')
     end
 
-    # The stamp is the Router's, not an opt-in: a recovery target stands in the
-    # failing component's place, and a swap addressed anywhere else lands
-    # somewhere else. Nothing here declares an identity param.
+    it "resolves a block id from a derived value when construction never got that far" do
+      # The class path used to be handed a raw wire hash, which carries only
+      # what arrived on the request — a block reading a derived value saw
+      # nothing and the recovery fragment landed on the wrong id.
+      exploding = Class.new(Weft::Component) do
+        def self.name = "DerivedIdCard"
+        param :order_id
+        derives(:slug) { |params| "order-#{params.order_id}" }
+        identifies_by { |params| "panel-#{params.slug}" }
+
+        def initialize(*)
+          super
+          raise "construction exploded"
+        end
+      end
+      exploding.recovers from: StandardError, with: derived_stand_in
+
+      get "/_components/derived_id_card", order_id: "42"
+
+      expect(last_response.body).to include('id="panel-order-42"')
+    end
+
     it "stamps it onto an unrelated recovery target too" do
       stand_in = Class.new(Weft::Component) do
         def self.name = "StandInCard"

@@ -68,7 +68,7 @@ module Weft
         "hx-#{method}" => path,
         "hx-target" => target || "##{component.weft_dom_id}",
         "hx-swap" => self.class.resolve_swap(swap),
-        "hx-vals" => component.weft_addressed_params.to_json
+        "hx-vals" => component.weft_addressing_params.to_json
       }
     end
 

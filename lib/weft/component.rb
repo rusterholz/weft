@@ -164,12 +164,12 @@ module Weft
     # URL to this component's Weft route with current params as query string.
     # Pass overrides to change specific param values in the URL.
     #
-    #   weft_url                          # => "/_components/orders_panel?status=shipped&page=1"
-    #   weft_url(page: 2)                 # => "/_components/orders_panel?status=shipped&page=2"
-    #   weft_url(status: nil, page: 1)    # => "/_components/orders_panel?page=1"
-    def weft_url(**overrides)
+    #   weft_component_url                          # => "/_components/orders_panel?status=shipped&page=1"
+    #   weft_component_url(page: 2)                 # => "/_components/orders_panel?status=shipped&page=2"
+    #   weft_component_url(status: nil, page: 1)    # => "/_components/orders_panel?page=1"
+    def weft_component_url(**overrides)
       path = self.class.resolved_component_path
-      query = weft_addressed_params.merge(overrides).compact
+      query = weft_addressing_params.merge(overrides).compact
       query.empty? ? path : "#{path}?#{URI.encode_www_form(query)}"
     end
 
@@ -189,7 +189,7 @@ module Weft
     # which is the same reason `brings` refuses a `unique!` companion.
     #
     # @api private — name to be settled with the rest of this family
-    def weft_addressed_params
+    def weft_addressing_params
       return serializable_params unless weft_mint
 
       serializable_params.merge(Weft.configuration.mint_wire_key => weft_mint)
@@ -230,17 +230,11 @@ module Weft
       throw Weft::Context::SLOT_TAKEN, id
     end
 
-    # URL to this component's Weft route with current params (no overrides).
-    # Used internally by apply_refresh_attrs.
-    def refresh_url
-      weft_url
-    end
-
     def apply_refresh_attrs
       refresh_triggers = self.class.refresh_triggers
       return if refresh_triggers.empty?
 
-      set_attribute "hx-get", refresh_url
+      set_attribute "hx-get", weft_component_url
       set_attribute "hx-trigger", refresh_triggers.join(", ")
       set_attribute "hx-swap", "outerHTML"
     end
@@ -264,7 +258,7 @@ module Weft
     # URL to this component's SSE stream endpoint with current wire params.
     def stream_url
       path = "#{self.class.resolved_component_path}/#{Weft.configuration.stream_suffix}"
-      query = weft_addressed_params.compact
+      query = weft_addressing_params.compact
       query.empty? ? path : "#{path}?#{URI.encode_www_form(query)}"
     end
   end

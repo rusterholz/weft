@@ -221,7 +221,7 @@ RSpec.describe Weft::Params::Assembly do
       end
       component = Weft::Context.new { insert_tag(klass) }.children.first
 
-      expect(component.weft_url).to eq("/_components/dual_wire_derives?order_id=99")
+      expect(component.weft_component_url).to eq("/_components/dual_wire_derives?order_id=99")
     end
 
     it "a declared-but-never-read failing derivation never raises" do
