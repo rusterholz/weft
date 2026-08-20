@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "weft/registry/validation"
+
 module Weft
   class << self
     # The process-wide registry. Defined here rather than in the gem root
@@ -33,18 +35,20 @@ module Weft
   # params into the linear walk OR invent two parallel code paths; keeping
   # them separate is the simplest honest answer.
   class Registry
+    include Validation
+
     def initialize
       @components = Set.new
       @pages = Set.new
       @path_index = nil
       @sse_present = nil
-      @routes_validated = false
+      @registrations_validated = false
     end
 
     def register(component_class)
       @components.add(component_class)
       @path_index = nil
-      @routes_validated = false
+      @registrations_validated = false
     end
 
     # No @path_index invalidation: pages aren't indexed there (see the class
@@ -52,7 +56,7 @@ module Weft
     # route-validation memo is cleared.
     def register_page(page_class)
       @pages.add(page_class)
-      @routes_validated = false
+      @registrations_validated = false
     end
 
     # Empty the registry. The evict-everything reset for hand-rolled reload
@@ -62,7 +66,7 @@ module Weft
       @pages.clear
       @path_index = nil
       @sse_present = nil
-      @routes_validated = false
+      @registrations_validated = false
     end
 
     # Remove one class from the registry, invalidating route lookup so a fresh
@@ -76,7 +80,7 @@ module Weft
 
       @path_index = nil
       @sse_present = nil
-      @routes_validated = false
+      @registrations_validated = false
       true
     end
 
@@ -88,7 +92,7 @@ module Weft
     # Non-routable pages (abstract bases, classes without a resolvable path)
     # are skipped. Returns [page_class, extracted_params] or nil.
     def match_page(path)
-      validate_routes!
+      validate_registrations!
       @pages.each do |page_class|
         next unless page_class.routable?
 
@@ -99,7 +103,7 @@ module Weft
     end
 
     def lookup(path)
-      validate_routes!
+      validate_registrations!
       path_index[path]
     end
 
@@ -137,88 +141,6 @@ module Weft
 
     def resolved_page_pattern(page_class)
       page_class.page_path || page_class.send(:default_page_path)
-    end
-
-    # Build the effective-route table across every routable component (its base
-    # path plus its reserved stream-suffix tail) and routable page (its resolved
-    # pattern), and raise Weft::InvalidDefinition on any duplicate — component vs
-    # component, page vs page, or component vs page — or any malformed path.
-    # Memoized per registry generation (cleared when a class registers), so it
-    # runs once at first request and is a no-op thereafter. Routability gates
-    # everything: abstract!/non-routable classes derive no path and never collide.
-    def validate_routes!
-      return if @routes_validated
-
-      seen = {}
-      routable_components.each do |klass|
-        warn_dependent_receives!(klass)
-        base = klass.resolved_component_path
-        add_route!(seen, base, klass, :component)
-        add_route!(seen, "#{base}/#{Weft.configuration.stream_suffix}", klass, :stream)
-      end
-      routable_pages.each { |klass| add_route!(seen, resolved_page_pattern(klass), klass, :page) }
-      @routes_validated = true
-    end
-
-    # A routable component with a required hand-off it cannot reconstruct
-    # standalone will raise on every refresh (nothing hands the value over).
-    # Defaulted hand-offs are exempt (declaring a default explicitly opts
-    # into standalone renders falling back to it), as are dual keys — a wire
-    # param or a derives supplies the standalone value. Runs once per
-    # registry generation, alongside route validation.
-    def warn_dependent_receives!(klass)
-      required = klass.received_params.reject { |_, meta| meta.key?(:default) }.keys
-      undualed = required - klass.params.keys - klass.derived_params.keys
-      return if undualed.empty?
-
-      Weft.logger.warn(
-        "#{klass.name} is routable but depends on hand-offs it cannot reconstruct standalone " \
-        "(#{undualed.map(&:inspect).join(', ')}) — a refresh will raise without them. " \
-        "Mark the class dependent!, or declare a derives or wire param dual for the key."
-      )
-    end
-
-    def add_route!(seen, path, klass, kind)
-      validate_route_shape!(path, klass, kind)
-      if (existing = seen[path])
-        raise Weft::InvalidDefinition, collision_message(path, existing, [klass, kind])
-      end
-
-      seen[path] = [klass, kind]
-    end
-
-    # Tier-B well-formedness guard: a resolved route must be a non-empty string
-    # beginning with "/" (an explicit "/" homepage is fine). Catches garbage from
-    # custom/inherited component_path or page_path procs.
-    def validate_route_shape!(path, klass, kind)
-      return if path.is_a?(String) && path.start_with?("/")
-
-      raise Weft::InvalidDefinition,
-            "#{route_label(klass, kind)} resolves to #{path.inspect}, which is not a valid route: " \
-            "a route must be a non-empty string beginning with \"/\"."
-    end
-
-    # Two same-named class objects at one route is the signature of code
-    # reloading without eviction — say so, rather than suggesting a rename.
-    def collision_message(path, existing, incoming)
-      if existing[0].name == incoming[0].name
-        "Route collision on #{path.inspect}: two class objects named #{existing[0].name} " \
-          "are registered — usually a code reloading setup that never evicts. Evict classes " \
-          "as they unload (Weft.registry.evict, e.g. from a Zeitwerk on_unload callback), " \
-          "or reset with Weft.registry.clear before each reload."
-      else
-        "Route collision on #{path.inspect}: #{route_label(*existing)} and " \
-          "#{route_label(*incoming)} resolve to the same route. Rename one class, " \
-          "set an explicit component_path/page_path, or mark one abstract! if it should not route."
-      end
-    end
-
-    def route_label(klass, kind)
-      case kind
-      when :stream then "the SSE stream endpoint of component #{klass.name}"
-      when :page then "page #{klass.name}"
-      else "component #{klass.name}"
-      end
     end
 
     # Match a Sinatra-style pattern against a path.
