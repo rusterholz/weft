@@ -48,6 +48,10 @@ module Weft
       @logger ||= Logger.new($stdout)
     end
 
+    def configuration
+      @configuration ||= Configuration.new
+    end
+
     def configure
       yield configuration
       apply_configuration

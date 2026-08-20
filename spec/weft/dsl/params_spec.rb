@@ -23,13 +23,15 @@ RSpec.describe Weft::DSL::Params do
       expect(klass.params).to eq(status: { default: "active" })
     end
 
-    it "rejects a param declared under weft's reserved mint key" do
-      expect do
-        Class.new(base_class) do
-          def self.name = "ReservedKeyAttr"
-          param :_mint
-        end
-      end.to raise_error(Weft::InvalidDefinition, /_mint/)
+    it "reserves no name for weft — a mint is not a param, so it claims no key" do
+      # The mint belongs to the component instance, never to the params bag,
+      # which is what leaves the whole namespace to the user.
+      klass = Class.new(base_class) do
+        def self.name = "MintNamedAttr"
+        param :_mint, default: "mine"
+      end
+
+      expect(klass.params[:_mint]).to eq(default: "mine")
     end
 
     it "accepts optional digest: kwarg" do

@@ -76,30 +76,10 @@ module Weft
         def unique? = own_identity == :unique
 
         # The params composing this component's identity (own, else inherited).
-        # The mint's key is read here rather than recorded at declaration, so
-        # moving {Weft::Configuration#mint_key} reaches loaded classes too.
+        # A `unique!` component has none: its identity is a mint, which is a
+        # property of the instance and never a param. See {#unique?}.
         def identifiers
-          case own_identity
-          when :unique then [Weft.configuration.mint_key]
-          when Array then own_identity
-          else []
-          end
-        end
-
-        # Weft declares the mint on the class's behalf. It is a param like any
-        # other — resolution, defaults and serialization all iterate this hash,
-        # and the mint has to serialize or it could not ride back — but it is
-        # marked as weft's own, so it never counts as declared surface.
-        #
-        # Present if and only if the class is unique: a subclass that overrides
-        # `unique!` with `identifies_by` would otherwise keep inheriting the
-        # mint through the ordinary param chain and carry a key it identifies
-        # by nothing.
-        def params
-          declared = super
-          return declared.except(Weft.configuration.mint_key) unless unique?
-
-          declared.merge(Weft.configuration.mint_key => { default: nil, internal: true })
+          own_identity.is_a?(Array) ? own_identity : []
         end
 
         # This class's own identity declaration, else the nearest ancestor's.
@@ -120,7 +100,8 @@ module Weft
         # The id is the class stem followed by one slot per declared identifier,
         # in declaration order. A component that identifies by nothing wears its
         # stem alone.
-        def weft_dom_id_for(params = {})
+        def weft_dom_id_for(params = {}, mint = nil)
+          return "#{weft_dom_id_base}-#{mint_segment(mint)}" if unique?
           return weft_dom_id_base if identifiers.empty?
 
           segments = identifiers.map { |key| identity_segment(params, key) }
@@ -156,24 +137,20 @@ module Weft
         # a collision drops a companion rather than merely duplicating an id.
         def identity_segment(bag, key)
           value = identity_value(bag, key)
-          return mint_segment(value) if unique?
-
           length = digest_length_for(key)
           return Weft::Addressing.digest(value, length) if length
 
           sanitize_identifier(value, key)
         end
 
-        # A mint arrives complete — issued by weft, checked on the way in — so
-        # it passes through untouched; sanitizing it would downcase its marker
-        # and undo the one thing the marker is for. It is checked again here
-        # because this method is also reachable from the class path, where no
-        # assembly has run and the bag is whatever the caller had.
+        # A mint is checked, never trusted: it reaches this method from the
+        # wire in the ordinary case, and from whatever the caller had in hand
+        # on the class path, where there is no instance to ask.
         #
-        # Anything else in the slot is reissued rather than rendered. A
-        # `unique!` component with no usable token would otherwise render blank
-        # and collide with every other such instance — landing somewhere wrong,
-        # where a fresh token lands nowhere.
+        # Anything unusable is reissued rather than rendered. A `unique!`
+        # component with no token would otherwise render blank and collide with
+        # every other such instance — landing somewhere wrong, where a fresh
+        # token lands nowhere.
         def mint_segment(value)
           Weft::Addressing.mint?(value) ? value.to_s : Weft::Addressing.mint
         end

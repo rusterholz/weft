@@ -7,16 +7,6 @@ require "active_support/core_ext/string/inflections"
 require "weft/addressing"
 
 module Weft
-  class << self
-    # The gem-wide configuration, built on first use. Defined here rather than
-    # at the gem root because class bodies read it while they are being loaded
-    # — `param` checks a name against the reserved mint key — so it has to be
-    # reachable from a file the DSL can require, not only from the root.
-    def configuration
-      @configuration ||= Configuration.new
-    end
-  end
-
   class Configuration
     # Built from the same stem the DOM id reads, so a component's two addresses
     # cannot drift. A user-supplied proc may call +addressing_stem+ to inherit

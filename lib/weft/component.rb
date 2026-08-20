@@ -69,12 +69,8 @@ module Weft
       # presentational components (none of those) register but are never served.
       # Subclasses fall back to this when they have no override of their own, so
       # an abstract parent does not disable concrete children.
-      # Params weft declared on the class's behalf don't count: a component
-      # gets an endpoint because of something its author declared, never
-      # because weft added a key behind their back.
       def inferred_routable?
-        params.reject { |_, meta| meta[:internal] }.any? ||
-          actions.any? || refresh_triggers.any? || !push_config.nil?
+        params.any? || actions.any? || refresh_triggers.any? || !push_config.nil?
       end
 
       def inherited(subclass)
@@ -141,7 +137,19 @@ module Weft
     def initialize(*)
       super
       @params = assembled_params
+      @weft_mint = resolve_weft_mint if self.class.unique?
     end
+
+    # This instance's mint, or nil unless the class is `unique!`.
+    #
+    # A mint is what makes two renderings of a component *the same object* to
+    # weft: an instance that comes back carrying the mint another instance was
+    # issued is not a lookalike, it is that component again, later. That is why
+    # it belongs to the instance and never to `params` — it identifies the
+    # object, rather than being data the object was given.
+    #
+    # @api private
+    attr_reader :weft_mint
 
     def build(attributes = {})
       apply_received_fallback(attributes) unless arbre_context.respond_to?(:take_received!)
@@ -161,16 +169,43 @@ module Weft
     #   weft_url(status: nil, page: 1)    # => "/_components/orders_panel?page=1"
     def weft_url(**overrides)
       path = self.class.resolved_component_path
-      query = serializable_params.merge(overrides).compact
+      query = weft_addressed_params.merge(overrides).compact
       query.empty? ? path : "#{path}?#{URI.encode_www_form(query)}"
     end
 
-    # Convention-based DOM ID: dasherized class name + primary wire-param value.
+    # This element's DOM id. A `unique!` component hands over the mint it is
+    # holding; every other kind composes its id from params alone.
     def weft_dom_id
-      self.class.weft_dom_id_for(serializable_params)
+      self.class.weft_dom_id_for(serializable_params, weft_mint)
+    end
+
+    # What has to ride a request for that request to come back to *this*
+    # element: its wire params, plus its mint when it has one.
+    #
+    # Deliberately not `serializable_params`, and the distinction is
+    # load-bearing. This is for a component's own request lineage — its refresh
+    # URL, its stream, the values its own actions post. Handing it to anyone
+    # else's request would assert that a different element is this same object,
+    # which is the same reason `brings` refuses a `unique!` companion.
+    #
+    # @api private — name to be settled with the rest of this family
+    def weft_addressed_params
+      return serializable_params unless weft_mint
+
+      serializable_params.merge(Weft.configuration.mint_key => weft_mint)
     end
 
     private
+
+    # The wire is the only source: a mint is never inherited from a parent, and
+    # no hand-off door was opened for it. Checked rather than trusted — it
+    # arrives from outside and is bound for an id attribute — and reissued when
+    # it is missing, stale, or malformed.
+    def resolve_weft_mint
+      carried = wire_source[Weft.configuration.mint_key.to_s] ||
+                wire_source[Weft.configuration.mint_key]
+      Weft::Addressing.mint?(carried) ? carried.to_s : Weft::Addressing.mint
+    end
 
     # Speak for this fragment's DOM slot, or abandon the render.
     #
@@ -229,7 +264,7 @@ module Weft
     # URL to this component's SSE stream endpoint with current wire params.
     def stream_url
       path = "#{self.class.resolved_component_path}/#{Weft.configuration.stream_suffix}"
-      query = serializable_params.compact
+      query = weft_addressed_params.compact
       query.empty? ? path : "#{path}?#{URI.encode_www_form(query)}"
     end
   end

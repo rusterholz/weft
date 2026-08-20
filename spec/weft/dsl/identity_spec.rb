@@ -3,6 +3,10 @@
 require "arbre"
 
 RSpec.describe Weft::DSL::Identity do
+  def render_in_context(klass, wire_params: {})
+    Weft::Context.new({}, nil, wire_params: wire_params) { insert_tag(klass) }.children.first
+  end
+
   describe ".identifies_by" do
     it "records the declared identifiers in declaration order" do
       klass = Class.new(Weft::Component) do
@@ -48,27 +52,32 @@ RSpec.describe Weft::DSL::Identity do
       expect(badge).to be_unique
     end
 
-    it "identifies by the mint key" do
-      expect(badge.identifiers).to eq([:_mint])
+    it "identifies by no param at all — a mint is not one" do
+      # Two instances carrying the same mint are the same object to weft. That
+      # is a property of the instance, not data the instance was handed.
+      expect(badge.identifiers).to eq([])
     end
 
-    it "declares the mint as a param, so it rides the wire back" do
-      expect(badge.params).to have_key(:_mint)
+    it "keeps the mint out of the params surface entirely" do
+      expect(badge.params).to be_empty
+      expect(badge.declared_keys).to be_empty
     end
 
-    it "marks the mint param internal, so it is weft's and not part of the surface" do
-      expect(badge.params[:_mint][:internal]).to be(true)
+    it "leaves the params bag free of it at render time too" do
+      instance = render_in_context(badge)
+
+      expect(instance.params.to_h).to be_empty
+      expect(instance.weft_mint).to match(/\AM\h{8}\z/)
     end
 
-    it "reads the key name when it is used, not when it was declared" do
+    it "reads the wire key when it is used, not when it was declared" do
       # Recording the name at declaration would strand already-loaded classes
       # on the old one the moment the knob moved.
       original = Weft.configuration.mint_key
       Weft.configuration.mint_key = :_weft_id
 
-      expect(badge.identifiers).to eq([:_weft_id])
-      expect(badge.params).to have_key(:_weft_id)
-      expect(badge.params).not_to have_key(:_mint)
+      expect(render_in_context(badge, wire_params: { "_weft_id" => "M1a2b3c4d" }).weft_dom_id).
+        to eq("status-badge-M1a2b3c4d")
     ensure
       Weft.configuration.mint_key = original
     end
@@ -84,7 +93,8 @@ RSpec.describe Weft::DSL::Identity do
         unique!
       end
 
-      expect(child.identifiers).to eq([:_mint])
+      expect(child).to be_unique
+      expect(child.identifiers).to eq([])
       expect(parent.identifiers).to eq(%i[order_id])
     end
 
@@ -92,7 +102,7 @@ RSpec.describe Weft::DSL::Identity do
       child = Class.new(badge) { def self.name = "SpecialBadge" }
 
       expect(child).to be_unique
-      expect(child.identifiers).to eq([:_mint])
+      expect(render_in_context(child).weft_dom_id).to match(/\Aspecial-badge-M\h{8}\z/)
     end
 
     it "is overridden by a subclass declaring identifies_by" do
@@ -105,6 +115,7 @@ RSpec.describe Weft::DSL::Identity do
       expect(child).not_to be_unique
       expect(child.identifiers).to eq(%i[order_id])
       expect(child.params).not_to have_key(:_mint)
+      expect(render_in_context(child, wire_params: { "order_id" => "7" }).weft_mint).to be_nil
     end
 
     it "raises when a class body also declares identifies_by" do
@@ -146,10 +157,6 @@ RSpec.describe Weft::DSL::Identity do
           span "badge"
         end
       end
-    end
-
-    def render_in_context(klass, wire_params: {})
-      Weft::Context.new({}, nil, wire_params: wire_params) { insert_tag(klass) }.children.first
     end
 
     it "issues a token at first render, when the wire carries none" do
@@ -224,6 +231,32 @@ RSpec.describe Weft::DSL::Identity do
 
       expect(minted.uniq.size).to eq(2)
       expect(minted).not_to include(host.weft_dom_id)
+    end
+
+    it "rides the component's own request lineage: refresh URL, stream, its actions" do
+      acting = Class.new(Weft::Component) do
+        def self.name = "ActingBadge"
+        unique!
+        performs(:advance) { nil }
+      end
+      instance = render_in_context(acting, wire_params: { "_mint" => "M1a2b3c4d" })
+      action = Weft::Action.new(name: :advance, method: :post, renders: acting)
+
+      expect(instance.weft_url).to include("_mint=M1a2b3c4d")
+      expect(instance.send(:stream_url)).to include("_mint=M1a2b3c4d")
+      expect(action.to_htmx_attrs(instance)["hx-vals"]).to include('"_mint":"M1a2b3c4d"')
+      expect(action.to_htmx_attrs(instance)["hx-target"]).to eq("#acting-badge-M1a2b3c4d")
+    end
+
+    it "never rides someone else's request" do
+      # `with:` defaults to the nearest component's params, which travel on an
+      # element the user is wiring up — a different object's request. A mint
+      # going along would assert that element IS this component, which is the
+      # same falsehood `brings` refuses for a unique! companion.
+      instance = render_in_context(badge, wire_params: { "_mint" => "M1a2b3c4d" })
+
+      expect(instance.send(:serializable_params)).to be_empty
+      expect(instance.weft_addressed_params).to eq(_mint: "M1a2b3c4d")
     end
 
     it "does not mint for a component that never asked" do

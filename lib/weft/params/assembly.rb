@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require "weft/addressing"
 require "weft/params"
 require "weft/resolver"
 
@@ -60,7 +59,6 @@ module Weft
       def bag
         data = @inherited.dup
         keys.each { |key| data[key] = stack_value(key) }
-        install_mint(data)
         report_shadowed_derivations(data)
         Weft::Params.new(data, provenance, defaults: declared_defaults)
       end
@@ -78,25 +76,6 @@ module Weft
       def hand_off_only_keys
         @component_class.received_params.keys - @component_class.params.keys -
           @component_class.derived_params.keys
-      end
-
-      # A `unique!` component's token, resolved outside the ordinary source
-      # stack because only the wire may supply it. Inheriting it would hand a
-      # nested component its parent's identity, and no hand-off door was ever
-      # opened for a key weft declares on the class's behalf.
-      #
-      # The carried token is checked rather than trusted: it arrives from the
-      # wire, where anything can be typed, and it is bound for an id attribute.
-      # A token that is missing, stale, or malformed is simply reissued — the
-      # component lands somewhere of its own either way.
-      def install_mint(data)
-        # Assembly serves Pages as well, and identity is a Component concern:
-        # a Page has no DOM slot to be unique within.
-        return unless @component_class.respond_to?(:unique?) && @component_class.unique?
-
-        carried = @wire[Weft.configuration.mint_key]
-        data[Weft.configuration.mint_key] =
-          Weft::Addressing.mint?(carried) ? carried : Weft::Addressing.mint
       end
 
       def stack_value(key)
