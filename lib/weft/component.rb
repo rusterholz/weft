@@ -176,7 +176,7 @@ module Weft
     # This element's DOM id. A `unique!` component hands over the mint it is
     # holding; every other kind composes its id from params alone.
     def weft_dom_id
-      self.class.weft_dom_id_for(serializable_params, weft_mint)
+      self.class.weft_dom_id_for(params, weft_mint)
     end
 
     # What has to ride a request for that request to come back to *this*

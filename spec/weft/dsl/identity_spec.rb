@@ -147,6 +147,136 @@ RSpec.describe Weft::DSL::Identity do
     end
   end
 
+  describe "the block form" do
+    let(:carted) do
+      Class.new(Weft::Component) do
+        def self.name = "CartPanel"
+        param :user_id
+        identifies_by { |params| "cart-#{params.user_id}" }
+      end
+    end
+
+    it "returns the whole id, not a slot in one" do
+      expect(carted.weft_dom_id_for(user_id: 7)).to eq("cart-7")
+    end
+
+    it "bypasses the stem, the separator and the sanitizer alike" do
+      loud = Class.new(Weft::Component) do
+        def self.name = "LoudPanel"
+        identifies_by { |_params| "Shouting_ID" }
+      end
+
+      expect(loud.weft_dom_id_for({})).to eq("Shouting_ID")
+    end
+
+    it "runs against params, with no reach into the instance" do
+      # The sandbox contract: verb blocks are (params) -> value pure functions
+      # with a void self, so a block stays portable to any process.
+      probing = Class.new(Weft::Component) do
+        def self.name = "ProbingPanel"
+        identifies_by { |_params| self.class.name.split("::").last }
+      end
+
+      expect(probing.weft_dom_id_for({})).to eq("Sandbox")
+    end
+
+    it "sees the complete bag, not just what serializes" do
+      # The block runs at the same branch point build would see, so a value
+      # this component derives is as reachable as one that came off the wire.
+      derived = Class.new(Weft::Component) do
+        def self.name = "DerivedPanel"
+        param :order_id
+        derives(:slug) { |params| "order-#{params.order_id}" }
+        identifies_by { |params| "panel-#{params.slug}" }
+      end
+
+      instance = render_in_context(derived, wire_params: { "order_id" => "9" })
+
+      expect(instance.weft_dom_id).to eq("panel-order-9")
+    end
+
+    it "is honored on the class path too, where there is no instance to ask" do
+      # This is the hole it closes: a `weft_dom_id` override is instance-only,
+      # so error recovery gave a component a different id than a normal render.
+      expect(carted.weft_dom_id_for(user_id: 3)).to eq("cart-3")
+    end
+
+    it "does not fall back when the block raises" do
+      # Landing nowhere beats landing somewhere wrong: the convention it
+      # overrode would answer with a different id, putting the fragment on some
+      # other component's element.
+      broken = Class.new(Weft::Component) do
+        def self.name = "BrokenPanel"
+        identifies_by { |_params| raise "no id for you" }
+      end
+
+      expect { broken.weft_dom_id_for({}) }.to raise_error(RuntimeError, /no id for you/)
+    end
+
+    it "permits collisions — deliberate ones are the reason it exists" do
+      twinned = Class.new(Weft::Component) do
+        def self.name = "TwinnedPanel"
+        param :whatever
+        identifies_by { |_params| "always-the-same" }
+      end
+
+      expect(twinned.weft_dom_id_for(whatever: 1)).to eq("always-the-same")
+      expect(twinned.weft_dom_id_for(whatever: 2)).to eq("always-the-same")
+    end
+
+    it "raises when the block returns something no selector could carry" do
+      # Collisions are permitted; malformed ids are not. An id weft cannot
+      # target with `#id` is broken for htmx, not merely unconventional.
+      ["has spaces", "#hash", ".dot", "", "9leading-digit", nil, 42].each do |bad|
+        klass = Class.new(Weft::Component) do
+          def self.name = "BadIdPanel"
+          identifies_by { |_params| bad }
+        end
+
+        expect { klass.weft_dom_id_for({}) }.
+          to raise_error(Weft::InvalidDefinition, /BadIdPanel/), "expected #{bad.inspect} to be refused"
+      end
+    end
+
+    it "exposes the block so the registry can skip its load-time id check" do
+      expect(carted.identity_block).to be_a(Proc)
+      expect(Class.new(Weft::Component) { def self.name = "Plain" }.identity_block).to be_nil
+    end
+
+    it "refuses both forms at once" do
+      expect do
+        Class.new(Weft::Component) do
+          def self.name = "DoubleFormed"
+          param :order_id
+          identifies_by(:order_id) { |params| params.order_id.to_s }
+        end
+      end.to raise_error(Weft::InvalidDefinition, /both/)
+    end
+
+    it "refuses a bare declaration with neither names nor block" do
+      # Behaviorally identical to omitting it, so it is a comment pretending to
+      # be code — and the likely real case is someone who meant to list params.
+      expect do
+        Class.new(Weft::Component) do
+          def self.name = "EmptyDeclaration"
+          identifies_by
+        end
+      end.to raise_error(Weft::InvalidDefinition, /identifies_by/)
+    end
+
+    it "is inherited, and replaceable wholesale by either other form" do
+      child = Class.new(carted) { def self.name = "SubCart" }
+      keyed = Class.new(carted) do
+        def self.name = "KeyedCart"
+        identifies_by :user_id
+      end
+
+      expect(child.weft_dom_id_for(user_id: 4)).to eq("cart-4")
+      expect(keyed.weft_dom_id_for(user_id: 4)).to eq("keyed-cart-4")
+      expect(keyed.identity_block).to be_nil
+    end
+  end
+
   describe "minting" do
     let(:badge) do
       Class.new(Weft::Component) do

@@ -2,6 +2,9 @@
 
 require "active_support/core_ext/string/inflections"
 
+require "weft/addressing"
+require "weft/dsl/sandbox"
+require "weft/params"
 require "weft/error"
 require "weft/resolver"
 
@@ -50,8 +53,35 @@ module Weft
         #
         # A component that declares nothing has no identity of its own: its id
         # is its class name alone. Declare `unique!` to be handed one.
-        def identifies_by(*names)
-          declare_identity!(names)
+        # A block form takes over the id entirely: it returns the *whole* id,
+        # bypassing the stem, the separator and the sanitizer.
+        #
+        #   identifies_by { |params| "cart-#{params.user_id}" }
+        #
+        # It runs in {Weft::DSL::Sandbox} against params — not against the
+        # instance — so it stays a pure function of the bag and is answerable
+        # on the class path, where there is no instance to ask. That is the
+        # hole it closes: an imperative `weft_dom_id` override is instance-only,
+        # so a component wore one id in a normal render and another in error
+        # recovery.
+        #
+        # Deliberate collisions are allowed — two components sharing an id so
+        # one swaps over the other is a reason to reach for this. Malformed ids
+        # are not: an id weft cannot target is broken rather than unusual.
+        def identifies_by(*names, &block)
+          if block && names.any?
+            raise Weft::InvalidDefinition,
+                  "#{name} declares identifies_by with both param names and a block — the block " \
+                  "returns the whole id, so names alongside it have nothing to compose"
+          end
+
+          unless block || names.any?
+            raise Weft::InvalidDefinition,
+                  "#{name} declares identifies_by with nothing to identify by. Name the params " \
+                  "that identify it, pass a block returning the id, or declare `unique!`"
+          end
+
+          declare_identity!(block || names)
         end
 
         # Assert that this component needs a slot of its own on the page while
@@ -74,6 +104,11 @@ module Weft
 
         # Whether this component carries a mint (own declaration, else inherited).
         def unique? = own_identity == :unique
+
+        # The block composing this component's id, if it declared one (own,
+        # else inherited). The registry's load-time id check reads this: a
+        # per-instance id cannot be derived from a class.
+        def identity_block = own_identity.is_a?(Proc) ? own_identity : nil
 
         # The params composing this component's identity (own, else inherited).
         # A `unique!` component has none: its identity is a mint, which is a
@@ -101,6 +136,7 @@ module Weft
         # in declaration order. A component that identifies by nothing wears its
         # stem alone.
         def weft_dom_id_for(params = {}, mint = nil)
+          return block_dom_id(params) if identity_block
           return "#{weft_dom_id_base}-#{mint_segment(mint)}" if unique?
           return weft_dom_id_base if identifiers.empty?
 
@@ -141,6 +177,31 @@ module Weft
           return Weft::Addressing.digest(value, length) if length
 
           sanitize_identifier(value, key)
+        end
+
+        # The block owns the id outright, so weft checks only that what comes
+        # back is something it can address. A raise inside the block is left to
+        # propagate: the convention it overrode would answer with a *different*
+        # id, landing the fragment on another component's element, and landing
+        # nowhere beats landing somewhere wrong.
+        def block_dom_id(bag)
+          rendered = Weft::DSL::Sandbox.run(identity_bag(bag), &identity_block).to_s
+          return rendered if rendered.match?(Weft::Addressing::DOM_ID_FORMAT)
+
+          raise Weft::InvalidDefinition,
+                "#{name}'s identifies_by block returned #{rendered.inspect}, which is not a usable " \
+                "DOM id — weft targets fragments with `#id`, so it must start with a letter or " \
+                "underscore and carry only letters, digits, underscores and dashes"
+        end
+
+        # The block is documented as receiving *params*, so it gets a bag however
+        # the caller reached us — the class path still hands raw hashes in
+        # places, and a block reading `params.order_id` off one would otherwise
+        # silently see nothing.
+        def identity_bag(bag)
+          return bag if bag.is_a?(Weft::Params)
+
+          Weft::Params.new(bag.to_h.transform_keys(&:to_sym))
         end
 
         # A mint is checked, never trusted: it reaches this method from the

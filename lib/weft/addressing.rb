@@ -35,6 +35,11 @@ module Weft
     # output alike, so the three kinds of slot can never be read for each other.
     MINT_MARKER = "M"
 
+    # What a DOM id has to look like for weft to target it with `#id`. Weft's
+    # own composition can only produce this shape; an `identifies_by` block can
+    # return anything, so its return is checked against it.
+    DOM_ID_FORMAT = /\A[A-Za-z_][\w-]*\z/
+
     # What separates mint space from param space on the wire. A param may be
     # named `_mint`; no param can be named `.anything`, because a leading dot
     # is not a name. Weft supplies this itself and the operator cannot omit it
