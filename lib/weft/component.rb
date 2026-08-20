@@ -192,7 +192,7 @@ module Weft
     def weft_addressed_params
       return serializable_params unless weft_mint
 
-      serializable_params.merge(Weft.configuration.mint_key => weft_mint)
+      serializable_params.merge(Weft.configuration.mint_wire_key => weft_mint)
     end
 
     private
@@ -202,8 +202,8 @@ module Weft
     # arrives from outside and is bound for an id attribute — and reissued when
     # it is missing, stale, or malformed.
     def resolve_weft_mint
-      carried = wire_source[Weft.configuration.mint_key.to_s] ||
-                wire_source[Weft.configuration.mint_key]
+      key = Weft.configuration.mint_wire_key
+      carried = wire_source[key] || wire_source[key.to_sym]
       Weft::Addressing.mint?(carried) ? carried.to_s : Weft::Addressing.mint
     end
 

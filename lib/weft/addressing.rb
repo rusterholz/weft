@@ -35,6 +35,12 @@ module Weft
     # output alike, so the three kinds of slot can never be read for each other.
     MINT_MARKER = "M"
 
+    # What separates mint space from param space on the wire. A param may be
+    # named `_mint`; no param can be named `.anything`, because a leading dot
+    # is not a name. Weft supplies this itself and the operator cannot omit it
+    # — that is the whole isolation, so it is not a knob.
+    MINT_WIRE_PREFIX = "."
+
     MINT_ENTROPY_BYTES = 4
     MINT_FORMAT = /\A#{MINT_MARKER}\h{#{MINT_ENTROPY_BYTES * 2}}\z/
 

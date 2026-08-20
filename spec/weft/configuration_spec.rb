@@ -407,6 +407,20 @@ RSpec.describe Weft::Configuration do
       expect { config.mint_key = "not a name" }.to raise_error(ArgumentError, /mint_key/)
     end
 
+    it "namespaces the wire key with a dot the operator cannot supply or remove" do
+      # The dot is what keeps mint space and param space from ever meeting:
+      # a param can be named _mint, but never .anything.
+      expect(config.mint_wire_key).to eq("._mint")
+
+      config.mint_key = :token
+      expect(config.mint_wire_key).to eq(".token")
+    end
+
+    it "refuses a key that tries to bring its own dot" do
+      expect { config.mint_key = ".mint" }.to raise_error(ArgumentError, /mint_key/)
+      expect { config.mint_key = :"a.b" }.to raise_error(ArgumentError, /mint_key/)
+    end
+
     it "rejects a non-string, non-symbol key" do
       expect { config.mint_key = 42 }.to raise_error(ArgumentError, /mint_key/)
     end

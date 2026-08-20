@@ -93,21 +93,31 @@ module Weft
       @push_attempts = value
     end
 
-    # The param key weft declares for itself on a `unique!` component, carrying
-    # that component's minted token. Move it if it collides with a key of your
-    # own. Read wherever it is used rather than recorded at declaration, so a
-    # change here reaches classes that are already loaded.
+    # Names the token a `unique!` component carries on the wire. A bare name:
+    # weft prefixes it (see {#mint_wire_key}), and the validation below is what
+    # guarantees the operator can neither supply that prefix nor dodge it.
+    #
+    # Rename it if you prefer the look of something else on your URLs. You do
+    # not need to move it to avoid a param of your own — mint space and param
+    # space cannot meet.
     def mint_key=(value)
       unless value.is_a?(Symbol) || value.is_a?(String)
         raise ArgumentError, "mint_key must be a Symbol or String, got #{value.inspect}"
       end
+
       unless value.to_s.match?(/\A\w+\z/)
         raise ArgumentError,
-              "mint_key must be a usable param name, got #{value.inspect}"
+              "mint_key must be a bare name — letters, digits and underscores, no punctuation — " \
+              "since weft namespaces it on the wire itself. Got #{value.inspect}"
       end
 
       @mint_key = value.to_sym
     end
+
+    # The key a mint actually travels under: {#mint_key} inside weft's own wire
+    # namespace. A param can be named `_mint`; none can be named `._mint`, so a
+    # user's params and weft's token cannot collide however either is named.
+    def mint_wire_key = "#{Weft::Addressing::MINT_WIRE_PREFIX}#{@mint_key}"
 
     # Characters of hash kept in a digested identity segment (see
     # `param :key, digest: true`). Longer is more collision-resistant and

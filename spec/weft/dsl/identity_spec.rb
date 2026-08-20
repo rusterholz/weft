@@ -76,7 +76,7 @@ RSpec.describe Weft::DSL::Identity do
       original = Weft.configuration.mint_key
       Weft.configuration.mint_key = :_weft_id
 
-      expect(render_in_context(badge, wire_params: { "_weft_id" => "M1a2b3c4d" }).weft_dom_id).
+      expect(render_in_context(badge, wire_params: { "._weft_id" => "M1a2b3c4d" }).weft_dom_id).
         to eq("status-badge-M1a2b3c4d")
     ensure
       Weft.configuration.mint_key = original
@@ -170,7 +170,7 @@ RSpec.describe Weft::DSL::Identity do
     end
 
     it "carries the token it was given, rather than issuing a new one" do
-      instance = render_in_context(badge, wire_params: { "_mint" => "M1a2b3c4d" })
+      instance = render_in_context(badge, wire_params: { "._mint" => "M1a2b3c4d" })
 
       expect(instance.weft_dom_id).to eq("status-badge-M1a2b3c4d")
     end
@@ -178,9 +178,9 @@ RSpec.describe Weft::DSL::Identity do
     it "serializes the token, so a refresh comes back to the same element" do
       # The whole point of a mint: issued once at first render, then carried
       # back and forth until something forces a new first render.
-      instance = render_in_context(badge, wire_params: { "_mint" => "M1a2b3c4d" })
+      instance = render_in_context(badge, wire_params: { "._mint" => "M1a2b3c4d" })
 
-      expect(instance.weft_url).to include("_mint=M1a2b3c4d")
+      expect(instance.weft_url).to include("._mint=M1a2b3c4d")
     end
 
     it "round-trips: the id a refresh resolves to is the id it was serving" do
@@ -193,13 +193,13 @@ RSpec.describe Weft::DSL::Identity do
     it "reissues rather than trusting a token that is not weft's" do
       # A mint arrives from the wire, where anything can be typed. An id
       # attribute is no place to put an unchecked string.
-      instance = render_in_context(badge, wire_params: { "_mint" => '"><script>' })
+      instance = render_in_context(badge, wire_params: { "._mint" => '"><script>' })
 
       expect(instance.weft_dom_id).to match(/\Astatus-badge-M\h{8}\z/)
     end
 
     it "reissues a token of the wrong shape" do
-      instance = render_in_context(badge, wire_params: { "_mint" => "M1a2b" })
+      instance = render_in_context(badge, wire_params: { "._mint" => "M1a2b" })
 
       expect(instance.weft_dom_id).to match(/\Astatus-badge-M\h{8}\z/)
     end
@@ -207,7 +207,7 @@ RSpec.describe Weft::DSL::Identity do
     it "follows the configured key name" do
       original = Weft.configuration.mint_key
       Weft.configuration.mint_key = :_weft_id
-      instance = render_in_context(badge, wire_params: { "_weft_id" => "M1a2b3c4d" })
+      instance = render_in_context(badge, wire_params: { "._weft_id" => "M1a2b3c4d" })
 
       expect(instance.weft_dom_id).to eq("status-badge-M1a2b3c4d")
     ensure
@@ -239,13 +239,30 @@ RSpec.describe Weft::DSL::Identity do
         unique!
         performs(:advance) { nil }
       end
-      instance = render_in_context(acting, wire_params: { "_mint" => "M1a2b3c4d" })
+      instance = render_in_context(acting, wire_params: { "._mint" => "M1a2b3c4d" })
       action = Weft::Action.new(name: :advance, method: :post, renders: acting)
 
-      expect(instance.weft_url).to include("_mint=M1a2b3c4d")
-      expect(instance.send(:stream_url)).to include("_mint=M1a2b3c4d")
-      expect(action.to_htmx_attrs(instance)["hx-vals"]).to include('"_mint":"M1a2b3c4d"')
+      expect(instance.weft_url).to include("._mint=M1a2b3c4d")
+      expect(instance.send(:stream_url)).to include("._mint=M1a2b3c4d")
+      expect(action.to_htmx_attrs(instance)["hx-vals"]).to include('"._mint":"M1a2b3c4d"')
       expect(action.to_htmx_attrs(instance)["hx-target"]).to eq("#acting-badge-M1a2b3c4d")
+    end
+
+    it "leaves a user's own param of the same name completely alone" do
+      # The load-bearing isolation: weft's wire namespace is a leading dot the
+      # operator can neither supply nor omit, so `param :_mint` is genuinely
+      # the user's — it is not clobbered outbound nor read back inbound.
+      clash = Class.new(Weft::Component) do
+        def self.name = "Clash"
+        unique!
+        param :_mint
+      end
+      instance = render_in_context(clash, wire_params: { "._mint" => "M1a2b3c4d", "_mint" => "theirs" })
+
+      expect(instance.params[:_mint]).to eq("theirs")
+      expect(instance.weft_mint).to eq("M1a2b3c4d")
+      expect(instance.weft_dom_id).to eq("clash-M1a2b3c4d")
+      expect(instance.weft_url).to include("_mint=theirs").and include("._mint=M1a2b3c4d")
     end
 
     it "never rides someone else's request" do
@@ -253,10 +270,10 @@ RSpec.describe Weft::DSL::Identity do
       # element the user is wiring up — a different object's request. A mint
       # going along would assert that element IS this component, which is the
       # same falsehood `brings` refuses for a unique! companion.
-      instance = render_in_context(badge, wire_params: { "_mint" => "M1a2b3c4d" })
+      instance = render_in_context(badge, wire_params: { "._mint" => "M1a2b3c4d" })
 
       expect(instance.send(:serializable_params)).to be_empty
-      expect(instance.weft_addressed_params).to eq(_mint: "M1a2b3c4d")
+      expect(instance.weft_addressed_params).to eq("._mint" => "M1a2b3c4d")
     end
 
     it "does not mint for a component that never asked" do
