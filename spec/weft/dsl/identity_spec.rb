@@ -136,6 +136,106 @@ RSpec.describe Weft::DSL::Identity do
     end
   end
 
+  describe "minting" do
+    let(:badge) do
+      Class.new(Weft::Component) do
+        def self.name = "StatusBadge"
+        unique!
+        def build(attributes = {})
+          super
+          span "badge"
+        end
+      end
+    end
+
+    def render_in_context(klass, wire_params: {})
+      Weft::Context.new({}, nil, wire_params: wire_params) { insert_tag(klass) }.children.first
+    end
+
+    it "issues a token at first render, when the wire carries none" do
+      expect(render_in_context(badge).weft_dom_id).to match(/\Astatus-badge-M\h{8}\z/)
+    end
+
+    it "issues a different token to each instance on the page" do
+      ids = Array.new(5) { render_in_context(badge).weft_dom_id }
+
+      expect(ids.uniq.size).to eq(5)
+    end
+
+    it "carries the token it was given, rather than issuing a new one" do
+      instance = render_in_context(badge, wire_params: { "_mint" => "M1a2b3c4d" })
+
+      expect(instance.weft_dom_id).to eq("status-badge-M1a2b3c4d")
+    end
+
+    it "serializes the token, so a refresh comes back to the same element" do
+      # The whole point of a mint: issued once at first render, then carried
+      # back and forth until something forces a new first render.
+      instance = render_in_context(badge, wire_params: { "_mint" => "M1a2b3c4d" })
+
+      expect(instance.weft_url).to include("_mint=M1a2b3c4d")
+    end
+
+    it "round-trips: the id a refresh resolves to is the id it was serving" do
+      first = render_in_context(badge)
+      carried = URI.decode_www_form(URI(first.weft_url).query).to_h
+
+      expect(render_in_context(badge, wire_params: carried).weft_dom_id).to eq(first.weft_dom_id)
+    end
+
+    it "reissues rather than trusting a token that is not weft's" do
+      # A mint arrives from the wire, where anything can be typed. An id
+      # attribute is no place to put an unchecked string.
+      instance = render_in_context(badge, wire_params: { "_mint" => '"><script>' })
+
+      expect(instance.weft_dom_id).to match(/\Astatus-badge-M\h{8}\z/)
+    end
+
+    it "reissues a token of the wrong shape" do
+      instance = render_in_context(badge, wire_params: { "_mint" => "M1a2b" })
+
+      expect(instance.weft_dom_id).to match(/\Astatus-badge-M\h{8}\z/)
+    end
+
+    it "follows the configured key name" do
+      original = Weft.configuration.mint_key
+      Weft.configuration.mint_key = :_weft_id
+      instance = render_in_context(badge, wire_params: { "_weft_id" => "M1a2b3c4d" })
+
+      expect(instance.weft_dom_id).to eq("status-badge-M1a2b3c4d")
+    ensure
+      Weft.configuration.mint_key = original
+    end
+
+    it "gives a nested unique component its own token, never its parent's" do
+      inner = badge
+      outer = Class.new(Weft::Component) do
+        def self.name = "BadgeHost"
+        unique!
+        define_method(:build) do |attributes = {}|
+          super(attributes)
+          insert_tag(inner)
+          insert_tag(inner)
+        end
+      end
+
+      host = render_in_context(outer)
+      minted = host.children.map { |c| c.get_attribute("id") }.compact
+
+      expect(minted.uniq.size).to eq(2)
+      expect(minted).not_to include(host.weft_dom_id)
+    end
+
+    it "does not mint for a component that never asked" do
+      plain = Class.new(Weft::Component) do
+        def self.name = "PlainCard"
+        param :status
+      end
+
+      expect(render_in_context(plain).weft_dom_id).to eq("plain-card")
+    end
+  end
+
   describe "inheritance" do
     let(:base) do
       Class.new(Weft::Component) do

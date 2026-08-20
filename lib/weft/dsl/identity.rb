@@ -156,10 +156,26 @@ module Weft
         # a collision drops a companion rather than merely duplicating an id.
         def identity_segment(bag, key)
           value = identity_value(bag, key)
+          return mint_segment(value) if unique?
+
           length = digest_length_for(key)
           return Weft::Addressing.digest(value, length) if length
 
           sanitize_identifier(value, key)
+        end
+
+        # A mint arrives complete — issued by weft, checked on the way in — so
+        # it passes through untouched; sanitizing it would downcase its marker
+        # and undo the one thing the marker is for. It is checked again here
+        # because this method is also reachable from the class path, where no
+        # assembly has run and the bag is whatever the caller had.
+        #
+        # Anything else in the slot is reissued rather than rendered. A
+        # `unique!` component with no usable token would otherwise render blank
+        # and collide with every other such instance — landing somewhere wrong,
+        # where a fresh token lands nowhere.
+        def mint_segment(value)
+          Weft::Addressing.mint?(value) ? value.to_s : Weft::Addressing.mint
         end
 
         # Values render into an alphabet holding no dash, so the separator marks a
