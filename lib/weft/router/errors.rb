@@ -115,8 +115,12 @@ module Weft
       end
 
       # +state+ is the bag the request had composed when it broke — what the
-      # recovery block reads. Bags are for blocks; the wire hash below is for
-      # URLs, and stays a plain hash so building one can't force a derivation.
+      # recovery block reads, and what identity falls back to when construction
+      # never produced an instance. Reused rather than rebuilt: its thunks are
+      # already forced, so an error component rendering from the same record
+      # costs no second query. Bags are for blocks and identity; the wire hash
+      # below is for URLs, and stays a plain hash because a retry URL has no
+      # business forcing a derivation to build itself.
       def render_error(component_class, state, error)
         entry = component_class.recovery_for(error)
         if entry
@@ -142,15 +146,6 @@ module Weft
       # derivation would run user code in the middle of error handling.
       def error_wire_params(component_class)
         Weft::Resolver.resolve(component_class, filtered_params)
-      end
-
-      # Identity's fallback bag, for when construction raised before an instance
-      # existed. A bag rather than the wire hash above, because an
-      # `identifies_by` block is entitled to the same params `build` would have
-      # seen — a derived value included. Assembly registers derivations without
-      # running them, so this forces user code only if the id actually reads one.
-      def error_identity_bag(component_class)
-        Weft::Params::Assembly.for_request(component_class, filtered_params)
       end
 
       # D1 applies when: the htmx_errors knob is :redirect, the request is htmx,
@@ -180,8 +175,8 @@ module Weft
         wire = error_wire_params(component_class)
         component_ctx = {
           originating_id: resolved_dom_id(component_class,
-                                          unbuilt_instance(component_class, filtered_params),
-                                          error_identity_bag(component_class)),
+                                          unbuilt_instance(component_class, filtered_params,
+                                                           branch_bag: state), state),
           originating_tag: component_tag_for(component_class),
           retry_url: compute_retry_url(component_class, wire),
           status: recovery_status(error, entry)
@@ -209,7 +204,9 @@ module Weft
       # at construction, so it answers for its own identity and URL before
       # `build` runs, and unlike the class-level derivation it honors a
       # `weft_dom_id` override. nil when the construction itself is what
-      # raises. Where the same component goes on to render, pass that instance
+      # raises. Branch it from the bag the request already has wherever there
+      # is one: a fresh bag re-runs every derivation the failed attempt had
+      # already paid for. Where the same component goes on to render, pass that instance
       # rather than making a second one — the two would carry separate bags,
       # and a derivation behind a declared param would run in each.
       def unbuilt_instance(component_class, wire_params, overlays: {}, branch_bag: nil)

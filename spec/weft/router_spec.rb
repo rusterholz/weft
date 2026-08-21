@@ -852,6 +852,30 @@ RSpec.describe Weft::Router do
       expect(last_response.body).to include('id="failing-card-1"')
     end
 
+    it "reuses the bag the request already composed, rather than re-deriving" do
+      # The canonical shape: derives(:order) { Order.find(...) }, an action that
+      # updates it, a recovery component that renders from the same object. The
+      # thunk fired before the failure, so identity must read the bag that has
+      # it memoized — a fresh bag would re-run the query.
+      calls = []
+      failing = Class.new(Weft::Component) do
+        def self.name = "OrderPanel"
+        param :order_id
+        derives(:order) do |params|
+          calls << params.order_id
+          "order-#{params.order_id}"
+        end
+        identifies_by { |params| "panel-#{params.order}" }
+        performs(:submit) { |params| params.order && raise("update failed") }
+      end
+      failing.recovers from: StandardError, with: derived_stand_in
+
+      post "/_components/order_panel/submit", order_id: "42"
+
+      expect(last_response.body).to include('id="panel-order-42"')
+      expect(calls).to eq(%w[42])
+    end
+
     it "resolves a block id from a derived value when construction never got that far" do
       # The class path used to be handed a raw wire hash, which carries only
       # what arrived on the request — a block reading a derived value saw

@@ -195,9 +195,15 @@ module Weft
         end
 
         # The block is documented as receiving *params*, so it gets a bag however
-        # the caller reached us. Weft's own callers all pass assembled bags now;
-        # this covers everyone else, since `weft_dom_id_for` is public and a
-        # plain hash is the obvious thing to hand it.
+        # the caller reached us. Weft's own callers pass the bag the request
+        # already composed; this coerces at the boundary for everyone else,
+        # since `weft_dom_id_for` is public and a plain hash is the obvious
+        # thing to hand it.
+        #
+        # A hash is genuinely sufficient for the argument form — identifiers
+        # must be declared wire params — and genuinely insufficient for a block
+        # reading a derived value, which raises NoMethodError off the wrapped
+        # bag rather than composing a quietly wrong id.
         def identity_bag(bag)
           return bag if bag.is_a?(Weft::Params)
 
