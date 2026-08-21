@@ -5,6 +5,7 @@ require "active_support/core_ext/string/inflections"
 require "weft/addressing"
 require "weft/dsl/sandbox"
 require "weft/params"
+require "weft/params/assembly"
 require "weft/error"
 require "weft/resolver"
 
@@ -142,10 +143,8 @@ module Weft
         #
         # +params+ is a bag wherever weft calls it — the one the request has
         # already composed, never a rebuilt one. A plain hash is accepted
-        # because this is public and a hash is the obvious thing to hand it; it
-        # carries everything the argument form needs, since identifiers must be
-        # declared wire params. A block reading a *derived* value off a hash
-        # raises rather than answering, which is the honest outcome.
+        # because this is public and a hash is the obvious thing to hand it,
+        # and it is assembled into a real bag before any block sees it.
         def weft_dom_id_for(params = {}, mint = nil)
           return block_dom_id(params) if identity_block
           return "#{weft_dom_id_base}-#{mint_segment(mint)}" if unique?
@@ -211,14 +210,15 @@ module Weft
         # since `weft_dom_id_for` is public and a plain hash is the obvious
         # thing to hand it.
         #
-        # A hash is genuinely sufficient for the argument form — identifiers
-        # must be declared wire params — and genuinely insufficient for a block
-        # reading a derived value, which raises NoMethodError off the wrapped
-        # bag rather than composing a quietly wrong id.
+        # A hash is *assembled* rather than merely wrapped, because a block is
+        # entitled to everything `build` would have seen. Wrapping produced a
+        # bag with no derivations, so a block reading one failed with a
+        # NoMethodError naming the derivation — pointing at the block, when the
+        # fault was the hash handed in three frames up.
         def identity_bag(bag)
           return bag if bag.is_a?(Weft::Params)
 
-          Weft::Params.new(bag.to_h.transform_keys(&:to_sym))
+          Weft::Params::Assembly.for_request(self, bag.to_h)
         end
 
         # A mint is checked, never trusted: it reaches this method from the

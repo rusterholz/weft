@@ -195,6 +195,21 @@ RSpec.describe Weft::DSL::Identity do
       expect(instance.weft_dom_id).to eq("panel-order-9")
     end
 
+    it "assembles a plain hash rather than half-wrapping it" do
+      # A block is entitled to everything build would have seen. A bare wrap
+      # carried no derivations, so a block reading one raised — naming the
+      # derivation, when the fault was the hash handed in further up.
+      derived = Class.new(Weft::Component) do
+        def self.name = "HashFedPanel"
+        param :order_id
+        derives(:slug) { |params| "order-#{params.order_id}" }
+        identifies_by { |params| "panel-#{params.slug}" }
+      end
+
+      expect(derived.weft_dom_id_for(order_id: 9)).to eq("panel-order-9")
+      expect(derived.weft_dom_id_for("order_id" => 9)).to eq("panel-order-9")
+    end
+
     it "is honored on the class path too, where there is no instance to ask" do
       # This is the hole it closes: a `weft_dom_id` override is instance-only,
       # so error recovery gave a component a different id than a normal render.
