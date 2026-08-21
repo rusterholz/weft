@@ -127,14 +127,25 @@ module Weft
           nil
         end
 
-        # Compute the would-be DOM ID for an instance of this class from a params
-        # bag, without instantiating. Single source of truth; the instance method
-        # delegates, and the Router falls back here when it cannot construct an
+        # Compute the would-be DOM ID for an instance of this class, without
+        # instantiating. Single source of truth: the instance method delegates
+        # here, and the Router falls back here when it cannot construct an
         # instance to ask.
         #
-        # The id is the class stem followed by one slot per declared identifier,
-        # in declaration order. A component that identifies by nothing wears its
-        # stem alone.
+        # One of three answers, by what the class declared:
+        #
+        # * an `identifies_by` block composes the whole id itself;
+        # * `unique!` wears the stem plus the mint it is holding (+mint+ — the
+        #   instance passes its own; the class path has none and issues one);
+        # * otherwise the stem, then one slot per declared identifier in
+        #   declaration order, or the stem alone if nothing identifies it.
+        #
+        # +params+ is a bag wherever weft calls it — the one the request has
+        # already composed, never a rebuilt one. A plain hash is accepted
+        # because this is public and a hash is the obvious thing to hand it; it
+        # carries everything the argument form needs, since identifiers must be
+        # declared wire params. A block reading a *derived* value off a hash
+        # raises rather than answering, which is the honest outcome.
         def weft_dom_id_for(params = {}, mint = nil)
           return block_dom_id(params) if identity_block
           return "#{weft_dom_id_base}-#{mint_segment(mint)}" if unique?
