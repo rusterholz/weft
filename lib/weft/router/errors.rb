@@ -115,8 +115,12 @@ module Weft
       end
 
       # +state+ is the bag the request had composed when it broke — what the
-      # recovery block reads. Bags are for blocks; the wire hash below is for
-      # URLs, and stays a plain hash so building one can't force a derivation.
+      # recovery block reads, and what identity falls back to when construction
+      # never produced an instance. Reused rather than rebuilt: its thunks are
+      # already forced, so an error component rendering from the same record
+      # costs no second query. Bags are for blocks and identity; the wire hash
+      # below is for URLs, and stays a plain hash because a retry URL has no
+      # business forcing a derivation to build itself.
       def render_error(component_class, state, error)
         entry = component_class.recovery_for(error)
         if entry
@@ -171,7 +175,8 @@ module Weft
         wire = error_wire_params(component_class)
         component_ctx = {
           originating_id: resolved_dom_id(component_class,
-                                          unbuilt_instance(component_class, filtered_params), wire),
+                                          unbuilt_instance(component_class, filtered_params,
+                                                           branch_bag: state), state),
           originating_tag: component_tag_for(component_class),
           retry_url: compute_retry_url(component_class, wire),
           status: recovery_status(error, entry)
@@ -199,7 +204,9 @@ module Weft
       # at construction, so it answers for its own identity and URL before
       # `build` runs, and unlike the class-level derivation it honors a
       # `weft_dom_id` override. nil when the construction itself is what
-      # raises. Where the same component goes on to render, pass that instance
+      # raises. Branch it from the bag the request already has wherever there
+      # is one: a fresh bag re-runs every derivation the failed attempt had
+      # already paid for. Where the same component goes on to render, pass that instance
       # rather than making a second one — the two would carry separate bags,
       # and a derivation behind a declared param would run in each.
       def unbuilt_instance(component_class, wire_params, overlays: {}, branch_bag: nil)
@@ -210,9 +217,8 @@ module Weft
       end
 
       # The DOM id a component wears, asked of an unbuilt instance first and
-      # falling back to the class-level derivation from an already-resolved
-      # params hash — that covers a construction that raises before the
-      # instance exists.
+      # falling back to the class-level derivation from an assembled bag —
+      # that covers a construction that raises before the instance exists.
       #
       # Identity that raises when *asked* does not fall through to the
       # class-level derivation, on purpose: a raising `weft_dom_id` is an
@@ -231,13 +237,21 @@ module Weft
       # Identity can itself raise — a `weft_dom_id` reading a record deleted
       # between renders — and the id it would have had is unrecoverable.
       #
-      # TEMPORARY: an unresolvable identity gets a unique throwaway, so it can
-      # never collide with or displace another fragment. Such a fragment simply
-      # lands nowhere, which is the honest outcome when we cannot say where it
-      # belongs. Component identity is due a design pass of its own; this is a
-      # placeholder until it gets one.
+      # An unresolvable identity gets a unique throwaway, so it can never
+      # collide with or displace another fragment. Such a fragment simply lands
+      # nowhere, which is the honest outcome when we cannot say where it
+      # belongs.
+      #
+      # This is the one place identity is deliberately asked nothing: everywhere
+      # else derivation takes an assembled bag, and here there is no bag worth
+      # assembling, because the question "which element is this?" has already
+      # failed. Intentional, not a placeholder.
+      #
+      # Built from the stem alone: the throwaway suffix already guarantees
+      # uniqueness, so asking identity for slots it has just failed to fill
+      # would only invent blank ones.
       def unresolved_dom_id(component_class)
-        "#{component_class.weft_dom_id_for}-unresolved-#{SecureRandom.hex(4)}"
+        "#{component_class.weft_dom_id_base}-unresolved-#{SecureRandom.hex(4)}"
       end
 
       # A recovery fragment stands in the failing component's place, so it

@@ -45,6 +45,29 @@ RSpec.describe Weft::Addressing do
     end
   end
 
+  describe ".mint" do
+    it "issues a marked token" do
+      expect(described_class.mint).to match(/\AM\h{8}\z/)
+    end
+
+    it "issues a different token every time — entropy, not a function of anything" do
+      expect(Array.new(50) { described_class.mint }.uniq.size).to eq(50)
+    end
+
+    it "recognizes its own tokens and rejects everything else" do
+      expect(described_class.mint?(described_class.mint)).to be(true)
+      expect(described_class.mint?("M1a2b3c4d")).to be(true)
+      expect(described_class.mint?("m1a2b3c4d")).to be(false)
+      expect(described_class.mint?("M1a2b")).to be(false)
+      expect(described_class.mint?("<script>")).to be(false)
+      expect(described_class.mint?(nil)).to be(false)
+    end
+
+    it "cannot be confused with a digested token" do
+      expect(described_class.mint?("D1a2b3c4d")).to be(false)
+    end
+  end
+
   describe "the DOM id and the route path agree on the stem" do
     it "strips a trailing Component from the id, as the path already does" do
       component_class = Class.new(Weft::Component) do
@@ -231,7 +254,146 @@ RSpec.describe Weft::Addressing do
       end
     end
 
+    describe "digest mode" do
+      let(:digested_class) do
+        Class.new(Weft::Component) do
+          def self.name = "PersonCard"
+          param :label, digest: true
+          identifies_by :label
+        end
+      end
+
+      it "renders the slot as a marked token instead of the value" do
+        expect(digested_class.weft_dom_id_for(label: "Alice Smith")).to eq("person-card-D5ed21b7f")
+      end
+
+      it "digests even a value that would have survived sanitization untouched" do
+        # All-or-nothing: a per-value fallback would let a digested slot collide
+        # with a literal value that is perfectly plausible for the same param.
+        expect(digested_class.weft_dom_id_for(label: "alice")).to eq("person-card-D0a50500b")
+      end
+
+      it "marks the token with an uppercase prefix the sanitizer can never emit" do
+        # parameterize downcases everything, exotic uppercase included, so a
+        # literal value can never be mistaken for a generated token.
+        segment = digested_class.weft_dom_id_for(label: "alice").split("-").last
+
+        expect(segment).to start_with("D")
+        expect(segment.length).to eq(9)
+      end
+
+      it "separates two values that sanitize to the same string" do
+        # Digesting after sanitization would destroy exactly the distinction
+        # digest exists to preserve.
+        left = digested_class.weft_dom_id_for(label: "Al  green")
+        right = digested_class.weft_dom_id_for(label: "al Green ")
+
+        expect(left).not_to eq(right)
+        expect("Al  green".parameterize).to eq("al Green ".parameterize)
+      end
+
+      it "separates nil from the empty string" do
+        # Reading `to_s` would render both as "", collapsing them to one token.
+        expect(digested_class.weft_dom_id_for(label: nil)).to eq("person-card-D5da3a4c7")
+        expect(digested_class.weft_dom_id_for(label: "")).to eq("person-card-D12ae32cb")
+      end
+
+      it "separates a value from its own string rendering" do
+        expect(digested_class.weft_dom_id_for(label: 42)).
+          not_to eq(digested_class.weft_dom_id_for(label: "42"))
+      end
+
+      it "digests a blank value rather than leaving the slot empty" do
+        expect(digested_class.weft_dom_id_for(label: nil)).not_to end_with("-")
+        expect(digested_class.weft_dom_id_for({})).to eq("person-card-D5da3a4c7")
+      end
+
+      it "is stable across processes" do
+        # String#hash is seeded per process: it would agree with itself under
+        # one worker and disagree under two.
+        id = digested_class.weft_dom_id_for(label: "Alice Smith")
+        out = `#{RbConfig.ruby} -Ilib -rweft -e '#{<<~SCRIPT.strip}'`
+          klass = Class.new(Weft::Component) do
+            def self.name = "PersonCard"
+            param :label, digest: true
+            identifies_by :label
+          end
+          print klass.weft_dom_id_for(label: "Alice Smith")
+        SCRIPT
+
+        expect(out).to eq(id)
+        expect(out).to match(/-D\h{8}\z/)
+      end
+
+      it "widens the token when the declaration asks for a length" do
+        wide = Class.new(Weft::Component) do
+          def self.name = "WideCard"
+          param :label, digest: 16
+          identifies_by :label
+        end
+
+        expect(wide.weft_dom_id_for(label: "alice")).to eq("wide-card-D0a50500b2a3435fe")
+      end
+
+      it "follows the gem-wide length when the declaration only sets the flag" do
+        original = Weft.configuration.digest_length
+        Weft.configuration.digest_length = 4
+        expect(digested_class.weft_dom_id_for(label: "alice")).to eq("person-card-D0a50")
+      ensure
+        Weft.configuration.digest_length = original
+      end
+
+      it "lets a per-param length override the gem-wide one" do
+        original = Weft.configuration.digest_length
+        Weft.configuration.digest_length = 4
+        wide = Class.new(Weft::Component) do
+          def self.name = "WideCard"
+          param :label, digest: 16
+          identifies_by :label
+        end
+
+        expect(wide.weft_dom_id_for(label: "alice")).to eq("wide-card-D0a50500b2a3435fe")
+      ensure
+        Weft.configuration.digest_length = original
+      end
+
+      it "digests only the params that asked for it" do
+        mixed = Class.new(Weft::Component) do
+          def self.name = "MixedCard"
+          param :kind
+          param :label, digest: true
+          identifies_by :kind, :label
+        end
+
+        expect(mixed.weft_dom_id_for(kind: "vip", label: "alice")).to eq("mixed-card-vip-D0a50500b")
+      end
+
+      it "gives repeated identical values the same token, since nothing salts them" do
+        pair = Class.new(Weft::Component) do
+          def self.name = "PairCard"
+          param :left, digest: true
+          param :right, digest: true
+          identifies_by :left, :right
+        end
+
+        expect(pair.weft_dom_id_for(left: nil, right: nil)).to eq("pair-card-D5da3a4c7-D5da3a4c7")
+      end
+
+      it "takes precedence over uuid rendering" do
+        uuid = Class.new(Weft::Component) do
+          def self.name = "UuidCard"
+          param :key, type: :uuid, digest: true
+          identifies_by :key
+        end
+
+        expect(uuid.weft_dom_id_for(key: "f7c599ce-3945-4340-b4cc-5754a682ae43")).
+          to eq("uuid-card-Dcad6c957")
+      end
+    end
+
     describe "blank slots" do
+      before { allow(Weft.logger).to receive(:warn) }
+
       let(:pair_class) do
         Class.new(Weft::Component) do
           def self.name = "PairRow"
@@ -252,6 +414,57 @@ RSpec.describe Weft::Addressing do
 
       it "treats a value that sanitizes away as blank" do
         expect(pair_class.weft_dom_id_for(left: "---", right: 3)).to eq("pair-row--3")
+      end
+
+      it "warns, naming the id the blank values share and the declaration that fixes it" do
+        pair_class.weft_dom_id_for(left: nil, right: 3)
+
+        expect(Weft.logger).to have_received(:warn).
+          with(/PairRow identifies by :left.*"pair-row--3".*digest: true/m)
+      end
+
+      it "warns for each blank identifier, not just the first" do
+        pair_class.weft_dom_id_for(left: nil, right: nil)
+
+        expect(Weft.logger).to have_received(:warn).with(/:left/).once
+        expect(Weft.logger).to have_received(:warn).with(/:right/).once
+      end
+
+      it "warns once per param however many instances render" do
+        # A hundred-row table would otherwise say the same thing a hundred times.
+        100.times { |i| pair_class.weft_dom_id_for(left: nil, right: i) }
+
+        expect(Weft.logger).to have_received(:warn).once
+      end
+
+      it "stays quiet when every identifying value is there" do
+        pair_class.weft_dom_id_for(left: 1, right: 2)
+
+        expect(Weft.logger).not_to have_received(:warn)
+      end
+
+      it "stays quiet in digest mode, where a blank value still gets its own slot" do
+        digested = Class.new(Weft::Component) do
+          def self.name = "DigestedPair"
+          param :left, digest: true
+          param :right, digest: true
+          identifies_by :left, :right
+        end
+
+        digested.weft_dom_id_for(left: nil, right: nil)
+
+        expect(Weft.logger).not_to have_received(:warn)
+      end
+
+      it "stays quiet for a component that identifies by nothing" do
+        bare = Class.new(Weft::Component) do
+          def self.name = "GlobalStats"
+          param :status
+        end
+
+        bare.weft_dom_id_for({})
+
+        expect(Weft.logger).not_to have_received(:warn)
       end
 
       it "suffixes a single blank identifier rather than dropping to the bare base" do
@@ -423,6 +636,49 @@ RSpec.describe Weft::Addressing do
       expect(child).to be_routable
     end
 
+    describe "unique! and routability" do
+      it "does not publish an endpoint for a component whose only param is weft's own" do
+        # Weft adding a param on your behalf is no reason for a public GET to
+        # appear — the routability lint exists to prevent exactly that.
+        badge = Class.new(Weft::Component) do
+          def self.name = "StatusBadge"
+          unique!
+        end
+
+        expect(badge).not_to be_routable
+      end
+
+      it "still routes when something the user declared earns it" do
+        actor = Class.new(Weft::Component) do
+          def self.name = "ActingBadge"
+          unique!
+          performs(:advance) { nil }
+        end
+
+        expect(actor).to be_routable
+      end
+
+      it "still routes when the user declares a param of their own" do
+        keyed = Class.new(Weft::Component) do
+          def self.name = "KeyedBadge"
+          unique!
+          param :status
+        end
+
+        expect(keyed).to be_routable
+      end
+
+      it "routes when asked explicitly" do
+        forced = Class.new(Weft::Component) do
+          def self.name = "ForcedBadge"
+          unique!
+          routable!
+        end
+
+        expect(forced).to be_routable
+      end
+    end
+
     describe "abstract! and routable! overrides" do
       it "abstract! makes a routable class non-routable" do
         component_class = Class.new(Weft::Component) do
@@ -483,7 +739,7 @@ RSpec.describe Weft::Addressing do
     end
   end
 
-  describe "#weft_url" do
+  describe "#weft_component_url" do
     it "returns the component path with current params" do
       component_class = Class.new(Weft::Component) do
         def self.name = "Panel"
@@ -496,7 +752,7 @@ RSpec.describe Weft::Addressing do
       end
       component = ctx.children.first
 
-      expect(component.weft_url).to eq("/_components/panel?status=shipped&page=2")
+      expect(component.weft_component_url).to eq("/_components/panel?status=shipped&page=2")
     end
 
     it "overrides specific params" do
@@ -511,7 +767,7 @@ RSpec.describe Weft::Addressing do
       end
       component = ctx.children.first
 
-      expect(component.weft_url(page: 3)).to eq("/_components/panel?status=shipped&page=3")
+      expect(component.weft_component_url(page: 3)).to eq("/_components/panel?status=shipped&page=3")
     end
 
     it "omits nil values from the URL" do
@@ -526,7 +782,7 @@ RSpec.describe Weft::Addressing do
       end
       component = ctx.children.first
 
-      expect(component.weft_url).to eq("/_components/panel?page=1")
+      expect(component.weft_component_url).to eq("/_components/panel?page=1")
     end
   end
 end

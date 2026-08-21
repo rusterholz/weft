@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "weft/error"
+require "weft/addressing"
 require "weft/params/assembly"
 
 module Weft
@@ -20,12 +21,20 @@ module Weft
         # type (see Resolver::TYPES). The two are orthogonal — an untyped
         # param accepts any value uncoerced — but a non-nil default must
         # already be an instance of the declared type.
+        # `digest:` renders this param's slot of the DOM id as an opaque
+        # token instead of the value itself — reach for it when blank is a
+        # legitimate value, or when two distinct values would sanitize to the
+        # same string. `digest: 12` widens the token past the gem-wide
+        # {Weft::Configuration#digest_length}.
         #   param :page, type: :integer
         #   param :status, default: "active", type: :string
-        def param(name, default: nil, type: nil)
+        #   param :customer_name, digest: true
+        def param(name, default: nil, type: nil, digest: false)
           validate_type!(name, type, default) unless type.nil?
+          validate_digest!(name, digest) if digest
           meta = { default: default }
           meta[:type] = type unless type.nil?
+          meta[:digest] = digest if digest
           own_params[name] = meta
         end
 
@@ -123,6 +132,15 @@ module Weft
           raise Weft::InvalidDefinition,
                 "param #{name.inspect} declares type #{type.inspect} but its default " \
                 "#{default.inspect} is #{default.class} — make them agree, or drop one"
+        end
+
+        def validate_digest!(name, digest)
+          return if digest == true
+          return if digest.is_a?(Integer) && digest.between?(1, Weft::Addressing::MAX_DIGEST_LENGTH)
+
+          raise Weft::InvalidDefinition,
+                "param #{name.inspect} declares digest #{digest.inspect} — pass true for the " \
+                "gem-wide length, or an integer between 1 and #{Weft::Addressing::MAX_DIGEST_LENGTH}"
         end
 
         def own_params

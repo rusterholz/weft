@@ -158,6 +158,99 @@ RSpec.describe Weft::Registry do
     end
   end
 
+  describe "DOM id base collision detection" do
+    it "raises when two components derive the same id base, routable or not" do
+      # The route check is routability-gated, so a non-routable class beside a
+      # routable one shared an id base with nothing to catch it. A component
+      # that never routes still has to swap into the right slot.
+      a = Class.new(Weft::Component) do
+        def self.name = "Foo"
+        param :x
+      end
+      b = Class.new(Weft::Component) do
+        def self.name = "FooComponent"
+        dependent!
+      end
+      registry.register(a)
+      registry.register(b)
+
+      expect { registry.lookup("/_components/foo") }.to raise_error(
+        Weft::InvalidDefinition, /DOM id.*"foo".*Foo.*FooComponent/m
+      )
+    end
+
+    it "catches a base two differently-shaped names arrive at" do
+      a = Class.new(Weft::Component) { def self.name = "OrderRow" }
+      b = Class.new(Weft::Component) { def self.name = "Order::Row" }
+      registry.register(a)
+      registry.register(b)
+
+      expect { registry.lookup("/x") }.to raise_error(Weft::InvalidDefinition, /"order-row"/)
+    end
+
+    it "names the reload case when both classes carry one name" do
+      a = Class.new(Weft::Component) { def self.name = "Twin" }
+      b = Class.new(Weft::Component) { def self.name = "Twin" }
+      registry.register(a)
+      registry.register(b)
+
+      expect { registry.lookup("/x") }.to raise_error(Weft::InvalidDefinition, /reloading|evict/i)
+    end
+
+    it "allows distinct bases" do
+      a = Class.new(Weft::Component) { def self.name = "Alpha" }
+      b = Class.new(Weft::Component) { def self.name = "Beta" }
+      registry.register(a)
+      registry.register(b)
+
+      expect { registry.lookup("/x") }.not_to raise_error
+    end
+
+    it "exempts a component whose id comes from a block" do
+      # Its id is not derived from the base at all, so the base cannot collide.
+      a = Class.new(Weft::Component) { def self.name = "Foo" }
+      b = Class.new(Weft::Component) do
+        def self.name = "FooComponent"
+        identifies_by { |_params| "somewhere-else" }
+      end
+      registry.register(a)
+      registry.register(b)
+
+      expect { registry.lookup("/x") }.not_to raise_error
+    end
+
+    it "exempts unique! components, whose ids provably cannot collide" do
+      # Each instance carries its own mint, so a shared base yields
+      # foo-Maaaa and foo-Mbbbb — never the same id.
+      a = Class.new(Weft::Component) do
+        def self.name = "Foo"
+        unique!
+      end
+      b = Class.new(Weft::Component) do
+        def self.name = "FooComponent"
+        unique!
+      end
+      registry.register(a)
+      registry.register(b)
+
+      expect { registry.lookup("/x") }.not_to raise_error
+    end
+
+    it "ignores anonymous classes, which have no name to derive a base from" do
+      registry.register(Class.new(Weft::Component))
+      registry.register(Class.new(Weft::Component))
+
+      expect { registry.lookup("/x") }.not_to raise_error
+    end
+
+    it "does not ask pages for an id base — they have no DOM identity" do
+      registry.register_page(Class.new(Weft::Page) { def self.name = "Solo" })
+      registry.register(Class.new(Weft::Component) { def self.name = "Solo" })
+
+      expect { registry.lookup("/x") }.not_to raise_error
+    end
+  end
+
   describe "dependent-receives lint" do
     before { allow(Weft.logger).to receive(:warn) }
 

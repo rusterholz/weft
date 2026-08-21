@@ -823,6 +823,21 @@ RSpec.describe Weft::Router do
       end
     end
 
+    # The stamp is the Router's, not an opt-in: a recovery target stands in the
+    # failing component's place, and a swap addressed anywhere else lands
+    # somewhere else. Nothing here declares an identity param.
+    let(:derived_stand_in) do
+      Class.new(Weft::Component) do
+        def self.name = "DerivedStandIn"
+        abstract!
+
+        def build(attributes = {})
+          super
+          span "stood in"
+        end
+      end
+    end
+
     it "returns 500 and renders the gem-default ErrorComponent when rendering fails" do
       get "/_components/failing_card", id: "1"
 
@@ -837,9 +852,52 @@ RSpec.describe Weft::Router do
       expect(last_response.body).to include('id="failing-card-1"')
     end
 
-    # The stamp is the Router's, not an opt-in: a recovery target stands in the
-    # failing component's place, and a swap addressed anywhere else lands
-    # somewhere else. Nothing here declares an identity param.
+    it "reuses the bag the request already composed, rather than re-deriving" do
+      # The canonical shape: derives(:order) { Order.find(...) }, an action that
+      # updates it, a recovery component that renders from the same object. The
+      # thunk fired before the failure, so identity must read the bag that has
+      # it memoized — a fresh bag would re-run the query.
+      calls = []
+      failing = Class.new(Weft::Component) do
+        def self.name = "OrderPanel"
+        param :order_id
+        derives(:order) do |params|
+          calls << params.order_id
+          "order-#{params.order_id}"
+        end
+        identifies_by { |params| "panel-#{params.order}" }
+        performs(:submit) { |params| params.order && raise("update failed") }
+      end
+      failing.recovers from: StandardError, with: derived_stand_in
+
+      post "/_components/order_panel/submit", order_id: "42"
+
+      expect(last_response.body).to include('id="panel-order-42"')
+      expect(calls).to eq(%w[42])
+    end
+
+    it "resolves a block id from a derived value when construction never got that far" do
+      # The class path used to be handed a raw wire hash, which carries only
+      # what arrived on the request — a block reading a derived value saw
+      # nothing and the recovery fragment landed on the wrong id.
+      exploding = Class.new(Weft::Component) do
+        def self.name = "DerivedIdCard"
+        param :order_id
+        derives(:slug) { |params| "order-#{params.order_id}" }
+        identifies_by { |params| "panel-#{params.slug}" }
+
+        def initialize(*)
+          super
+          raise "construction exploded"
+        end
+      end
+      exploding.recovers from: StandardError, with: derived_stand_in
+
+      get "/_components/derived_id_card", order_id: "42"
+
+      expect(last_response.body).to include('id="panel-order-42"')
+    end
+
     it "stamps it onto an unrelated recovery target too" do
       stand_in = Class.new(Weft::Component) do
         def self.name = "StandInCard"
@@ -878,6 +936,31 @@ RSpec.describe Weft::Router do
       get "/_components/unstable_id", id: "1"
 
       expect(last_response.body).to match(/id="unstable-id-unresolved-[0-9a-f]{8}"/)
+    end
+
+    # A throwaway id is not an identity — asking identity for slots it cannot
+    # fill would invent blank ones, doubling the separator and warning about a
+    # collision risk that the throwaway suffix has already ruled out.
+    it "builds the unresolved id from the stem alone, not from empty slots" do
+      allow(Weft.logger).to receive(:warn)
+      unstable = Class.new(Weft::Component) do
+        def self.name = "UnstableKeyed"
+        param :order_id
+        identifies_by :order_id
+
+        def build(attributes = {})
+          super
+          raise "build broke"
+        end
+
+        def weft_dom_id = raise("identity broke")
+      end
+      expect(unstable).to be_routable
+
+      get "/_components/unstable_keyed", order_id: "1"
+
+      expect(last_response.body).to match(/id="unstable-keyed-unresolved-[0-9a-f]{8}"/)
+      expect(Weft.logger).not_to have_received(:warn).with(/rendered blank/)
     end
 
     it "includes a retry button targeting the failing wrapper" do
@@ -1791,6 +1874,24 @@ RSpec.describe Weft::Router do
 
       expect(Weft.logger).to have_received(:warn).
         with(/SideCounter companion declared at .+:\d+ was dropped.+already claimed by .+:\d+\./m)
+    end
+
+    it "offers digest mode as the fix when the values themselves cannot differ" do
+      # Two distinct values can sanitize to one string, in which case "give
+      # them different values" is advice the developer has already taken.
+      allow(Weft.logger).to receive(:warn)
+      mine = companion_class
+      source = Class.new(Weft::Component) do
+        def self.name = "AdvisingIncluder"
+        param :order_id
+        performs(:advance) { nil }
+      end
+      source.brings(mine)
+      source.brings(mine, on: :advance)
+
+      post "/_components/advising_includer/advance", order_id: "9"
+
+      expect(Weft.logger).to have_received(:warn).with(/digest: true/)
     end
 
     it "keeps both fragments when two declarations resolve to different DOM ids" do # rubocop:disable RSpec/ExampleLength

@@ -197,7 +197,9 @@ module Weft
           "#{dropped[:source_location].join(':')} was dropped: it resolves to DOM id " \
           "#{dom_id.inspect}, already claimed by #{claimant}. An out-of-band swap is addressed " \
           "by DOM id, so only one fragment can land there — give them different values for an " \
-          "identifying param, or drop one of the declarations."
+          "identifying param, or drop one of the declarations. If the values already differ and " \
+          "still land here, they render to the same slot: declare that param `digest: true` to " \
+          "keep them apart."
         )
       end
 

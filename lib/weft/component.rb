@@ -18,7 +18,6 @@ require "weft/dsl/announcements"
 require "weft/dsl/updates"
 require "weft/error"
 require "weft/registry"
-require "weft/resolver"
 require "weft/addressing"
 require "weft/router/streaming"
 
@@ -92,26 +91,6 @@ module Weft
         end.to_s
       end
 
-      # Value classes an identifying param may hold. An allowlist: arrays,
-      # hashes, and rich objects stringify to selector-hostile junk, and an id
-      # derived from one could never be reconstructed from the wire.
-      SCALAR_ID_CLASSES = [String, Symbol, Numeric, TrueClass, FalseClass].freeze
-
-      # Compute the would-be DOM ID for an instance of this class from a params
-      # bag, without instantiating. Single source of truth; the instance method
-      # delegates, and the Router falls back here when it cannot construct an
-      # instance to ask.
-      #
-      # The id is the class stem followed by one slot per declared identifier,
-      # in declaration order. A component that identifies by nothing wears its
-      # stem alone.
-      def weft_dom_id_for(params = {})
-        base = addressing_stem.underscore.tr("/", "-").tr("_", "-")
-        return base if identifiers.empty?
-
-        "#{base}-#{identifiers.map { |key| identity_segment(params, key) }.join('-')}"
-      end
-
       # @api private
       # This class's name as its addresses are built from it — the route path
       # and the DOM id read the same stem, so the two can no longer drift.
@@ -120,38 +99,6 @@ module Weft
       def addressing_stem = stem(name, "Component")
 
       private
-
-      # One slot of the id. Identifying values are sanitized into a dash-free
-      # alphabet, so the separator can never occur inside a slot and a doubled
-      # separator can only mean an empty one — which is why every declared
-      # identifier keeps its slot even when its value is absent. Two components
-      # differing in a value they both leave blank would otherwise collide, and
-      # since M17 a collision drops a companion rather than merely duplicating
-      # an id.
-      #
-      # The one exception is a uuid-typed value, which keeps its dashes: fixed
-      # width means a known boundary, so it cannot blur into its neighbour.
-      def identity_segment(bag, key)
-        value = identity_value(bag, key)
-        return "" if value.nil?
-
-        rendered = value.to_s
-        return rendered.downcase if uuid_identifier?(key, rendered)
-
-        rendered.parameterize.tr("-", "_")
-      end
-
-      def uuid_identifier?(key, value)
-        params.dig(key, :type) == :uuid && Weft::Resolver.uuid?(value)
-      end
-
-      # Wire hashes arrive string-keyed, assembled bags symbol-keyed; identity
-      # reads the same value either way.
-      def identity_value(bag, key)
-        return nil unless bag.respond_to?(:key?)
-
-        bag.key?(key) ? bag[key] : bag[key.to_s]
-      end
 
       # Gem-default name-based path derivation, plus the well-formedness guard.
       # Mirrors {Weft::Page.default_page_path}: a routable class whose demodulized
@@ -190,7 +137,19 @@ module Weft
     def initialize(*)
       super
       @params = assembled_params
+      @weft_mint = resolve_weft_mint if self.class.unique?
     end
+
+    # This instance's mint, or nil unless the class is `unique!`.
+    #
+    # A mint is what makes two renderings of a component *the same object* to
+    # weft: an instance that comes back carrying the mint another instance was
+    # issued is not a lookalike, it is that component again, later. That is why
+    # it belongs to the instance and never to `params` — it identifies the
+    # object, rather than being data the object was given.
+    #
+    # @api private
+    attr_reader :weft_mint
 
     def build(attributes = {})
       apply_received_fallback(attributes) unless arbre_context.respond_to?(:take_received!)
@@ -205,21 +164,48 @@ module Weft
     # URL to this component's Weft route with current params as query string.
     # Pass overrides to change specific param values in the URL.
     #
-    #   weft_url                          # => "/_components/orders_panel?status=shipped&page=1"
-    #   weft_url(page: 2)                 # => "/_components/orders_panel?status=shipped&page=2"
-    #   weft_url(status: nil, page: 1)    # => "/_components/orders_panel?page=1"
-    def weft_url(**overrides)
+    #   weft_component_url                          # => "/_components/orders_panel?status=shipped&page=1"
+    #   weft_component_url(page: 2)                 # => "/_components/orders_panel?status=shipped&page=2"
+    #   weft_component_url(status: nil, page: 1)    # => "/_components/orders_panel?page=1"
+    def weft_component_url(**overrides)
       path = self.class.resolved_component_path
-      query = serializable_params.merge(overrides).compact
+      query = weft_addressing_params.merge(overrides).compact
       query.empty? ? path : "#{path}?#{URI.encode_www_form(query)}"
     end
 
-    # Convention-based DOM ID: dasherized class name + primary wire-param value.
+    # This element's DOM id. A `unique!` component hands over the mint it is
+    # holding; every other kind composes its id from params alone.
     def weft_dom_id
-      self.class.weft_dom_id_for(serializable_params)
+      self.class.weft_dom_id_for(params, weft_mint)
+    end
+
+    # What has to ride a request for that request to come back to *this*
+    # element: its wire params, plus its mint when it has one.
+    #
+    # Deliberately not `serializable_params`, and the distinction is
+    # load-bearing. This is for a component's own request lineage — its refresh
+    # URL, its stream, the values its own actions post. Handing it to anyone
+    # else's request would assert that a different element is this same object,
+    # which is the same reason `brings` refuses a `unique!` companion.
+    #
+    # @api private — name to be settled with the rest of this family
+    def weft_addressing_params
+      return serializable_params unless weft_mint
+
+      serializable_params.merge(Weft.configuration.mint_wire_key => weft_mint)
     end
 
     private
+
+    # The wire is the only source: a mint is never inherited from a parent, and
+    # no hand-off door was opened for it. Checked rather than trusted — it
+    # arrives from outside and is bound for an id attribute — and reissued when
+    # it is missing, stale, or malformed.
+    def resolve_weft_mint
+      key = Weft.configuration.mint_wire_key
+      carried = wire_source[key] || wire_source[key.to_sym]
+      Weft::Addressing.mint?(carried) ? carried.to_s : Weft::Addressing.mint
+    end
 
     # Speak for this fragment's DOM slot, or abandon the render.
     #
@@ -244,17 +230,11 @@ module Weft
       throw Weft::Context::SLOT_TAKEN, id
     end
 
-    # URL to this component's Weft route with current params (no overrides).
-    # Used internally by apply_refresh_attrs.
-    def refresh_url
-      weft_url
-    end
-
     def apply_refresh_attrs
       refresh_triggers = self.class.refresh_triggers
       return if refresh_triggers.empty?
 
-      set_attribute "hx-get", refresh_url
+      set_attribute "hx-get", weft_component_url
       set_attribute "hx-trigger", refresh_triggers.join(", ")
       set_attribute "hx-swap", "outerHTML"
     end
@@ -278,7 +258,7 @@ module Weft
     # URL to this component's SSE stream endpoint with current wire params.
     def stream_url
       path = "#{self.class.resolved_component_path}/#{Weft.configuration.stream_suffix}"
-      query = serializable_params.compact
+      query = weft_addressing_params.compact
       query.empty? ? path : "#{path}?#{URI.encode_www_form(query)}"
     end
   end

@@ -104,15 +104,14 @@ module Weft
         false
       end
 
-      # Resolve, render, write. The event name is recomputed from the class +
-      # resolved wire params — the failed build left no instance to ask. Any
+      # Resolve, render, write. The event name is recomputed from the class and
+      # its assembled bag — the failed build left no instance to ask. Any
       # render-path StandardError is logged and swallowed: the failure already
       # counts against the budget, and the close logic must still run.
       def push_recovery_frame(out, component_class, error, attempts_remaining)
-        resolved = Weft::Resolver.resolve(component_class, filtered_params)
         state = Weft::Params::Assembly.for_request(component_class, filtered_params)
         html = render_push_recovery(component_class, state, error, attempts_remaining: attempts_remaining)
-        out << format_sse_event(component_class.weft_dom_id_for(resolved), html) if html
+        out << format_sse_event(component_class.weft_dom_id_for(state), html) if html
       rescue Errno::EPIPE, IOError
         raise
       rescue StandardError => e

@@ -3,6 +3,27 @@
 require "arbre"
 
 RSpec.describe Weft::DSL::Companions do
+  describe "bringing a unique! component" do
+    it "raises, since a companion cannot be addressed by a token it has never seen" do
+      # unique! buys in-page uniqueness and self-refresh stability. It cannot
+      # make a component addressable from someone ELSE's request: the companion
+      # resolves from the host's params, which have never heard of the token,
+      # so it mints a fresh one and the swap targets an id not on the page.
+      badge = Class.new(Weft::Component) do
+        def self.name = "MintedBadge"
+        unique!
+      end
+
+      expect do
+        Class.new(Weft::Component) do
+          def self.name = "BadgeHost"
+          param :order_id
+          brings badge
+        end
+      end.to raise_error(Weft::InvalidDefinition, /unique!/)
+    end
+  end
+
   describe "brings DSL" do
     it "stores companions with component class" do
       included = Class.new(Weft::Component) { def self.name = "IncTarget" }

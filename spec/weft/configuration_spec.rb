@@ -388,6 +388,75 @@ RSpec.describe Weft::Configuration do
     end
   end
 
+  describe "#mint_key" do
+    it "defaults to :_mint" do
+      expect(config.mint_key).to eq(:_mint)
+    end
+
+    it "accepts a custom key so a user who genuinely collides can move weft's" do
+      config.mint_key = :_weft_id
+      expect(config.mint_key).to eq(:_weft_id)
+    end
+
+    it "coerces a string to a symbol, since params are symbol-keyed" do
+      config.mint_key = "_tag"
+      expect(config.mint_key).to eq(:_tag)
+    end
+
+    it "rejects a key that is not name-like" do
+      expect { config.mint_key = "not a name" }.to raise_error(ArgumentError, /mint_key/)
+    end
+
+    it "namespaces the wire key with a dot the operator cannot supply or remove" do
+      # The dot is what keeps mint space and param space from ever meeting:
+      # a param can be named _mint, but never .anything.
+      expect(config.mint_wire_key).to eq("._mint")
+
+      config.mint_key = :token
+      expect(config.mint_wire_key).to eq(".token")
+    end
+
+    it "refuses a key that tries to bring its own dot" do
+      expect { config.mint_key = ".mint" }.to raise_error(ArgumentError, /mint_key/)
+      expect { config.mint_key = :"a.b" }.to raise_error(ArgumentError, /mint_key/)
+    end
+
+    it "rejects a non-string, non-symbol key" do
+      expect { config.mint_key = 42 }.to raise_error(ArgumentError, /mint_key/)
+    end
+  end
+
+  describe "#digest_length" do
+    it "defaults to 8" do
+      expect(config.digest_length).to eq(8)
+    end
+
+    it "accepts a custom length" do
+      config.digest_length = 12
+      expect(config.digest_length).to eq(12)
+    end
+
+    it "accepts the full width of the underlying hash" do
+      config.digest_length = 64
+      expect(config.digest_length).to eq(64)
+    end
+
+    it "rejects zero" do
+      expect { config.digest_length = 0 }.
+        to raise_error(ArgumentError, /digest_length/)
+    end
+
+    it "rejects a width the hash cannot supply" do
+      expect { config.digest_length = 65 }.
+        to raise_error(ArgumentError, /digest_length/)
+    end
+
+    it "rejects a non-integer value" do
+      expect { config.digest_length = 8.5 }.
+        to raise_error(ArgumentError, /digest_length/)
+    end
+  end
+
   describe "gem-level access via Weft.configure" do
     around do |example|
       original = Weft.configuration
