@@ -137,6 +137,11 @@ defines label: "Drivers", accent: "available"
 `defines` is sugar for statically-known derivations: each pair is exactly `derives(key) { value }`, with identical priority, overridability, and laziness. It shines in a subclass that pins constant faces of an inherited component while deriving the dynamic ones:
 
 ```ruby
+class StatCard < Weft::Component
+  builder_method :stat_card
+  param :status
+end
+
 class AvailableDriversCard < StatCard
   defines label: "Drivers", accent: "available"          # fixed
   derives(:value) { |_p| "#{Driver.available.count}/#{Driver.count}" }  # per render
@@ -152,7 +157,7 @@ receives :order
 receives :page_num, default: 1
 ```
 
-Some values can't ride a URL — an `ActiveRecord` object, a pre-built collection, anything rich. `receives` declares that a call site hands the value over directly: `order_row(order: order)` fills `params.order`. The kwarg is consumed as the hand-off, so it never becomes an HTML attribute on the wrapper, and the value never serializes into a URL.
+Some values can't ride a URL — an `ActiveRecord` object, a pre-built collection, anything rich. `receives` declares that a call site hands the value over directly: given an `OrderRow` that declares `builder_method :order_row`, a parent building `order_row(order: order)` fills `params.order` for the code inside `OrderRow`. The kwarg is consumed as the hand-off, so it never becomes an HTML attribute on the wrapper, and the value never serializes into a URL.
 
 A hand-off is **required by default**: a call site that omits it raises `Weft::NotReceived`, with the backtrace pointing at the call site rather than deep inside the framework. Declaring a default makes it optional — `receives :page_num, default: 1`, and an explicit `default: nil` counts too (the presence of the keyword is what makes it optional, not the value).
 
@@ -175,7 +180,7 @@ The first five are values the bag *holds*. The sixth is a fallback the bag *asks
 
 That order is what makes *duals* work — declaring a key through two doors so it resolves whether it's handed over or has to fetch itself:
 
-- **`param` + `receives`** — handed the value when embedded (no query round-trip), wire-borne when rendered standalone, so a self-refreshing card embedded with `status_card(status: "hot")` keeps its status across refreshes.
+- **`param` + `receives`** — handed the value when embedded (no query round-trip), wire-borne when rendered standalone, so a self-refreshing card embedded with `stat_card(status: "hot")` keeps its status across refreshes.
 - **`derives` + `receives`** — handed the value when embedded, self-fetching when standalone. A `derives` dual also satisfies the refresh-safety lint.
 - **`param` + `derives`** — use the wire value if present, otherwise derive one.
 
