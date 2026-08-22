@@ -222,6 +222,11 @@ def top_level_keywords(args)
       quote = args[i]
       i += 1
       i += 1 while i < args.length && !(args[i] == quote && args[i - 1] != "\\")
+    when "#"
+      # A trailing comment is not an argument list. Doc examples annotate
+      # heavily, and `refreshes every: 5 # verb: live updates` otherwise reads
+      # as a `verb:` keyword. Interpolation is already inside the quote branch.
+      i += 1 while i < args.length && args[i] != "\n"
     else
       # Match first: a second regex would clobber Regexp.last_match.
       m = depth.zero? ? args[i..].match(/\A([a-z_]\w*):\s/) : nil
@@ -244,6 +249,20 @@ def balanced_args(src, open)
   src[(open + 1)..]
 end
 
+# A DSL is usually written without parentheses, and an example follows the
+# house style rather than the parser's convenience — checking only `foo(...)`
+# can therefore watch a whole documented surface without ever seeing a call.
+# Such an argument list runs to the end of the line, and onto the next while a
+# trailing comma says it is not finished.
+def trailing_args(text)
+  taken = []
+  text.lines.each do |line|
+    taken << line
+    break unless line.rstrip.end_with?(",")
+  end
+  taken.join
+end
+
 def check_keywords(blocks, sigs)
   found = []
   blocks.each do |path, start, src|
@@ -253,8 +272,12 @@ def check_keywords(blocks, sigs)
       next if sig[:rest] || sig[:kws].empty?
 
       offset = 0
-      while (idx = src.index(/(?<![.\w:])#{Regexp.escape(name)}\s*\(/, offset))
-        top_level_keywords(balanced_args(src, src.index("(", idx))).each do |kw|
+      # Either form, but never a bare mention: `param` alone on a line takes no
+      # arguments, and `params.foo` is a different word.
+      while (idx = src.index(/(?<![.\w:])#{Regexp.escape(name)}(?=\s*\(|[ \t]+[^\s(])/, offset))
+        rest = src[(idx + name.length)..]
+        args = rest.match?(/\A\s*\(/) ? balanced_args(src, src.index("(", idx)) : trailing_args(rest)
+        top_level_keywords(args).each do |kw|
           next if sig[:kws].include?(kw)
 
           found << "#{path}:#{start + src[0...idx].count("\n")}  #{name}(#{kw}:) " \
