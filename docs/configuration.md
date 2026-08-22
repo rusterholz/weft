@@ -176,6 +176,32 @@ The path segment marking a component's SSE stream endpoint. A component declarin
 
 Set a bare path segment — no slashes; Weft supplies the separator. The default's leading underscore keeps stream endpoints out of the namespace of derived component paths (which, coming from Ruby class names, never begin with an underscore).
 
+## Identity
+
+These two shape the DOM ids Weft composes. What identity *is* — how you declare it, and why it decides which companions can coexist — lives in [Identity](dsl.md#identity).
+
+### `digest_length`
+
+Default: `8`.
+
+How many characters of hash a digested identity slot keeps, for params declared `digest: true`. Longer is more collision-resistant and more DOM id; the default carries a thousand same-class instances on one page at about a one-in-ten-thousand chance of a collision. Must be an integer between 1 and 64.
+
+```ruby
+c.digest_length = 12
+```
+
+This is the gem-wide default for declarations that don't name their own; `param :label, digest: 12` overrides it for one param.
+
+### `mint_key`
+
+Default: `:_mint`.
+
+The name a [`unique!`](dsl.md#unique--a-slot-for-a-component-with-nothing-to-name-it) component's token travels under. Set a bare name — letters, digits and underscores only — because Weft namespaces it on the wire itself: the token actually rides as `._mint`, inside a prefix no user param can occupy. That's what keeps your params and Weft's token from colliding however either is named, and it's why you'd only change this to avoid a clash with a *reserved* name in something downstream, not to avoid one of your own.
+
+```ruby
+c.mint_key = :_slot
+```
+
 ## Error handling
 
 Four settings name the fallback render targets Weft uses when something raises and no user-declared `recovers` entry intercepts it; two more shape how those fallbacks present. The full story — error classes, `recovers` chains, auto-injected attributes — lives in [Error handling](error-handling.md).

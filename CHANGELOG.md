@@ -2,7 +2,31 @@
 
 ## v0.3.0 (unreleased)
 
+Weft learns to say what a thing *is*: components name their own identity instead of inheriting one by accident, so sibling instances stay individually addressable and the words for what a class body does mean one thing each.
+
+### New Features:
+
+- **Declared Component Identity** (`identifies_by`) – Name the params that distinguish one instance from the next, and read a class body to find out. Full model in [the DSL reference](docs/dsl.md#identity).
+  - `identifies_by :order_id, :line_item_id` – slots appear in the order you write them, and a blank one holds its place rather than shifting the rest
+  - The value can arrive through any door — a `param`, a `derives`, a `defines`, or a `receives` — so a component handed a whole record derives the scalar that names it and identifies by that
+  - `identifies_by { |params| "cart-#{params.user_id}" }` composes the whole id yourself, for the cases a list of slots can't express
+  - An identifying value that isn't a scalar raises `Weft::InvalidIdentifierValue` naming the component and the param, rather than composing a selector two instances could share
+
+- **A Slot For Components With Nothing To Name Them** (`unique!`) – A badge repeated down a table or a card the page renders many of asks for its own slot, and Weft issues it a token at first render and carries it from then on. Uniqueness doesn't publish a route: a component that wants one still declares something that earns it.
+
+- **Digested Identity Slots** (`digest:`) – `param :label, digest: true` renders an identifying value as a short deterministic hash, so values that are blank, long, or not URL-shaped still give each instance a stable target. The same value always yields the same id, across processes and across workers. `digest: 12` widens one param; `Weft.configuration.digest_length` moves the default.
+
+- **UUID Params** (`type: :uuid`) – Declares a param as a UUID string, and keeps its dashes intact where a DOM id would otherwise sanitize them.
+
+- **Collision Detection Covers DOM Ids** – Two components whose ids would collide are caught when routes are validated, alongside the route checks — so a fragment that could only ever land on another component's element is a startup error, not a mystery in the browser.
+
 ### Breaking Changes:
+
+- **Identity Is Declared, Not Positional** – A component's DOM id no longer derives from whichever param happened to be declared first. Declare `identifies_by` on any component whose instances must be individually addressable; one that declares nothing wears its class id, which is the right answer for a component appearing once per page.
+  - This is the change that makes identity survive inheritance: a subclass can now replace its parent's identity outright, which a first-param convention could never express
+  - `Weft::Registry::Eligibility` is now `Weft::Addressing`, and a trailing `Component` is stripped from a DOM id exactly as it already was from a route path
+
+- **Component URLs Say What They Are** – `weft_url` is now `weft_component_url`, naming the component's own GET URL rather than leaving "weft url" to be guessed at. `refresh_url` is gone; it existed only because `weft_url` didn't say what it was for.
 
 - **Announcements Have Their Own Word** – The verb that sends an event out to the page is now `announces`, which leaves `trigger:` meaning exactly one thing: the browser event that fires an element's request. htmx spells opposite ends of the same round trip `hx-trigger` and `HX-Trigger`; weft no longer inherits that ambiguity, so you can read a class body and know which direction an event travels.
   - `announces "order-updated", on: :advance` – `on:` filtering, inheritance, and duplicate collapsing all behave as before
