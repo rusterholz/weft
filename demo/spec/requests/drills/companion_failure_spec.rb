@@ -16,8 +16,12 @@ RSpec.describe "Companion failure drill", type: :request do
   end
 
   it "re-renders the host with its counter advanced" do
-    expect(response.body).to include(%(id="drills-companion-host-3"))
     expect(response.body).to include("has run 3 time(s)")
+  end
+
+  it "keeps the host's element still while that counter moves" do
+    expect(response.body).to include(%(id="drills-companion-host"))
+    expect(response.body).not_to include(%(id="drills-companion-host-3"))
   end
 
   it "reports the failure in the companion's own slot, the one already on the page" do

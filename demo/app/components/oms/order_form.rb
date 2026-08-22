@@ -9,8 +9,10 @@ module Oms
   class OrderForm < Weft::Component
     builder_method :order_form
 
+    # No `identifies_by`: one form per page, so the bare class id is already
+    # unique — and identifying by a field the user is typing into would move
+    # the element the error re-render has to land on.
     param :customer_name, type: :string
-    identifies_by :customer_name
     param :address_line_1, type: :string # rubocop:disable Naming/VariableNumber
     param :city, type: :string
     param :state, type: :string
