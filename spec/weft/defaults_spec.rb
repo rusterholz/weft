@@ -120,6 +120,30 @@ RSpec.describe "Weft::Defaults" do
       html = described_class.render(exception: nil, request_path: "/x", status_code: 500)
       expect(html).to include("<title>Error</title>")
     end
+
+    # Branding the error component should reach the page that wraps one. The
+    # page names the knob rather than the gem's class, so an app that overrides
+    # `error_component` doesn't get its own box for fragments and ours for
+    # full-document responses.
+    it "wraps whichever component error_component names" do
+      branded = Class.new(Weft::Component) do
+        def self.name = "BrandedErrorComponent"
+
+        def build(attributes = {})
+          super
+          para "our apologies"
+        end
+      end
+      Weft.configuration.error_component = branded
+
+      html = described_class.render(exception: ArgumentError.new("bad arg"), request_path: "/x", status_code: 500)
+
+      expect(html).to include("our apologies")
+    ensure
+      # The harness isolates the registry per example but not the configuration,
+      # so a knob set here would otherwise follow the whole run.
+      Weft.configuration.error_component = nil
+    end
   end
 
   describe Weft::Defaults::NotFoundComponent do
