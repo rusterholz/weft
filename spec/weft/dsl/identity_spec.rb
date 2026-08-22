@@ -40,6 +40,70 @@ RSpec.describe Weft::DSL::Identity do
     end
   end
 
+  describe "identifying values" do
+    let(:card) do
+      Class.new(Weft::Component) do
+        def self.name = "Card"
+        param :key
+        identifies_by :key
+      end
+    end
+
+    def dom_id_for(value)
+      card.weft_dom_id_for(Weft::Params::Assembly.call(card, {}, overlays: { key: value }))
+    end
+
+    it "composes a scalar into the id" do
+      expect(dom_id_for("shipped")).to eq("card-shipped")
+      expect(dom_id_for(:hot)).to eq("card-hot")
+      expect(dom_id_for(33)).to eq("card-33")
+      expect(dom_id_for(true)).to eq("card-true")
+    end
+
+    it "leaves the slot blank for nil and for an empty string, as the warning describes" do
+      expect(dom_id_for(nil)).to eq("card-")
+      expect(dom_id_for("")).to eq("card-")
+    end
+
+    it "refuses an Array rather than composing a selector out of its elements" do
+      expect { dom_id_for([1, 2]) }.to raise_error(Weft::InvalidIdentifierValue, /Array/)
+    end
+
+    it "refuses a Hash rather than composing a selector out of its entries" do
+      expect { dom_id_for({ a: 1 }) }.to raise_error(Weft::InvalidIdentifierValue, /Hash/)
+    end
+
+    it "refuses a rich object here rather than raising from inside ActiveSupport" do
+      expect { dom_id_for(Object.new) }.
+        to raise_error(Weft::InvalidIdentifierValue, /Card identifies by :key/)
+    end
+
+    it "points at deriving a scalar, which is the fix" do
+      expect { dom_id_for({ a: 1 }) }.to raise_error(/derives/)
+    end
+
+    it "refuses a record a derivation handed it, through a real render" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "RecordCard"
+        derives(:record) { Object.new }
+        identifies_by :record
+      end
+
+      expect { render_in_context(klass) }.to raise_error(Weft::InvalidIdentifierValue)
+    end
+
+    it "refuses a non-scalar in digest mode too — the mode renders the value, it does not widen what may identify" do
+      digested = Class.new(Weft::Component) do
+        def self.name = "DigestCard"
+        param :key, digest: true
+        identifies_by :key
+      end
+      bag = Weft::Params::Assembly.call(digested, {}, overlays: { key: { a: 1 } })
+
+      expect { digested.weft_dom_id_for(bag) }.to raise_error(Weft::InvalidIdentifierValue)
+    end
+  end
+
   describe ".unique!" do
     let(:badge) do
       Class.new(Weft::Component) do

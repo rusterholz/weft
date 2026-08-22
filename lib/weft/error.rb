@@ -52,6 +52,13 @@ module Weft
   # Symbol that does not start with `@`.
   InvalidDefinition = Class.new(Error)
 
+  # Raised at render time when a value composing a component's DOM id is not a
+  # scalar — an Array, a Hash, a record. Its own category on purpose: nothing is
+  # missing and no API was misused, so it is neither an InvalidUsage nor an
+  # InvalidDefinition. The declaration is legitimate and the value that reached
+  # it cannot be addressed, and the fix is sometimes one and sometimes the other.
+  InvalidIdentifierValue = Class.new(Error)
+
   # Raised for semantic mistakes at render / action time — invalid input
   # combinations or references to state that isn't there (e.g. an unknown
   # assets bundle named at `register_stylesheet`).

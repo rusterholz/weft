@@ -183,10 +183,28 @@ module Weft
         # a collision drops a companion rather than merely duplicating an id.
         def identity_segment(bag, key)
           value = identity_value(bag, key)
+          refuse_unaddressable!(value, key)
           length = digest_length_for(key)
           return Weft::Addressing.digest(value, length) if length
 
           sanitize_identifier(value, key)
+        end
+
+        # {SCALAR_ID_CLASSES} is a promise, and this is where it is kept: ahead
+        # of both composition modes, because `digest:` changes how a value is
+        # rendered, not what may identify. Left to itself an Array composes
+        # `card-1_2` and a Hash `card-a_1` — selector-shaped junk that two
+        # instances can easily share — while a record's default `to_s` carries
+        # address bytes that raise out of ActiveSupport's transliteration,
+        # naming neither the component nor the param.
+        def refuse_unaddressable!(value, key)
+          return if SCALAR_ID_CLASSES.any? { |scalar| value.is_a?(scalar) }
+
+          raise Weft::InvalidIdentifierValue,
+                "#{name} identifies by #{key.inspect}, which held #{value.class}. A DOM id is " \
+                "composed from scalars (String, Symbol, number, boolean, or nil), since weft " \
+                "targets fragments with `#id`. Identify by a scalar the object already carries, " \
+                "or `derives` one from it."
         end
 
         # The block owns the id outright, so weft checks only that what comes
