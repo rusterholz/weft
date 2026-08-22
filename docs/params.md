@@ -66,7 +66,7 @@ Here is the pivot that makes the whole system hold together: **only a component'
 
 The other three doors never serialize: you can't put an `Order` object in a query string, and a derived value can always be re-derived. So what travels forward is exactly the URL-safe wire state the component declared with `param`, and nothing else. Inherited values don't travel either — a child that merely *read* its parent's `order_id` doesn't carry it. A child that needs `order_id` on the next request must declare it.
 
-The same discipline applies to a component's HTML attributes. Chrome passed at the call site (`stat_card(class: "wide", name: "picker")`) exists only in that in-page render — a wire re-render rebuilds the component from its params alone, and the call-site attributes are gone. An attribute the component *depends on* (a `name` the pattern reads, an ARIA role) belongs inside `build` via `set_attribute`, where every render path reproduces it.
+The same discipline applies to a component's HTML attributes. Take a `StatCard`: a small self-refreshing tile whose class body declares `builder_method :stat_card`, so a parent builds it by that name. Chrome passed at its call site (`stat_card(class: "wide", name: "picker")`) exists only in that in-page render — a wire re-render rebuilds the component from its params alone, and the call-site attributes are gone. An attribute the component *depends on* (a `name` the pattern reads, an ARIA role) belongs inside `build` via `set_attribute`, where every render path reproduces it.
 
 ## The round trip: refresh and actions
 
@@ -77,7 +77,7 @@ This is the payoff. Because a rendered component carries its own wire params, it
 
 The callable and the render that follows it are two points on **one chain**, not two independent resolutions. Weft composes the component's params from the wire, hands that to the callable, layers whatever the callable returned on top, and passes the result on to the render — which branches it the same way a child branches its parent's. So a callable reads the same `derives` its `build` does, and a derivation it forces is already a value by the time the render, and the companions riding alongside, read the same key. One lookup, one response.
 
-So "render with enough to get where it needs" is literal: whatever a component will need to reconstruct itself on the next request, it must hold as its own `param`s at render time, because that is what gets serialized into the refresh URL and the action payload. A self-refreshing card embedded as `stat_card(status: "hot")` keeps refreshing correctly *only* if it declares `param :status` — otherwise the refresh request carries no status and the standalone re-render has nothing to go on.
+So "render with enough to get where it needs" is literal: whatever a component will need to reconstruct itself on the next request, it must hold as its own `param`s at render time, because that is what gets serialized into the refresh URL and the action payload. That `StatCard`, embedded as `stat_card(status: "hot")`, keeps refreshing correctly *only* if it declares `param :status` — otherwise the refresh request carries no status and the standalone re-render has nothing to go on.
 
 ## Lists, and why `receives` exists
 
