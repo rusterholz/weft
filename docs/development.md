@@ -60,6 +60,21 @@ bundle exec rubocop
 
 Both the gem and the demo (`cd demo && bundle exec rubocop`) must be offense-free.
 
+## Documentation Drift
+
+Prose has no compiler, so a rename lands, the specs go green, and the docs keep confidently naming a method that no longer exists. `bin/doc-drift-check` catches the mechanical half of that:
+
+```bash
+bundle exec bin/doc-drift-check   # all four checks
+bin/doc-drift-check               # links + identifiers only, no gem load
+```
+
+It verifies that intra-repo links and anchors resolve, that identifiers presented as methods exist, that every gem-level setting the docs name on `Weft` (`Weft.configure` and friends) answers on the real namespace, and that keyword arguments in ruby examples match the DSL's actual signatures. It exits non-zero on any finding — run it whenever you change docs or rename anything the docs describe.
+
+Two categories are *derived* rather than allowlisted, so the check stays honest as the docs grow: Arbre's builder surface comes from `Arbre::Element`'s own ancestors, and component builders come from every `builder_method` the docs declare. A misspelled builder call still fails, which is the point.
+
+What it cannot ask is whether a paragraph is still *true* — a characterization outlives the design it described far more quietly than a method name does. That judgment stays yours.
+
 ## Lockfiles and Platforms
 
 After changing the `Gemfile`, `Appraisals`, or the gemspec:

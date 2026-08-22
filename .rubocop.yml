@@ -20,6 +20,11 @@ AllCops:
     # patterns rubocop dislikes (long change methods, :address_line_1 names)
     # that follow database/postal conventions, not Ruby style conventions.
     - "demo/db/**/*"
+    # Vendored copy of the shared doc-drift checker: everything below its CONFIG
+    # is verbatim from claude/defaults/doc-drift-check.rb, and that sameness is
+    # the point — a fix travels in either direction only while the two stay
+    # diffable. Styling our copy would fork it permanently for no reader's sake.
+    - "bin/doc-drift-check"
 
 Layout/DotPosition:
   EnforcedStyle: trailing

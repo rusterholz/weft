@@ -1,0 +1,293 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Doc drift check — does the documentation still describe the code that exists?
+#
+# Four checks, run from the repo root. Every one of them exists because prose
+# outlives the thing it describes: a rename lands, the specs go green, and the
+# docs keep confidently naming a method that was deleted two releases ago. A
+# reader has no way to discover they have been misled.
+#
+#   bin/doc-drift-check              # links + ghost identifiers (no gem load)
+#   bundle exec bin/doc-drift-check  # ...plus the two checks that load the gem
+#
+# Weft's copy of the shared checker in `claude/defaults/doc-drift-check.rb`.
+# Everything below CONFIG is verbatim from that artifact — keep it that way, so
+# the two stay diffable and a fix to either can travel. Exits non-zero on any
+# finding.
+
+CONFIG = {
+  # Markdown to check. Include everything a reader might follow.
+  docs: -> { Dir.glob("docs/**/*.md") + Dir.glob("*.md") },
+
+  # Docs that describe history rather than the current API. Links are still
+  # checked; the API-existence checks are not, because a changelog's job is to
+  # name the identifier that no longer exists.
+  history_docs: %w[CHANGELOG.md],
+
+  # Where method definitions live. Test-support dirs count: docs legitimately
+  # name maintainer-facing helpers that are not in lib/.
+  sources: -> { Dir.glob("lib/**/*.rb") + Dir.glob("spec/support/**/*.rb") },
+
+  # Nil disables the two checks that need the library loaded.
+  require_target: "weft",
+
+  # The gem-level config surface. Docs writing `Weft.foo` must find `foo` here.
+  namespace: -> { Weft },
+
+  # Modules whose instance methods are the documented API. Keyword arguments in
+  # fenced examples are checked against these signatures. Weft's DSL macros live
+  # in the `ClassMethods` submodule of each `Weft::DSL::*` — derived rather than
+  # listed, so a new DSL module is covered the day it lands.
+  api_modules: lambda {
+    Weft::DSL.constants.map { |c| Weft::DSL.const_get(c) }
+             .select { |m| m.is_a?(Module) && m.const_defined?(:ClassMethods, false) }
+             .map { |m| m.const_get(:ClassMethods) } + [Weft::Configuration]
+  },
+
+  # Names the docs may present as methods without defining them. Three groups,
+  # and only the first is a hand-kept list.
+  known_names: [
+    # Language built-ins, RSpec, and methods the docs name on a receiver weft
+    # does not own — `Kernel#p`, `Post.find`, `Rack::Protection::…#token`. The
+    # check drops the receiver before matching, so these arrive here bare.
+    %w[
+      new raise rescue require puts sleep loop each map lambda proc catch throw freeze exit exit!
+      inject dup tap send format include extend to_json to_s to_i to_f call merge fetch reject
+      select count first last size length min max sum sort enum_for define_method attr_reader
+      instance_method respond_to? is_a? nil? empty? any? all? none? key? kind_of? frozen?
+      start_with? end_with? instance_double double allow expect before find token p
+    ],
+
+    # Arbre's builder surface — every tag helper and traversal method a `build`
+    # block may call. Derived, because the tag set is 150-odd names that track
+    # the HTML spec, not us. Stopping the ancestor walk at Object is what keeps
+    # Kernel's private methods (`system`, `eval`, `binding`) from being silenced
+    # wholesale; Arbre's own `p` is Kernel's, which is why it is listed above.
+    begin
+      require "arbre"
+      Arbre::Element.ancestors.take_while { |mod| mod != Object }
+                    .flat_map { |mod| mod.instance_methods(false) + mod.private_instance_methods(false) }
+    rescue LoadError
+      [] # plain-ruby run without arbre installed: report the tag helpers rather than lie
+    end,
+
+    # Component builders the docs declare. Weft's central DSL *is* "class
+    # OrderRow becomes order_row(...) in a template", so every example showing a
+    # component names a helper that by construction cannot exist in lib/.
+    # `builder_method` is that declaration, so the docs state their own
+    # vocabulary and a misspelled call still fails — where an allowlist would
+    # grow forever and silence exactly the typo it was meant to catch.
+    (Dir.glob("docs/**/*.md") + Dir.glob("*.md"))
+      .flat_map { |path| File.read(path).scan(/builder_method\s+:([a-z_]\w*)/) }.flatten
+  ].flatten.map(&:to_s).uniq
+}.freeze
+
+# ---------------------------------------------------------------------------
+
+findings = []
+loaded =
+  if CONFIG[:require_target] && defined?(Bundler)
+    require CONFIG[:require_target]
+    true
+  else
+    false
+  end
+
+# Fenced code blocks, with the line the fence opened on. Fence tracking is
+# language-blind on the way out: a ```bash closer read as a ```ruby opener
+# inverts every block after it, silently halving coverage.
+def ruby_blocks(paths)
+  paths.flat_map do |path|
+    open_lang = nil
+    start = 0
+    buf = []
+    out = []
+    File.readlines(path).each_with_index do |line, i|
+      if line =~ /^```(\w*)\s*$/
+        if open_lang
+          out << [path, start, buf.join] if ["ruby", ""].include?(open_lang)
+          open_lang = nil
+          buf = []
+        else
+          open_lang = Regexp.last_match(1)
+          start = i + 2
+        end
+      elsif open_lang
+        buf << line
+      end
+    end
+    out
+  end
+end
+
+def heading_slugs(path)
+  return [] unless File.exist?(path)
+
+  File.readlines(path).grep(/^#+\s/).map do |h|
+    # Each space becomes its own hyphen, as GitHub does — a heading like
+    # "`brings` — companions" leaves two spaces where the em dash was and
+    # anchors as `brings--companions`. Collapsing the run here would have
+    # this check disagree with every em-dash heading in the repo.
+    h.sub(/^#+\s*/, "").strip.downcase.gsub(/[^\w\s-]/, "").gsub(/\s/, "-")
+  end
+end
+
+# 1. Every intra-repo link resolves, file and anchor both.
+def check_links(paths)
+  slugs = {}
+  found = []
+  paths.each do |src|
+    File.readlines(src).each_with_index do |line, i|
+      line.scan(/\[[^\]]*\]\(([^)\s]+)\)/) do |(target)|
+        next if target.start_with?("http", "mailto:", "#!")
+
+        file, anchor = target.split("#", 2)
+        resolved = file.to_s.empty? ? src : File.expand_path(file, File.dirname(src)).sub("#{Dir.pwd}/", "")
+        next found << "#{src}:#{i + 1}  missing file -> #{target}" unless File.exist?(resolved)
+        next unless anchor
+
+        slugs[resolved] ||= heading_slugs(resolved)
+        found << "#{src}:#{i + 1}  missing anchor -> #{target}" unless slugs[resolved].include?(anchor)
+      end
+    end
+  end
+  found
+end
+
+# 2. Names the docs present as callable — `foo(...)` or `Thing#foo` — exist.
+def check_identifiers(paths, sources, known)
+  defined_names = known.dup
+  sources.each do |file|
+    src = File.read(file)
+    defined_names |= src.scan(/^\s*def (?:self\.)?([a-z_]\w*[?!=]?)/).flatten
+    defined_names |= src.scan(/(?:attr_(?:reader|accessor|writer)|delegate)\s+(.+)$/).flatten
+                        .flat_map { |l| l.scan(/:([a-z_]\w*)/) }.flatten
+    defined_names |= src.scan(/define_method\(?[: ]"?([a-z_]\w*)/).flatten
+    # RSpec matchers and anything else named by a `define`-style DSL.
+    defined_names |= src.scan(/\bdefine\s+:([a-z_]\w*)/).flatten
+    # Names generated from a list of symbols (hook types, operation tables).
+    defined_names |= src.scan(/%i\[([^\]]+)\]/).flatten.flat_map(&:split)
+  end
+
+  unknown = Hash.new { |h, k| h[k] = [] }
+  paths.each do |path|
+    File.readlines(path).each_with_index do |line, i|
+      line.scan(/`(?:[A-Z][\w:]*[#.])?([a-z_]\w*[?!]?)\(/) { |(m)| unknown[m] << "#{path}:#{i + 1}" }
+      line.scan(/`[A-Z][\w:]*#([a-z_]\w*[?!]?)`/) { |(m)| unknown[m] << "#{path}:#{i + 1}" }
+    end
+  end
+  unknown.reject! { |m, _| defined_names.include?(m) || m.end_with?("_") }
+  unknown.map { |m, locs| "#{locs.uniq.first}  no definition found for `#{m}` (#{locs.size} references)" }
+end
+
+# 3. `Namespace.foo` in the docs answers on the real namespace.
+def check_namespace(paths, namespace)
+  name = namespace.name
+  missing = Hash.new { |h, k| h[k] = [] }
+  paths.each do |path|
+    File.readlines(path).each_with_index do |line, i|
+      line.scan(/#{Regexp.escape(name)}\.([a-z_]\w*[?!=]?)/) do |(m)|
+        missing[m] << "#{path}:#{i + 1}" unless namespace.respond_to?(m) || m.end_with?("_")
+      end
+    end
+  end
+  missing.map { |m, locs| "#{locs.uniq.first}  #{name}.#{m} is not defined" }
+end
+
+# 4. Keyword arguments in examples match real signatures. This is the check that
+# catches a renamed keyword: the example still parses, and still raises.
+def signatures(modules)
+  sigs = Hash.new { |h, k| h[k] = { kws: [], rest: false } }
+  modules.each do |mod|
+    mod.instance_methods(false).each do |m|
+      params = mod.instance_method(m).parameters
+      sigs[m.to_s][:kws] |= params.select { |t, _| %i[key keyreq].include?(t) }.map { |_, n| n.to_s }
+      sigs[m.to_s][:rest] ||= params.any? { |t, _| t == :keyrest }
+    end
+  end
+  sigs
+end
+
+# Keywords at argument-list depth 0 only: `vars: { order_id: 1 }` passes one.
+def top_level_keywords(args)
+  found = []
+  depth = 0
+  i = 0
+  while i < args.length
+    case args[i]
+    when "{", "[", "(" then depth += 1
+    when "}", "]", ")" then depth -= 1
+    when '"', "'"
+      quote = args[i]
+      i += 1
+      i += 1 while i < args.length && !(args[i] == quote && args[i - 1] != "\\")
+    else
+      # Match first: a second regex would clobber Regexp.last_match.
+      m = depth.zero? ? args[i..].match(/\A([a-z_]\w*):\s/) : nil
+      found << m[1] if m && (i.zero? || args[i - 1].match?(/[\s,(]/))
+    end
+    i += 1
+  end
+  found
+end
+
+def balanced_args(src, open)
+  depth = 0
+  (open...src.length).each do |j|
+    depth += 1 if src[j] == "("
+    next unless src[j] == ")"
+
+    depth -= 1
+    return src[(open + 1)...j] if depth.zero?
+  end
+  src[(open + 1)..]
+end
+
+def check_keywords(blocks, sigs)
+  found = []
+  blocks.each do |path, start, src|
+    sigs.each do |name, sig|
+      # **opts absorbs anything; so does a trailing positional when the method
+      # declares no keyword at all (Ruby binds the bare hash to it).
+      next if sig[:rest] || sig[:kws].empty?
+
+      offset = 0
+      while (idx = src.index(/(?<![.\w:])#{Regexp.escape(name)}\s*\(/, offset))
+        top_level_keywords(balanced_args(src, src.index("(", idx))).each do |kw|
+          next if sig[:kws].include?(kw)
+
+          found << "#{path}:#{start + src[0...idx].count("\n")}  #{name}(#{kw}:) " \
+                   "— accepts: #{sig[:kws].join(', ')}"
+        end
+        offset = idx + name.length
+      end
+    end
+  end
+  found.uniq
+end
+
+docs = CONFIG[:docs].call
+sources = CONFIG[:sources].call
+current = docs - CONFIG[:history_docs]
+
+report = lambda do |label, results|
+  findings.concat(results)
+  puts "#{results.empty? ? 'ok  ' : 'FAIL'} #{label}"
+  results.each { |r| puts "       #{r}" }
+end
+
+report.call("#{docs.size} docs: intra-repo links and anchors", check_links(docs))
+report.call("identifiers presented as methods", check_identifiers(current, sources, CONFIG[:known_names]))
+
+if loaded
+  report.call("#{CONFIG[:namespace].call.name} config surface", check_namespace(current, CONFIG[:namespace].call))
+  blocks = ruby_blocks(current)
+  report.call("#{blocks.size} ruby examples: keyword arguments", check_keywords(blocks, signatures(CONFIG[:api_modules].call)))
+else
+  puts "skip the two checks that load the library — run under `bundle exec`"
+end
+
+puts
+puts findings.empty? ? "no drift found" : "#{findings.size} finding(s)"
+exit(findings.empty? ? 0 : 1)
