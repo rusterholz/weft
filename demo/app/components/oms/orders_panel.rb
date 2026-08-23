@@ -7,8 +7,9 @@ module Oms
     PER_PAGE = 25
     FILTER_STATUSES = %w[submitted processing shipped fulfilled].freeze
 
+    # One panel per page, filtered in place: `status` is what the panel is
+    # *showing*, not which panel it is, and it's blank on the default view.
     param :status, type: :string
-    identifies_by :status
     param :page, default: 1, type: :integer
 
     def build(attributes = {})

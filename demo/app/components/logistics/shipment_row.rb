@@ -6,6 +6,11 @@ module Logistics
 
     receives :shipment
 
+    # Same shape as Delivery::DriverRow: the hand-off is a record, so the row
+    # derives the scalar that actually names it.
+    derives(:shipment_id) { |p| p.shipment.id }
+    identifies_by :shipment_id
+
     def build(attributes = {})
       super
       driver = Delivery::Driver.find_by(id: params.shipment.driver_id)

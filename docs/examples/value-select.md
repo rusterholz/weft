@@ -2,7 +2,7 @@
 
 Two selects, where the first drives the second: pick a car make, and the model select repopulates with that make's models — no page reload, no hand-written JavaScript.
 
-This is Weft's take on [htmx's cascading-selects example](https://htmx.org/examples/value-select/), with one structural difference. Their server returns bare `<option>` tags that swap into the model select's interior; a Weft component brings its own wrapper element, so here the model select *is* the component — changing the make fetches a fresh `<select>` and swaps it into a stable slot.
+This is Weft's take on [htmx's cascading-selects example](https://htmx.org/examples/value-select/), with one structural difference. Their server returns bare `<option>` tags that swap into the model select's interior; a Weft component brings its own wrapper element, so here the model select *is* the component — changing the make fetches a fresh `<select>` that replaces the old one outright.
 
 ## The components
 
@@ -41,7 +41,7 @@ class CarsPage < Weft::Page
     div do
       label "Make ", for: "make"
       select name: "make", id: "make",
-             loads: ModelSelect, trigger: :change, swap: :fill, target: "#models" do
+             loads: ModelSelect, trigger: :change, swap: :outerHTML, target: "#model-select" do
         option "Audi",   value: "audi"
         option "Toyota", value: "toyota"
         option "BMW",    value: "bmw"
@@ -49,9 +49,7 @@ class CarsPage < Weft::Page
     end
     div do
       label "Model "
-      span id: "models" do
-        model_select
-      end
+      model_select
     end
   end
 end
@@ -65,7 +63,7 @@ end
 
 **Keep the URL clean of `with:`.** Baking `with: { make: ... }` into the URL would freeze the value at render time, fighting the live selection htmx appends. In page markup, simply omitting `with:` does the right thing. Inside a *component's* `build`, though, an omitted `with:` defaults to that component's current params — pass an explicit `with: {}` there to keep the live value as the only parameter.
 
-**The component is the `<select>` itself.** Overriding `tag_name` (an [Arbre-layer move](../arbre.md#inside-build-the-component-contract)) makes the wrapper element a `<select>` rather than the default `<div>`, so the fetched fragment drops into the form as a real form control. Note that its `name` attribute is set inside `build` rather than at the call site: a fragment fetched over the wire is rebuilt from its declared params alone, so any wrapper attribute the pattern depends on belongs in `build`. And its DOM id derives from the `make` value, changing with every swap — which is why the make select targets the stable `#models` slot with `swap: :fill` instead of chasing the select by id.
+**The component is the `<select>` itself.** Overriding `tag_name` (an [Arbre-layer move](../arbre.md#inside-build-the-component-contract)) makes the wrapper element a `<select>` rather than the default `<div>`, so the fetched fragment drops into the form as a real form control. Note that its `name` attribute is set inside `build` rather than at the call site: a fragment fetched over the wire is rebuilt from its declared params alone, so any wrapper attribute the pattern depends on belongs in `build`. And it declares no [`identifies_by`](../dsl.md#identity), so its DOM id is simply `#model-select` — the same before and after every swap. That's what lets the make select address the component by its own id and replace it outright, with no wrapper element standing in as a stable slot.
 
 **`trigger: :change` is spelled out for clarity.** It's also htmx's default trigger for a `<select>`, which is why the original htmx example omits it; keeping it explicit costs one kwarg and makes the interaction readable at the call site.
 
@@ -75,32 +73,30 @@ The initial render of the two selects:
 
 ```html
 <select name="make" id="make" hx-get="/_components/model_select"
-        hx-swap="innerHTML" hx-target="#models" hx-trigger="change">
+        hx-swap="outerHTML" hx-target="#model-select" hx-trigger="change">
   <option value="audi">Audi</option>
   <option value="toyota">Toyota</option>
   <option value="bmw">BMW</option>
 </select>
 ...
-<span id="models">
-  <select id="model-select-audi" name="model">
-    <option value="a1">A1</option>
-    <option value="a4">A4</option>
-    <option value="a6">A6</option>
-  </select>
-</span>
+<select id="model-select" name="model">
+  <option value="a1">A1</option>
+  <option value="a4">A4</option>
+  <option value="a6">A6</option>
+</select>
 ```
 
 Choosing Toyota sends `GET /_components/model_select?make=toyota`, which returns the fresh select:
 
 ```html
-<select id="model-select-toyota" name="model">
+<select id="model-select" name="model">
   <option value="landcruiser">Landcruiser</option>
   <option value="tacoma">Tacoma</option>
   <option value="yaris">Yaris</option>
 </select>
 ```
 
-— and htmx fills `#models` with it. With no `make` parameter at all, the param's default renders the Audi list; parameters the component doesn't declare are simply ignored.
+— and htmx swaps it in over the old one. The id is the same in both, which is what makes the next change work exactly like the first. With no `make` parameter at all, the param's default renders the Audi list; parameters the component doesn't declare are simply ignored.
 
 ## Related
 

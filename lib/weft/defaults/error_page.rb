@@ -19,10 +19,11 @@ module Weft
       # The component reads the same request the page did — recovery values
       # ride as overlays and reach every depth — so handing them over as
       # builder kwargs would only render them as HTML attributes on the error
-      # box, exception message and all.
+      # box, exception message and all. Named through the knob, so an app that
+      # brands its error component gets that box here too.
       def build(attributes = {})
         super
-        insert_tag(Weft::Defaults::ErrorComponent)
+        insert_tag(Weft.configuration.error_component)
       end
     end
   end

@@ -82,6 +82,7 @@ param :rate, type: :float       # "3.14"  → 3.14
 param :price, type: :decimal    # "19.99" → BigDecimal("19.99") — full precision, right for money
 param :active, type: :boolean   # "true" and "1" → true; anything else → false
 param :zip, type: :string       # looks numeric, isn't — leading zeros survive
+param :order_id, type: :uuid    # a string, and one that keeps its dashes in a DOM id
 ```
 
 An untyped param accepts whatever arrives, uncoerced — right for values that are already strings, and for rich shapes like the nested hash browsers submit for `items[widget]=2`. Declare `type: :boolean` on every flag param: without it, a wire `"false"` is just a truthy string. `default:` is independent of `type:` — the default fills the key when no source supplies a value, is never itself coerced, and must already be an instance of the declared type. Weft checks declarations on the spot: an unknown type or a disagreeing default raises `Weft::InvalidDefinition` at class-load time, not mid-request.
@@ -99,9 +100,7 @@ Declared param names always win over hash methods — if you declare `param :cou
 
 Only a component's *own* declared params serialize — into its refresh and stream URLs and its action payloads. That's the refresh contract: a standalone request must be able to reconstruct the component from its URL, so only URL-safe wire state belongs there. The other three doors are server-side and never serialize.
 
-The first `param` also anchors the component's DOM identity: the wrapper's element id is the dasherized class name suffixed with the first declared param's value — `StatCard` with `status: "shipped"` renders `id="stat-card-shipped"`, which is how sibling instances stay individually addressable. Declare the identifying param first. The suffix rides only when the value is a non-blank scalar (String, Symbol, number, or boolean): `nil`, `""`, and non-scalar values all derive the same bare class id, so a component's identity is stable across the different ways "no value" can arrive.
-
-That id decides more than where a fragment lands. Because an out-of-band swap is addressed by it, it also decides which [`brings`](#brings--companions-in-the-same-response) companions can coexist in one response: two that resolve to the same id collide, and only one rides. Changing which param you declare first — or what that param holds — can therefore change *which* companions appear, not merely where they go.
+Params are also where a component's DOM identity usually comes from — but nothing here is implicit: you say which ones with [`identifies_by`](#identity), below.
 
 Declaring a param has a routing consequence: a component with params (or any verb below) is considered independently addressable and gets its own route. See [Routing](routing.md).
 
@@ -137,6 +136,11 @@ defines label: "Drivers", accent: "available"
 `defines` is sugar for statically-known derivations: each pair is exactly `derives(key) { value }`, with identical priority, overridability, and laziness. It shines in a subclass that pins constant faces of an inherited component while deriving the dynamic ones:
 
 ```ruby
+class StatCard < Weft::Component
+  builder_method :stat_card
+  param :status
+end
+
 class AvailableDriversCard < StatCard
   defines label: "Drivers", accent: "available"          # fixed
   derives(:value) { |_p| "#{Driver.available.count}/#{Driver.count}" }  # per render
@@ -152,7 +156,7 @@ receives :order
 receives :page_num, default: 1
 ```
 
-Some values can't ride a URL — an `ActiveRecord` object, a pre-built collection, anything rich. `receives` declares that a call site hands the value over directly: `order_row(order: order)` fills `params.order`. The kwarg is consumed as the hand-off, so it never becomes an HTML attribute on the wrapper, and the value never serializes into a URL.
+Some values can't ride a URL — an `ActiveRecord` object, a pre-built collection, anything rich. `receives` declares that a call site hands the value over directly: given an `OrderRow` that declares `builder_method :order_row`, a parent building `order_row(order: order)` fills `params.order` for the code inside `OrderRow`. The kwarg is consumed as the hand-off, so it never becomes an HTML attribute on the wrapper, and the value never serializes into a URL.
 
 A hand-off is **required by default**: a call site that omits it raises `Weft::NotReceived`, with the backtrace pointing at the call site rather than deep inside the framework. Declaring a default makes it optional — `receives :page_num, default: 1`, and an explicit `default: nil` counts too (the presence of the keyword is what makes it optional, not the value).
 
@@ -175,7 +179,7 @@ The first five are values the bag *holds*. The sixth is a fallback the bag *asks
 
 That order is what makes *duals* work — declaring a key through two doors so it resolves whether it's handed over or has to fetch itself:
 
-- **`param` + `receives`** — handed the value when embedded (no query round-trip), wire-borne when rendered standalone, so a self-refreshing card embedded with `status_card(status: "hot")` keeps its status across refreshes.
+- **`param` + `receives`** — handed the value when embedded (no query round-trip), wire-borne when rendered standalone, so a self-refreshing card embedded with `stat_card(status: "hot")` keeps its status across refreshes.
 - **`derives` + `receives`** — handed the value when embedded, self-fetching when standalone. A `derives` dual also satisfies the refresh-safety lint.
 - **`param` + `derives`** — use the wire value if present, otherwise derive one.
 
@@ -195,6 +199,78 @@ Two shapes of consumption both work, and both are idiomatic:
 - **Inherit-and-read.** A base component reads `params.order_id` that it never declares, trusting the render tree — or a subclass — to supply it. This keeps the base pipeline-agnostic: each subclass chooses its own door (`param`, `receives`, or `derives`) to fill the key, and the shared `build` stays the same. The cost is that the dependency is implicit — nothing in the base names what it needs.
 
 Subclasses can also **redeclare** an inherited key. Redeclaring through the *same* door overrides the parent's declaration (the block or metadata is replaced, keeping the parent's declaration-order position). Redeclaring through a *different* door adds a dual — it doesn't replace the parent's door. There's no way to *un*-declare a key a parent declared; a subclass that needs different behavior overrides or duals, it doesn't remove.
+
+## Identity
+
+Every rendered component wears a DOM id, and Weft addresses fragments by it: `#order-row-42` is how a refresh knows what to replace and how an out-of-band swap finds its slot. An id is composed from the class name — its **stem** — and whatever you nominate to distinguish one instance from the next.
+
+```ruby
+class OrderRow < Weft::Component
+  param :order_id
+  identifies_by :order_id        # id="order-row-42"
+end
+```
+
+Two consequences are worth holding onto. Sibling instances that resolve to the *same* id are only individually addressable by accident — the first one wins. And because a [`brings`](#brings--companions-in-the-same-response) companion is addressed by id, identity decides which companions can **coexist in one response**: two that resolve to the same id collide, and only one rides.
+
+### `identifies_by` — name what distinguishes an instance
+
+Pass the params that identify the component, in the order they should appear:
+
+```ruby
+identifies_by :order_id, :line_item_id   # id="line-item-row-42-7"
+```
+
+Order is the order you write, not the order the params were declared in. Each value is sanitised so the single `-` between slots stays unambiguous — a dash inside a value becomes an underscore — and declared positions are never collapsed, so a blank slot still occupies its place rather than shifting the ones after it.
+
+The value may come through **any door**: a `param`, a `derives`, a `defines`, or a `receives`. What matters is the value's *type*, not where it entered from. That makes a derivation the natural answer when a component is handed a whole record:
+
+```ruby
+class DriverRow < Weft::Component
+  receives :driver                        # the record itself cannot compose an id
+  derives(:driver_id) { |p| p.driver.id } # the scalar that names it can
+  identifies_by :driver_id
+end
+```
+
+An identifying value must be a **scalar** — a String, Symbol, number, boolean, or `nil`. Anything else raises `Weft::InvalidIdentifierValue` naming the component and the param, because an Array or a Hash would otherwise stringify into a selector two instances could share, and a record's default `to_s` carries its memory address, which changes on every request.
+
+`nil` and `""` are legitimate: both render an empty slot, so `id="order-row-"`. Weft warns once per class and param when that happens, since every instance with a blank value lands on the same id — see `digest:` below for the usual fix.
+
+**A block form** composes the whole id yourself, for the cases a list of slots can't express:
+
+```ruby
+identifies_by { |params| "cart-#{params.user_id}" }
+```
+
+The block receives the params bag and returns the **entire id** — the stem is not prefixed for you, so include whatever you want in it. It runs sandboxed against the bag rather than the instance, which is what lets Weft answer "what id would this class wear?" without building one. Deliberate collisions are allowed here — two components sharing an id so one swaps over the other is a fair reason to reach for this — but an id Weft cannot target is refused rather than rendered.
+
+### `unique!` — a slot for a component with nothing to name it
+
+Some components have nothing to identify by and still need their own slot: a badge repeated down a table, a card the page renders many of. `unique!` has Weft issue a token at first render and carry it from then on:
+
+```ruby
+class StatusBadge < Weft::Component
+  unique!                        # id="status-badge-M3f9c1a20"
+end
+```
+
+It is an alternative to `identifies_by`, not a companion to it — declaring both raises, since they are contradictory claims rather than a precedence puzzle. Like `identifies_by`, it replaces any identity inherited from a superclass. Asking for a slot does not publish a route: a component that wants one declares something that earns it, or says `routable!`.
+
+### `digest:` — when the values collide but the instances differ
+
+An identifying param whose values are often blank, very long, or not URL-shaped can render its value as a short hash instead:
+
+```ruby
+param :label, digest: true       # id="tag-D2a6c3f05"
+param :label, digest: 12         # a longer digest, for a crowded page
+```
+
+The digest is deterministic — the same value always yields the same id, across processes and across workers — so it stays a stable target between requests. It's all-or-nothing per param rather than a fallback: a digested param is *always* digested, so its id doesn't change shape depending on what the value happens to be. `Weft.configuration.digest_length` sets the default width for declarations that don't name one.
+
+### What identity is not
+
+A DOM id is a **label, not a carrier**. Every value it derives from travels on the wire independently, so nothing is lost when an id is opaque, and nothing is transported by making it descriptive. Two components whose ids would collide by class name are caught when routes are validated — see [Collision detection](routing.md#collision-detection).
 
 ## Verbs
 

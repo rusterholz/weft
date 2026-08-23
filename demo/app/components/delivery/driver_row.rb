@@ -6,6 +6,12 @@ module Delivery
 
     receives :driver
 
+    # A hand-off holds the whole record, which cannot compose a DOM id. Derive
+    # the scalar the row is really identified by and name that — sibling rows
+    # then differ, and the id stays the same one across renders.
+    derives(:driver_id) { |p| p.driver.id }
+    identifies_by :driver_id
+
     def build(attributes = {})
       super
 

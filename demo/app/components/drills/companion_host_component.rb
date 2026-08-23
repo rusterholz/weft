@@ -8,8 +8,10 @@ module Drills
   class CompanionHostComponent < Weft::Component
     builder_method :companion_host
 
+    # `runs` counts this component's own action, so identifying by it would
+    # rename the element on every click — the one thing an OOB companion
+    # needs to stay put.
     param :runs, type: :integer, default: 0
-    identifies_by :runs
 
     performs(:break_companion) { |params| { runs: params.runs + 1 } }
 
