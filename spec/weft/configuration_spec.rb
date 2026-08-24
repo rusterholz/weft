@@ -458,13 +458,6 @@ RSpec.describe Weft::Configuration do
   end
 
   describe "gem-level access via Weft.configure" do
-    around do |example|
-      original = Weft.configuration
-      Weft.instance_variable_set(:@configuration, described_class.new)
-      example.run
-      Weft.instance_variable_set(:@configuration, original)
-    end
-
     it "yields the configuration object" do
       Weft.configure do |c|
         expect(c).to be_a(described_class)
@@ -480,13 +473,6 @@ RSpec.describe Weft::Configuration do
   end
 
   describe "router_logging apply step in Weft.configure" do
-    around do |example|
-      original_config = Weft.configuration
-      Weft.instance_variable_set(:@configuration, described_class.new)
-      example.run
-      Weft.instance_variable_set(:@configuration, original_config)
-    end
-
     it "applies a true router_logging to Weft::Router's :logging setting" do
       allow(Weft::Router).to receive(:set)
 

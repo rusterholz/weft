@@ -55,6 +55,10 @@ Naming/VariableNumber:
 RSpec/DescribeClass:
   Exclude:
     - "spec/integration/**/*"
+    # Its subject is spec_helper's isolation guarantee, not a class. Naming one
+    # would only make `described_class` stand in for `Weft`, where the literal
+    # module name is the clearer read.
+    - "spec/harness_isolation_spec.rb"
 
 RSpec/ExampleLength:
   Max: 15
