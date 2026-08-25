@@ -131,13 +131,6 @@ RSpec.describe Weft::Page do
   end
 
   describe "htmx-ext-sse script auto-inclusion" do
-    around do |example|
-      original = Weft.configuration.include_sse_ext
-      example.run
-    ensure
-      Weft.configuration.include_sse_ext = original
-    end
-
     context "with include_sse_ext = :auto (default)" do
       it "omits the sse.js script when no registered component pushes" do
         allow(Weft.registry).to receive(:any_sse_components?).and_return(false)
@@ -215,14 +208,6 @@ RSpec.describe Weft::Page do
   end
 
   describe "resolve-against-root for registered assets" do
-    around do |example|
-      original = Weft.configuration
-      Weft.instance_variable_set(:@configuration, Weft::Configuration.new)
-      example.run
-    ensure
-      Weft.instance_variable_set(:@configuration, original)
-    end
-
     def render_with(stylesheet: nil, stylesheet_assets: nil, script: nil, script_assets: nil)
       klass = Class.new(described_class) { def self.name = "AssetPage" }
       klass.register_stylesheet(stylesheet, assets: stylesheet_assets) if stylesheet

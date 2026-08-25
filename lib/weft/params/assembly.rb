@@ -46,12 +46,20 @@ module Weft
       # a render, the state already composed at the top of a request. Passing
       # +hand_offs: nil+ says the door does not exist (see .for_request);
       # an empty hash says it exists and nobody staged anything.
+      # +violations+ is reported, never raised on: assembling is reading, and
+      # the error path assembles too. Construction is where a component commits
+      # to the values, so construction is where the refusal belongs — which is
+      # also what leaves a *populated* bag for recovery to redraw from.
+      attr_reader :violations
+
       def initialize(component_class, wire_source, hand_offs: {}, overlays: {}, branched_from: nil)
         @component_class = component_class
         @received = hand_offs || {}
         @hand_offs = !hand_offs.nil?
         @overlays = overlays
-        @wire = Weft::Resolver.resolve_present(component_class, wire_source)
+        resolution = Weft::Resolver.resolution(component_class, wire_source)
+        @wire = resolution.coerced
+        @violations = resolution.violations
         @inherited = branched_from ? branched_from.branch_data : {}
         @upstream_provenance = branched_from ? branched_from.provenance : {}
       end

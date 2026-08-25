@@ -21,11 +21,16 @@ Weft ships a small semantic hierarchy rooted at `Weft::Error`:
 | --- | --- | --- |
 | `Weft::Error` | — | Abstract root. Never raised directly; `rescue Weft::Error` catches the whole family. |
 | `Weft::HTTPError` | — | Abstract intermediate for errors that carry an HTTP status. |
+| `Weft::BadRequest` | 400 | The request itself couldn't be read. |
+| `Weft::InvalidParamValue` | 400 | A wire value the param's declared `type:` can't represent. Carries the raw values it refused. |
+| `Weft::MissingParam` | 400 | A param declared `required:` that no source supplied. |
 | `Weft::NotFound` | 404 | The thing addressed doesn't exist. |
 | `Weft::Unauthorized` | 401 | Authentication required. |
 | `Weft::Forbidden` | 403 | Authenticated, but not allowed. |
 | `Weft::Unprocessable` | 422 | The request was understood but can't be acted on — validation failures, mostly. |
 | `Weft::InternalError` | 500 | An explicit "we broke" signal. |
+
+The `Weft::BadRequest` family is the one Weft raises for you, before any component builds — see [`strict:`](dsl.md#strict--what-a-type-guarantees). It draws a line worth keeping in your own code too: **400 means "I can't read what you sent"; 422 means "I read it fine, and it isn't acceptable."** Refusing an unreadable id and reporting a failed validation are different answers, and only one of them needs a database lookup to find out.
 
 Raise these from your `build` methods and action callables to communicate outcomes with the right status semantics: `raise Weft::NotFound` when a record lookup comes up empty, `raise Weft::Unprocessable` when validation fails. They're a convenience, not a requirement — your code can keep raising its own vocabulary (`ActiveRecord::RecordNotFound`, a domain error) and let a `recovers` edge [declare what it means](#the-recovers-chain) with `status:`. An error that's neither a `Weft::HTTPError` nor mapped by such an edge is treated as status 500.
 

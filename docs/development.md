@@ -24,6 +24,8 @@ bundle exec appraisal rspec     # the full six-gemfile matrix
 
 Run the matrix before committing any gem code change — a construct that works on current ActiveSupport can still break the oldest row.
 
+The matrix varies dependencies, not Ruby: CI runs all six gemfiles against **each supported Ruby (3.2, 3.3, 3.4)**, while a local run covers only the one in `.ruby-version`. So a Ruby-version-specific failure passes locally and fails in CI — a gem that moved from Ruby's default gems to its bundled ones is the usual cause, since a bundled gem is off the load path under `bundle exec` until the Gemfile names it. Install the other Rubies (`asdf install ruby 3.4.7`) and re-run with `ASDF_RUBY_VERSION=3.4.7 bundle exec appraisal rspec` when a change touches loading or dependencies.
+
 **Demo suite** — the demo app (`demo/`) has its own Gemfile and specs:
 
 ```bash

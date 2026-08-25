@@ -7,7 +7,7 @@ require "weft/dsl/sandbox"
 require "weft/params"
 require "weft/params/assembly"
 require "weft/error"
-require "weft/resolver"
+require "weft/types"
 
 module Weft
   module DSL
@@ -253,17 +253,25 @@ module Weft
 
         # Values render into an alphabet holding no dash, so the separator marks a
         # boundary and nothing else: a doubled separator can only mean an empty
-        # slot. A uuid-typed value is the deliberate exception — it keeps its
-        # dashes, which is safe only because its width is fixed, so its boundaries
-        # are known without the separator having to mark them.
+        # slot. A type may claim its own rendering instead — :uuid does, keeping
+        # its dashes, which is safe only because its width is fixed, so its
+        # boundaries are known without the separator having to mark them.
+        #
+        # Asked of the type rather than tested against a name, so a registered
+        # type gets the same say. It is asked at render time rather than trusted
+        # from the declaration, so a uuid-typed param holding something else
+        # degrades to ordinary sanitisation instead of emitting a segment with
+        # dashes weft cannot vouch for.
         def sanitize_identifier(value, key)
           return "" if value.nil?
 
-          rendered = value.to_s
-          return rendered.downcase if uuid_identifier?(key, rendered)
+          claimed = declared_type(key)&.id_segment(value)
+          return claimed if claimed
 
-          rendered.parameterize.tr("-", "_")
+          value.to_s.parameterize.tr("-", "_")
         end
+
+        def declared_type(key) = Weft::Types.lookup(params.dig(key, :type))
 
         # Declared width for a digested param, or nil when the param renders its
         # value. `digest: true` defers to the gem-wide width so one setting can
@@ -296,8 +304,6 @@ module Weft
             )
           end
         end
-
-        def uuid_identifier?(key, value) = params.dig(key, :type) == :uuid && Weft::Resolver.uuid?(value)
 
         # Wire hashes arrive string-keyed, assembled bags symbol-keyed; identity
         # reads the same value either way.

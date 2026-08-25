@@ -38,14 +38,13 @@ RSpec.describe Weft do
   end
 
   describe ".configure log level application" do
+    # Only the logger: spec_helper isolates the configuration. Nilling it makes
+    # `logger` rebuild, so these read the level off a fresh one.
     around do |example|
       saved_logger = described_class.instance_variable_get(:@logger)
-      saved_config = described_class.instance_variable_get(:@configuration)
       described_class.instance_variable_set(:@logger, nil)
-      described_class.instance_variable_set(:@configuration, nil)
       example.run
       described_class.instance_variable_set(:@logger, saved_logger)
-      described_class.instance_variable_set(:@configuration, saved_config)
     end
 
     it "applies the default :info level" do

@@ -6,14 +6,6 @@ require "tmpdir"
 RSpec.describe Weft::Autoloading do
   let(:app_dir) { Dir.mktmpdir("weft-autoloading") }
 
-  # The reload hook reads Weft.configuration; isolate the global instance.
-  around do |example|
-    original = Weft.instance_variable_get(:@configuration)
-    Weft.instance_variable_set(:@configuration, Weft::Configuration.new)
-    example.run
-    Weft.instance_variable_set(:@configuration, original)
-  end
-
   after do
     described_class.loaders.each(&:unload)
     described_class.loaders.clear

@@ -4,10 +4,12 @@
 
 source "https://rubygems.org"
 
+gem "activemodel", ">= 6.1"
 gem "activesupport", "~> 8.0.0"
 gem "appraisal", "~> 2.5"
 gem "arbre", "~> 2.2.0"
 gem "bundler", "~> 2.7"
+gem "mutex_m"
 gem "openssl", ">= 3.2.2"
 gem "parallel", "~> 1.24"
 gem "pry-byebug", platforms: :mri

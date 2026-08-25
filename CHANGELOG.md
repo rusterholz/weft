@@ -2,9 +2,19 @@
 
 ## v0.3.0 (unreleased)
 
-Weft learns to say what a thing *is*: components name their own identity instead of inheriting one by accident, so sibling instances stay individually addressable and the words for what a class body does mean one thing each.
+Weft learns to say what a thing *is*: components name their own identity instead of inheriting one by accident, and the types they declare become promises Weft keeps — so sibling instances stay individually addressable, a malformed request fails where the mistake is, and the words for what a class body does mean one thing each.
 
 ### New Features:
+
+- **Errors That Hand Back What You Typed** – When a wire value is refused, the error carries every violation from that request: the key, what the type wanted, and the raw value exactly as it arrived. So a `recovers` edge can redraw the form with `wombat` still sitting in the age field and a message beside it, instead of the zero a lenient conversion would have put there.
+  - Every bad field in one pass, so a form with three of them reports three rather than making the visitor fix them one round trip at a time
+  - The fields that *did* arrive cleanly are still in `params`, so a redraw keeps the rest of the form intact
+
+- **Required Params** (`required:`) – `param :order_id, type: :uuid, required: true` says a request without it isn't a request you'll serve, and Weft answers 400 rather than rendering something half-addressed. It pairs with `strict:` as the other half of one idea: `strict:` refuses a value that's wrong, `required:` refuses one that's missing.
+
+- **A Vocabulary For Unreadable Requests** – `Weft::BadRequest` and its two members (`Weft::InvalidParamValue`, `Weft::MissingParam`) fill the 400 that Weft's error family was missing, and they're matchable like any other: `recovers from: Weft::BadRequest, with: NotFoundPage, status: 404` if you'd rather your app answered differently. The line they draw is worth borrowing: **400 means "I can't read what you sent"; 422 means "I read it fine, and it isn't acceptable."**
+
+- **Booleans That Understand Forms** – `type: :boolean` now reads the words browsers and humans actually send — `true/false`, `1/0`, `on/off`, `yes/no`, `t/f`, `y/n`, in any case. A bare `<input type="checkbox">` submits `on` when checked, which previously read as **false**; it now reads as true, which is what it plainly meant.
 
 - **Declared Component Identity** (`identifies_by`) – Name the params that distinguish one instance from the next, and read a class body to find out. Full model in [the DSL reference](docs/dsl.md#identity).
   - `identifies_by :order_id, :line_item_id` – slots appear in the order you write them, and a blank one holds its place rather than shifting the rest
@@ -21,6 +31,11 @@ Weft learns to say what a thing *is*: components name their own identity instead
 - **Collision Detection Covers DOM Ids** – Two components whose ids would collide are caught when routes are validated, alongside the route checks — so a fragment that could only ever land on another component's element is a startup error, not a mystery in the browser.
 
 ### Breaking Changes:
+
+- **A Declared Type Is Now A Promise** – `type:` used to be a parsing hint that quietly did its best: `?page=wombat` on `param :page, type: :integer` rendered **page 0**, and `:float`, `:decimal` and `:boolean` invented `0.0`, `0.0` and `false` the same way. A value the type can't represent is now refused with a `Weft::BadRequest`, so a bad request fails at the request instead of surfacing three screens later as "this page is showing the wrong records."
+  - `?page=` — an empty value — now falls to the param's declared default. It's a cleared field, and treating it as a value is how `default: 1` used to render page 0
+  - `strict: false` on a param, or `Weft.configuration.strict_params = false` across the app, restores lenient conversion — and lenient means **exactly** [`ActiveModel::Type`](https://api.rubyonrails.org/classes/ActiveModel/Type.html), the behavior a Rails app already has, verified against every ActiveModel from 6.1 to 8.0
+  - Values the type *can* read are unchanged, so a request that was already well-formed behaves exactly as before
 
 - **Identity Is Declared, Not Positional** – A component's DOM id no longer derives from whichever param happened to be declared first. Declare `identifies_by` on any component whose instances must be individually addressable; one that declares nothing wears its class id, which is the right answer for a component appearing once per page.
   - This is the change that makes identity survive inheritance: a subclass can now replace its parent's identity outright, which a first-param convention could never express

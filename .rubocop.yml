@@ -52,9 +52,21 @@ Naming/VariableNumber:
   Exclude:
     - "spec/**/*"
 
+Metrics/ParameterLists:
+  # Keyword arguments carry none of the positional confusion this cop targets —
+  # `param :page, type: :integer, strict: true` names every one of them at the
+  # call site. Collapsing weft's declaration macros into an options hash to
+  # satisfy a count would move them TOWARD the defect we removed from
+  # `receives`, which silently swallowed anything it did not recognise.
+  CountKeywordArgs: false
+
 RSpec/DescribeClass:
   Exclude:
     - "spec/integration/**/*"
+    # Its subject is spec_helper's isolation guarantee, not a class. Naming one
+    # would only make `described_class` stand in for `Weft`, where the literal
+    # module name is the clearer read.
+    - "spec/harness_isolation_spec.rb"
 
 RSpec/ExampleLength:
   Max: 15

@@ -14,13 +14,14 @@ class ErrorPage < ApplicationPage
 
   title "Error"
 
+  # The component reads the same request this page did — recovery values ride
+  # as overlays and reach every depth — so it needs nothing handed over. Passing
+  # them as builder kwargs would name declared params at the call site, which
+  # weft renders as HTML attributes: the exception message would sit in the
+  # markup even with verbose_error_pages off, where the visible text is hidden
+  # and the page therefore *looks* safe.
   def build(attributes = {})
     super
-    insert_tag(
-      ErrorComponent,
-      exception: @params.exception,
-      request_path: @params.request_path,
-      status_code: @params.status_code
-    )
+    insert_tag(ErrorComponent)
   end
 end

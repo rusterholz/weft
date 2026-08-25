@@ -1430,13 +1430,6 @@ RSpec.describe Weft::Router do
   end
 
   describe "configurable stream suffix" do
-    around do |example|
-      original = Weft.configuration.stream_suffix
-      example.run
-    ensure
-      Weft.configuration.stream_suffix = original
-    end
-
     it "treats a path ending in the configured suffix as a stream request" do
       Weft.configuration.stream_suffix = "sse"
       router = described_class.new!(downstream_app)
@@ -3116,12 +3109,6 @@ RSpec.describe Weft::Router do
     end
 
     describe "htmx_errors knob" do
-      around do |example|
-        original = Weft.configuration.htmx_errors
-        example.run
-        Weft.configuration.htmx_errors = original
-      end
-
       it "emits HX-Redirect to the error_page when :redirect, htmx, and gem-default catches the failure (D1)" do
         Weft.configuration.htmx_errors = :redirect
 
@@ -3226,14 +3213,14 @@ RSpec.describe Weft::Router do
     let(:tmpdir) { Dir.mktmpdir("weft-static-spec-") }
     let(:url_prefix) { "/static-spec-#{rand(1_000_000)}" }
 
+    # spec_helper isolates the configuration; the mount register is its own ivar
+    # and stays local. Resetting it is what lets each example mount afresh —
+    # apply_static_assets! skips a bundle name it has already seen.
     around do |example|
-      original_config = Weft.configuration
       original_mounted = Weft.instance_variable_get(:@mounted_static_bundles)
-      Weft.instance_variable_set(:@configuration, Weft::Configuration.new)
       Weft.instance_variable_set(:@mounted_static_bundles, nil)
       example.run
     ensure
-      Weft.instance_variable_set(:@configuration, original_config)
       Weft.instance_variable_set(:@mounted_static_bundles, original_mounted)
       FileUtils.rm_rf(tmpdir)
     end

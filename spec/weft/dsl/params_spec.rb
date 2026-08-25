@@ -106,18 +106,13 @@ RSpec.describe Weft::DSL::Params do
       expect(klass.params[:page]).to eq(default: 1, type: :integer)
     end
 
-    it "accepts all five declarable types" do
+    it "accepts every registered type" do
       klass = Class.new(base_class) do
         def self.name = "AllTypesTest"
-        param :label, type: :string
-        param :page, type: :integer
-        param :rate, type: :float
-        param :active, type: :boolean
-        param :price, type: :decimal
+        Weft::Types.registered.each { |type| param :"a_#{type}", type: type }
       end
 
-      expect(klass.params.values.map { |meta| meta[:type] }).
-        to eq(%i[string integer float boolean decimal])
+      expect(klass.params.values.map { |meta| meta[:type] }).to eq(Weft::Types.registered)
     end
 
     it "raises InvalidDefinition on an unknown type" do
@@ -126,8 +121,13 @@ RSpec.describe Weft::DSL::Params do
           def self.name = "UnknownTypeTest"
           param :page, type: :number
         end
-      end.to raise_error(Weft::InvalidDefinition,
-                         /:page.*unknown type :number.*:string, :integer, :float, :boolean, :decimal/m)
+        # Names the declarable types without pinning their order, which is a
+        # property of the registration file rather than of the message — and
+        # which a registered type would otherwise break.
+      end.to raise_error(Weft::InvalidDefinition) { |error|
+        expect(error.message).to match(/:page.*unknown type :number/m)
+        expect(error.message).to include(*Weft::Types.registered.map(&:inspect))
+      }
     end
 
     it "raises InvalidDefinition when a non-nil default does not match the declared type" do
@@ -565,6 +565,120 @@ RSpec.describe Weft::DSL::Params do
       end.children.first
 
       expect(component.get_attribute("sse-connect")).to eq("/_components/ticker_card/_stream?symbol=WEFT")
+    end
+  end
+
+  # Strictness and requiredness are refused at CONSTRUCTION, not inside the
+  # Resolver — the Resolver reports, the component commits. That split is what
+  # lets the error path re-read the same malformed wire hash while reporting
+  # the failure, instead of raising a second time on top of it.
+  describe "refusing wire values a declaration cannot accept" do
+    def build(klass, wire)
+      Weft::Context.new({}, nil, wire_params: wire) { insert_tag(klass) }.children.first
+    end
+
+    it "refuses a value the declared type cannot represent" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "StrictBuild"
+        param :page, default: 1, type: :integer
+      end
+
+      expect { build(klass, { "page" => "wombat" }) }.
+        to raise_error(Weft::InvalidParamValue, /wombat.*:page/m)
+    end
+
+    # Each type says what it wanted in words, because "declares type :uuid"
+    # tells a reader only what they already wrote. This is also the facet a
+    # registered type needs most: a `:duration` has to be able to say "is not
+    # an ISO-8601 duration" rather than inherit something generic.
+    it "says what the type wanted, in the type's own words" do
+      {
+        integer: "whole number", float: "number", decimal: "number",
+        boolean: "true or false", string: "single value", uuid: "uuid"
+      }.each do |type, phrase|
+        klass = Class.new(Weft::Component) do
+          def self.name = "RefusalProbe"
+          param :probe, type: type
+        end
+        bad = type == :string ? %w[a b] : "wombat"
+
+        expect { build(klass, { "probe" => bad }) }.
+          to raise_error(Weft::InvalidParamValue, /#{Regexp.escape(phrase)}/), type.to_s
+      end
+    end
+
+    it "answers 400, since the request is unreadable rather than unacceptable" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "StatusBuild"
+        param :page, type: :integer
+      end
+
+      error = begin
+        build(klass, { "page" => "wombat" })
+      rescue Weft::InvalidParamValue => e
+        e
+      end
+
+      expect(error).to be_a(Weft::BadRequest)
+      expect(error.status).to eq(400)
+    end
+
+    # The whole point of refusing rather than fabricating is to be able to say
+    # what arrived. A recovery redrawing a form needs "wombat" back, not the 0
+    # that lenient coercion would have invented.
+    it "carries every violation, with the raw value the user actually sent" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "CarriesBuild"
+        param :page, type: :integer
+        param :rate, type: :float
+      end
+
+      error = begin
+        build(klass, { "page" => "wombat", "rate" => "badger" })
+      rescue Weft::InvalidParamValue => e
+        e
+      end
+
+      expect(error.violations.map(&:key)).to eq(%i[page rate])
+      expect(error.violations.map(&:raw)).to eq(%w[wombat badger])
+    end
+
+    it "refuses an absent value on a required param" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "RequiredBuild"
+        param :order_id, type: :uuid, required: true
+      end
+
+      expect { build(klass, {}) }.to raise_error(Weft::MissingParam, /order_id/)
+    end
+
+    it "accepts a required param the wire supplied" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "RequiredSupplied"
+        param :page, type: :integer, required: true
+      end
+
+      expect(build(klass, { "page" => "2" }).params.page).to eq(2)
+    end
+
+    # `required:` guards the absence door and `strict:` the malformation door.
+    # A malformed value is not an absent one, so it is one complaint, not two.
+    it "reports a malformed required value as malformed, not as missing" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "RequiredMalformed"
+        param :page, type: :integer, required: true
+      end
+
+      expect { build(klass, { "page" => "wombat" }) }.to raise_error(Weft::InvalidParamValue)
+    end
+
+    it "refuses a default alongside required at declare time" do
+      expect do
+        Class.new(Weft::Component) do
+          def self.name = "RequiredWithDefault"
+          param :page, default: 1, type: :integer, required: true
+        end
+      end.to raise_error(Weft::InvalidDefinition, /required.*default/m)
     end
   end
 end

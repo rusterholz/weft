@@ -176,6 +176,20 @@ The path segment marking a component's SSE stream endpoint. A component declarin
 
 Set a bare path segment — no slashes; Weft supplies the separator. The default's leading underscore keeps stream endpoints out of the namespace of derived component paths (which, coming from Ruby class names, never begin with an underscore).
 
+## Params
+
+### `strict_params`
+
+Default: `true`.
+
+Whether a declared `type:` is a promise Weft keeps. On, a wire value the type cannot represent is refused with a [`Weft::BadRequest`](dsl.md#strict--what-a-type-guarantees) — `?page=wombat` on `param :page, type: :integer` answers 400 rather than rendering page 0. Off, coercion is exactly [`ActiveModel::Type`](https://api.rubyonrails.org/classes/ActiveModel/Type.html)'s, which is what a Rails application already does.
+
+```ruby
+c.strict_params = false
+```
+
+This is the gem-wide default for params that don't state their own; `param :page, type: :integer, strict: true` overrides it either way, so you can turn strictness off across an app and keep it where it earns its place.
+
 ## Identity
 
 These two shape the DOM ids Weft composes. What identity *is* — how you declare it, and why it decides which companions can coexist — lives in [Identity](dsl.md#identity).

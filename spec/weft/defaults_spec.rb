@@ -1,12 +1,6 @@
 # frozen_string_literal: true
 
 RSpec.describe "Weft::Defaults" do
-  around do |example|
-    original = Weft.configuration.verbose_error_pages
-    example.run
-    Weft.configuration.verbose_error_pages = original
-  end
-
   describe Weft::Defaults::ErrorComponent do
     it "is not auto-routable (abstract)" do
       expect(described_class.routable?).to be(false)
