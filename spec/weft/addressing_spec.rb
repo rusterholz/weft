@@ -218,6 +218,61 @@ RSpec.describe Weft::Addressing do
           to eq("oms-order-header-f7c599ce-3945-4340-b4cc-5754a682ae43")
       end
 
+      # The shape a record-shaped hand-off forces: the caller holds the whole
+      # driver, which cannot compose a DOM id, so the row derives the scalar it
+      # is really identified by. Identity has to read that key's declarations
+      # through whichever door declared it, or the same UUID renders one way
+      # from a `param` and another from a `derives`.
+      # Rendered rather than asked of the class, because that is the only place
+      # a hand-off exists: `Assembly.for_request` stages none, so a derivation
+      # reading one has nothing to read. Which is also why these assert on a
+      # built instance — the shape the demo's rows actually take.
+      def id_of(klass, **handed)
+        Weft::Context.new { insert_tag(klass, **handed) }.children.first.weft_dom_id
+      end
+
+      it "keeps the dashes of a uuid-typed value reached through derives" do
+        derived_class = Class.new(Weft::Component) do
+          def self.name = "Delivery::DriverRow"
+          receives :driver
+          derives(:driver_id, type: :uuid) { |p| p.driver.id }
+          identifies_by :driver_id
+        end
+        driver = Struct.new(:id).new("f7c599ce-3945-4340-b4cc-5754a682ae43")
+
+        expect(id_of(derived_class, driver: driver)).
+          to eq("delivery-driver-row-f7c599ce-3945-4340-b4cc-5754a682ae43")
+      end
+
+      it "keeps the dashes of a uuid-typed value handed straight over" do
+        received_class = Class.new(Weft::Component) do
+          def self.name = "HandedRow"
+          receives :order_id, type: :uuid
+          identifies_by :order_id
+        end
+
+        expect(id_of(received_class, order_id: "f7c599ce-3945-4340-b4cc-5754a682ae43")).
+          to eq("handed-row-f7c599ce-3945-4340-b4cc-5754a682ae43")
+      end
+
+      # Two records, two digests: a single `D\h{8}` match would be satisfied by
+      # digesting the nil a derivation that never ran leaves behind.
+      it "digests an identifying value reached through derives" do
+        digested_class = Class.new(Weft::Component) do
+          def self.name = "DigestedRow"
+          receives :record
+          derives(:label, digest: true) { |p| p.record.to_s }
+          identifies_by :label
+        end
+
+        first = id_of(digested_class, record: "anything at all")
+        second = id_of(digested_class, record: "something else")
+
+        expect(first).to match(/\Adigested-row-D\h{8}\z/)
+        expect(first).not_to eq(second)
+        expect(id_of(digested_class, record: "anything at all")).to eq(first)
+      end
+
       it "normalizes uuid case, since a UUID is case-insensitive" do
         uuid_class = Class.new(Weft::Component) do
           def self.name = "UpperCard"
