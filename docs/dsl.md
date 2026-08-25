@@ -80,12 +80,44 @@ Wire values arrive as strings, so a param that means something else declares its
 param :page, type: :integer     # "2"     → 2
 param :rate, type: :float       # "3.14"  → 3.14
 param :price, type: :decimal    # "19.99" → BigDecimal("19.99") — full precision, right for money
-param :active, type: :boolean   # "true" and "1" → true; anything else → false
+param :active, type: :boolean   # true/false, 1/0, on/off, yes/no, t/f, y/n — any case
 param :zip, type: :string       # looks numeric, isn't — leading zeros survive
 param :order_id, type: :uuid    # a string, and one that keeps its dashes in a DOM id
 ```
 
 An untyped param accepts whatever arrives, uncoerced — right for values that are already strings, and for rich shapes like the nested hash browsers submit for `items[widget]=2`. Declare `type: :boolean` on every flag param: without it, a wire `"false"` is just a truthy string. `default:` is independent of `type:` — the default fills the key when no source supplies a value, is never itself coerced, and must already be an instance of the declared type. Weft checks declarations on the spot: an unknown type or a disagreeing default raises `Weft::InvalidDefinition` at class-load time, not mid-request.
+
+An empty wire value is absence, not a value: `?page=` is a cleared field, so the key falls to its declared default rather than coercing to zero.
+
+#### `strict:` — what a type guarantees
+
+A declared type is a promise about the values a param will hold, and Weft keeps it: a wire value the type cannot represent is **refused**, not coerced into something invented.
+
+```ruby
+param :page, type: :integer
+```
+
+`?page=wombat` raises `Weft::InvalidParamValue` — a `Weft::BadRequest`, so it answers **400** and matches `recovers from: Weft::BadRequest`. The error carries every violation from that request, each naming the key, the raw value exactly as it arrived, and what the type wanted. That raw value is the point: an error component redrawing a form needs to put `wombat` back in the box, which the coerced-away `0` could never do.
+
+Strictness is on by default and turns off per param, or globally via [`Weft.configuration.strict_params`](configuration.md#params):
+
+```ruby
+param :page, type: :integer, strict: false   # coerce leniently instead
+```
+
+With strictness off, coercion is exactly [`ActiveModel::Type`](https://api.rubyonrails.org/classes/ActiveModel/Type.html)'s — the behavior a Rails application already has, warts and all. Note one consequence worth knowing before you reach for it: ActiveModel's boolean has a closed *false* list and treats everything else as true, so `?flag=wombat` is `true` there where strict mode refuses it, and `?flag=no` is `true` there where strict mode reads `false`.
+
+#### `required:` — refusing absence
+
+`strict:` refuses a malformed value; `required:` refuses a missing one. They are separate questions and compose:
+
+```ruby
+param :order_id, type: :uuid, required: true
+```
+
+If no source supplies `order_id`, Weft raises `Weft::MissingParam` — also a `Weft::BadRequest`, also 400. A required param may not declare a `default:`, since a default *is* the answer to absence; declaring both raises `Weft::InvalidDefinition` at class-load time.
+
+Note the two doors default opposite ways, and deliberately: a `param` is optional until you say `required: true`, because the wire is absent by nature, while a [`receives`](#receives--caller-hand-offs) is required until you give it a `default:`, because a hand-off is the call site's contract.
 
 Inside the component, `params` returns the resolved values with method-style access:
 

@@ -8,6 +8,8 @@ The whole model in one breath: **a request's params flow in and down the render 
 
 Every render starts with a request, and a request carries **wire params**: the query string, the path segments, and any form body, all as strings. Weft routes the request to a page (or a standalone component), which resolves its declared `param`s from those wire values — coercing each into its declared `type:`, and filling in defaults where the request said nothing.
 
+Two things a request can get wrong are answered here rather than deeper in: a value the declared type cannot represent is refused, and so is a missing `required:` one. Both raise a [`Weft::BadRequest`](dsl.md#strict--what-a-type-guarantees) and answer 400 — before any component builds, so nothing renders from a value weft had to invent.
+
 ```ruby
 class OrderPage < Weft::Page
   self.page_path = "/orders/:order_id"
