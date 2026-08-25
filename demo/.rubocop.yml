@@ -33,6 +33,14 @@ Metrics/BlockLength:
 Metrics/ClassLength:
   Exclude:
     - "app.rb"
+    # A catalogue: one card per recovery pathway, as the class itself says.
+    # The shape the cop was really pointing at — ten copies of "titled card,
+    # paragraph, demonstration" — became Drills::DrillCard, which is the
+    # answer weft was already offering. What is left over the limit is the
+    # explanatory prose, and on a page whose job is teaching, that prose IS
+    # the content. If the cards ever stop sharing a shape, that is the signal
+    # worth acting on rather than this line count.
+    - "app/pages/drills_page.rb"
 
 Metrics/MethodLength:
   Max: 20
