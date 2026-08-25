@@ -265,19 +265,17 @@ module Weft
         def sanitize_identifier(value, key)
           return "" if value.nil?
 
-          claimed = declared_type(key)&.id_segment(value)
+          claimed = Weft::Types.lookup(declared_type(key))&.id_segment(value)
           return claimed if claimed
 
           value.to_s.parameterize.tr("-", "_")
         end
 
-        def declared_type(key) = Weft::Types.lookup(params.dig(key, :type))
-
         # Declared width for a digested param, or nil when the param renders its
         # value. `digest: true` defers to the gem-wide width so one setting can
         # move every declaration that didn't ask for something specific.
         def digest_length_for(key)
-          declared = params.dig(key, :digest)
+          declared = declared_digest(key)
           return nil unless declared
 
           declared == true ? Weft.configuration.digest_length : declared

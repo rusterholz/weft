@@ -59,9 +59,21 @@ module Weft
         #                                    # (even nil) softens absence
         # Hand-offs are server-side values: they never serialize into URLs and
         # don't make a component routable.
-        def receives(name, **options)
+        # `type:` and `digest:` say the same thing here as on `param`, but weft
+        # can do less about them: a hand-off is already a Ruby object, so there
+        # is nothing to coerce. They are declarations weft consults where it
+        # consults them — composing a DOM id — not assertions checked on read.
+        #
+        # The signature is explicit rather than **options because it used to
+        # swallow whatever it did not recognise: `receives :x, type: :uuid` was
+        # accepted and silently ignored. An unknown keyword now raises, as it
+        # already does on `param` and `derives`.
+        def receives(name, type: nil, digest: false, **options)
+          validate_received!(name, type, digest, options)
           meta = {}
           meta[:default] = options[:default] if options.key?(:default)
+          meta[:type] = type unless type.nil?
+          meta[:digest] = digest if digest
           own_received_params[name] = meta
         end
 
@@ -82,13 +94,22 @@ module Weft
         # The block is a `(params) -> value` pure function with a void self.
         # Derived values are server-side: never serialized, not
         # routable-making.
-        def derives(name, &block)
+        # Takes `type:` and `digest:` for the same reason `receives` does: a
+        # derived value can be the one a component is identified by — a record
+        # handed over cannot compose a DOM id, so the row derives the scalar
+        # that names it — and that scalar needs to say it is a uuid.
+        def derives(name, type: nil, digest: false, &block)
           unless block
             raise Weft::InvalidDefinition,
                   "derives #{name.inspect} requires a block — the derivation is the declaration"
           end
 
-          own_derived_params[name] = { block: block, source_location: block.source_location }
+          validate_type!(name, type, nil) unless type.nil?
+          validate_digest!(name, digest) if digest
+          meta = { block: block, source_location: block.source_location }
+          meta[:type] = type unless type.nil?
+          meta[:digest] = digest if digest
+          own_derived_params[name] = meta
         end
 
         # Sugar for statically-known derivations: each pair registers
@@ -112,6 +133,13 @@ module Weft
           params.keys | received_params.keys | derived_params.keys
         end
 
+        # The declared wire type for a key, whichever door declared it, or nil.
+        def declared_type(key) = declared_facet(key, :type)
+
+        # The declared digest width for a key — true for the gem-wide default,
+        # an integer for a specific width — whichever door declared it, or nil.
+        def declared_digest(key) = declared_facet(key, :digest)
+
         # All declared derivations (own + inherited), preserving declaration
         # order. A child redeclaring a parent's key replaces the block, like
         # a method override.
@@ -124,6 +152,38 @@ module Weft
         end
 
         private
+
+        # One key's declarations may be spread across doors — a `param` for the
+        # wire shape, a `derives` that computes it — so a consumer that reached
+        # into one door's table would answer differently depending on which door
+        # happened to declare the key. Asking here instead is what lets identity
+        # render a uuid the same way whether it arrived over the wire, from a
+        # caller, or from a derivation.
+        #
+        # Wire first, mirroring Assembly#default_for: its meta is the one a URL
+        # round-trips through, so for a dual key it is the one that has to hold.
+        def declared_facet(key, facet)
+          [params, received_params, derived_params].each do |table|
+            meta = table[key]
+            return meta[facet] if meta&.key?(facet)
+          end
+          nil
+        end
+
+        # `default:` is the one option that rides the rest hash, because only
+        # `options.key?(:default)` can tell "declared nil" from "not declared" —
+        # and that distinction is what makes a hand-off required or optional.
+        def validate_received!(name, type, digest, options)
+          unknown = options.keys - [:default]
+          unless unknown.empty?
+            raise ArgumentError,
+                  "receives #{name.inspect} got unknown keyword#{'s' if unknown.size > 1} " \
+                  "#{unknown.map(&:inspect).join(', ')}"
+          end
+
+          validate_type!(name, type, nil) unless type.nil?
+          validate_digest!(name, digest) if digest
+        end
 
         def validate_param!(name, default, options)
           validate_type!(name, options[:type], default) unless options[:type].nil?
