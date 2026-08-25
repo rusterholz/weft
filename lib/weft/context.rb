@@ -59,7 +59,7 @@ module Weft
     # they have grown to four is a fair signal that they want a render-environment
     # object of their own — a change that would touch every render path and
     # a documented constructor, so it belongs with the lifecycle work, not here.
-    def initialize(assigns = {}, helpers = nil, wire_params: nil, overlays: nil, # rubocop:disable Metrics/ParameterLists
+    def initialize(assigns = {}, helpers = nil, wire_params: nil, overlays: nil,
                    branch_bag: nil, slots: nil, &)
       @wire_params = wire_params || {}
       @overlays = overlays || {}

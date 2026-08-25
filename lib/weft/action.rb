@@ -16,7 +16,7 @@ module Weft
   class Action
     attr_reader :name, :method, :swap, :target, :renders, :callable
 
-    def initialize(name:, renders:, method: :post, swap: :outer_html, target: nil, callable: nil) # rubocop:disable Metrics/ParameterLists
+    def initialize(name:, renders:, method: :post, swap: :outer_html, target: nil, callable: nil)
       @name = name
       @method = method
       @swap = swap

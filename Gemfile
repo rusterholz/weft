@@ -4,6 +4,12 @@ source "https://rubygems.org"
 
 gemspec
 
+# Test-only. Weft promises that `strict: false` coerces exactly as
+# ActiveModel::Type does, and spec/weft/activemodel_parity_spec.rb checks that
+# against the real thing rather than against a remembered table. Deliberately
+# NOT a runtime dependency: weft implements its own coercions so a standalone
+# Sinatra app pulls in nothing extra, and this is what catches the drift.
+gem "activemodel", ">= 6.1"
 gem "appraisal", "~> 2.5"
 gem "bundler", "~> 2.7"
 # Fix for OpenSSL 3.6.0 CRL verification bug on macOS

@@ -26,16 +26,21 @@ module Weft
         # legitimate value, or when two distinct values would sanitize to the
         # same string. `digest: 12` widens the token past the gem-wide
         # {Weft::Configuration#digest_length}.
+        # `strict:` decides what happens when the wire sends something the
+        # declared type cannot represent: refuse it, or coerce anyway. Left
+        # unsaid it follows {Weft::Configuration#strict_params}, so the three
+        # states are true, false, and "whatever the app says".
+        # `required:` is the orthogonal question — `strict:` refuses a malformed
+        # value, `required:` refuses an absent one — and pairs with `default:`
+        # only as a contradiction, since a default *is* the answer to absence.
         #   param :page, type: :integer
         #   param :status, default: "active", type: :string
         #   param :customer_name, digest: true
-        def param(name, default: nil, type: nil, digest: false)
-          validate_type!(name, type, default) unless type.nil?
-          validate_digest!(name, digest) if digest
-          meta = { default: default }
-          meta[:type] = type unless type.nil?
-          meta[:digest] = digest if digest
-          own_params[name] = meta
+        #   param :order_id, type: :uuid, required: true
+        def param(name, default: nil, type: nil, digest: false, strict: nil, required: false)
+          options = { type: type, digest: digest, strict: strict, required: required }
+          validate_param!(name, default, options)
+          own_params[name] = param_meta(default, options)
         end
 
         # Returns all declared params (own + inherited), preserving declaration order.
@@ -120,18 +125,49 @@ module Weft
 
         private
 
+        def validate_param!(name, default, options)
+          validate_type!(name, options[:type], default) unless options[:type].nil?
+          validate_digest!(name, options[:digest]) if options[:digest]
+          validate_required!(name, default) if options[:required]
+        end
+
+        # Only what was actually said: an absent `strict:` has to stay absent
+        # so it can defer to the gem-wide setting, which a stored `false` would
+        # override. `default:` is the exception — every param carries one,
+        # since nil is a legitimate answer to "what if nobody supplies this".
+        def param_meta(default, options)
+          meta = { default: default }
+          meta[:type] = options[:type] unless options[:type].nil?
+          meta[:digest] = options[:digest] if options[:digest]
+          meta[:strict] = options[:strict] unless options[:strict].nil?
+          meta[:required] = true if options[:required]
+          meta
+        end
+
         def validate_type!(name, type, default)
-          entry = Weft::Resolver::TYPES[type]
+          entry = Weft::Types.lookup(type)
           unless entry
             raise Weft::InvalidDefinition,
                   "param #{name.inspect} declares unknown type #{type.inspect} — declarable " \
-                  "types are #{Weft::Resolver::TYPES.keys.map(&:inspect).join(', ')}"
+                  "types are #{Weft::Types.registered.map(&:inspect).join(', ')}"
           end
-          return if default.nil? || entry[:classes].any? { |klass| default.is_a?(klass) }
+          return if default.nil? || entry.permits_default?(default)
 
           raise Weft::InvalidDefinition,
                 "param #{name.inspect} declares type #{type.inspect} but its default " \
                 "#{default.inspect} is #{default.class} — make them agree, or drop one"
+        end
+
+        # A declared default answers absence; `required: true` refuses it. Two
+        # answers to one question, so refuse the pair rather than rank them.
+        # `default: nil` is not a declared default — it is the signature's own
+        # value for "none given".
+        def validate_required!(name, default)
+          return if default.nil?
+
+          raise Weft::InvalidDefinition,
+                "param #{name.inspect} is required but declares default #{default.inspect} — a " \
+                "default is what makes a param optional. Drop one of the two"
         end
 
         def validate_digest!(name, digest)
@@ -193,12 +229,48 @@ module Weft
         end
       end
 
+      # Uses the Assembly object rather than `.call` because construction needs
+      # both halves of what it produced: the bag, and what the wire sent that
+      # no declared type could accept.
       def resolve_bag(received:, validate:)
-        bag = Weft::Params::Assembly.call(self.class, wire_source,
-                                          hand_offs: received,
-                                          overlays: context_overlays, branched_from: inherited_bag)
+        assembly = Weft::Params::Assembly.new(self.class, wire_source,
+                                              hand_offs: received,
+                                              overlays: context_overlays,
+                                              branched_from: inherited_bag)
+        bag = assembly.bag
+        refuse_violations!(assembly.violations)
+        validate_required!(bag)
         validate_hand_offs!(bag) if validate
         bag
+      end
+
+      def refuse_violations!(violations)
+        return if violations.empty?
+
+        raise Weft::InvalidParamValue.new(
+          "#{self.class.name} was sent #{violations.map { |v| violation_phrase(v) }.join(', ')}",
+          violations
+        )
+      end
+
+      # The type says what it wanted, in words. "declares type :uuid" would tell
+      # a reader only what they already wrote.
+      def violation_phrase(violation)
+        "#{violation.raw.inspect} for #{violation.key.inspect}, which " \
+          "#{Weft::Types.lookup(violation.type).refusal}"
+      end
+
+      # `required:` is the absence door; the malformation door has already had
+      # its say above, so a value that arrived badly is reported as malformed
+      # rather than counted twice as missing.
+      def validate_required!(bag)
+        self.class.params.each do |key, meta|
+          next unless meta[:required] && bag[key].nil?
+
+          raise Weft::MissingParam,
+                "#{self.class.name} requires #{key.inspect}, and no source supplied it — the " \
+                "request did not send it and it declares no default"
+        end
       end
 
       def context_overlays

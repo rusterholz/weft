@@ -4,6 +4,7 @@
 
 source "https://rubygems.org"
 
+gem "activemodel", ">= 6.1"
 gem "activesupport", "~> 7.1.0"
 gem "appraisal", "~> 2.5"
 gem "arbre", "~> 1.7.0"

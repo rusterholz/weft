@@ -17,6 +17,14 @@ module Weft
     end
   end
 
+  # The request itself could not be read — a value no declared type can
+  # represent, a required one absent. Distinct from Unprocessable (422), which
+  # says weft read you fine and your domain said no; that judgment belongs to
+  # the application's own validation, not here.
+  class BadRequest < HTTPError
+    def self.status = 400
+  end
+
   class NotFound < HTTPError
     def self.status = 404
   end
@@ -69,6 +77,29 @@ module Weft
   # ancestor that isn't there (it should usually be `dependent!` and rendered
   # only inside that ancestor).
   AncestorNotFound = Class.new(InvalidUsage)
+
+  # Raised at construction when the wire sent a value a param's declared type
+  # cannot represent and the param is strict. Carries every violation from the
+  # same pass — a form with three bad fields reports three, rather than making
+  # the caller fix them one round-trip at a time — each naming the key, the raw
+  # value as it arrived, and the type it failed. The raw value is the point:
+  # a recovery redrawing a form needs what the user typed, not the zero lenient
+  # coercion would have invented in its place.
+  class InvalidParamValue < BadRequest
+    attr_reader :violations
+
+    def initialize(message, violations = [])
+      super(message)
+      @violations = violations
+    end
+  end
+
+  # Raised at construction when a param declared `required: true` ends
+  # resolution with no value from any source. The wire counterpart of
+  # {NotReceived}, which guards the hand-off door — note the two doors default
+  # opposite ways, since the wire is absent by nature and a hand-off is the
+  # caller's contract.
+  MissingParam = Class.new(BadRequest)
 
   # Raised by the `adds_children_to :@ivar` macro when build returns without
   # ever assigning the named ivar and then a child is added — almost always

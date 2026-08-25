@@ -24,7 +24,13 @@ module Weft
 
     attr_reader :component_path, :digest_length, :htmx_errors, :include_sse_ext, :log_level, :mint_key,
                 :push_attempts, :stream_suffix
-    attr_accessor :include_htmx, :verbose_error_pages, :router_logging
+    # strict_params is the gem-wide answer for params that don't state one:
+    # a wire value a declared type cannot represent is refused rather than
+    # coerced into something invented. Individual params override it either way
+    # with `strict:`. Turning it off gem-wide puts coercion back to
+    # ActiveModel::Type's own behavior, which is lenient by design because Rails
+    # has a validation layer behind it.
+    attr_accessor :include_htmx, :verbose_error_pages, :router_logging, :strict_params
     attr_writer :error_component, :error_page, :not_found_page, :not_found_component
 
     # @api private
@@ -37,6 +43,7 @@ module Weft
       @include_htmx = true
       @include_sse_ext = :auto
       @router_logging = false
+      @strict_params = true
       @verbose_error_pages = true
       @htmx_errors = :fragment
       @log_level = :info
