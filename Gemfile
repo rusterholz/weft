@@ -12,6 +12,12 @@ gemspec
 gem "activemodel", ">= 6.1"
 gem "appraisal", "~> 2.5"
 gem "bundler", "~> 2.7"
+# Default gem through Ruby 3.3, bundled from 3.4 — must be declared, exactly as
+# the gemspec declares bigdecimal. Only the activemodel above needs it: through
+# ActiveSupport 7.0, `active_support/notifications` requires mutex_m, so loading
+# ActiveModel on Ruby 3.4 fails without this on the oldest appraisal rows. Weft
+# itself never reaches that path (verified: `require "weft"` loads neither).
+gem "mutex_m"
 # Fix for OpenSSL 3.6.0 CRL verification bug on macOS
 # See: https://github.com/ruby/openssl/issues/949
 gem "openssl", ">= 3.2.2"

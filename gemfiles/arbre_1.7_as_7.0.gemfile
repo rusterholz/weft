@@ -9,6 +9,7 @@ gem "activesupport", "~> 7.0.0"
 gem "appraisal", "~> 2.5"
 gem "arbre", "~> 1.7.0"
 gem "bundler", "~> 2.7"
+gem "mutex_m"
 gem "openssl", ">= 3.2.2"
 gem "parallel", "~> 1.24"
 gem "pry-byebug", platforms: :mri
