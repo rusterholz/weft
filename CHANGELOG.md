@@ -14,6 +14,22 @@ Weft learns to say what a thing *is*: components name their own identity instead
 
 - **A Vocabulary For Unreadable Requests** – `Weft::BadRequest` and its two members (`Weft::InvalidParamValue`, `Weft::MissingParam`) fill the 400 that Weft's error family was missing, and they're matchable like any other: `recovers from: Weft::BadRequest, with: NotFoundPage, status: 404` if you'd rather your app answered differently. The line they draw is worth borrowing: **400 means "I can't read what you sent"; 422 means "I read it fine, and it isn't acceptable."**
 
+- **Typed Values Wherever They Come From** (`type:`/`digest:` on `derives` and `receives`) – A component handed a whole record derives the scalar that names it, and that scalar can now say what it is:
+
+  ```ruby
+  receives :driver
+  derives(:driver_id, type: :uuid) { |p| p.driver.id }
+  identifies_by :driver_id
+  ```
+
+  Previously the same UUID kept its dashes through a `param` and lost them through a `derives`, leaving an app carrying two id styles for one kind of value. Identity now asks what a key declares rather than which door declared it. Declaring one key as two different types is refused — one key holds one value.
+
+- **A Component Can Decline A DOM Id** (`anonymous!`) – Chrome that nothing routes to, refreshes, or brings has no use for an id, and an id every instance shares isn't merely useless: ids must be unique in a document, so it's invalid HTML that breaks `getElementById` and every `#id` selector aimed near it. `anonymous!` renders no `id` attribute at all, and joins `identifies_by` and `unique!` as the third mutually exclusive answer — so a chrome base class can decline while the subclasses that *are* addressed declare identity and override it.
+
+- **Weft Tells You When Two Elements Share An Id** – Render the same id twice and Weft says so once per class, naming the class, the id, and the three declarations that answer it. It watches the render rather than the class body on purpose: what makes an id wrong is a second instance appearing, which no class body can predict — a component rendered once per page is right to wear its bare class id.
+
+- **Declarations Stop Being Silently Ignored** – `receives :order, type: :uuid` used to be accepted and quietly dropped, because `receives` swallowed any keyword it didn't recognise. Unknown keywords now raise, as they always have on `param` and `derives`.
+
 - **Booleans That Understand Forms** – `type: :boolean` now reads the words browsers and humans actually send — `true/false`, `1/0`, `on/off`, `yes/no`, `t/f`, `y/n`, in any case. A bare `<input type="checkbox">` submits `on` when checked, which previously read as **false**; it now reads as true, which is what it plainly meant.
 
 - **Declared Component Identity** (`identifies_by`) – Name the params that distinguish one instance from the next, and read a class body to find out. Full model in [the DSL reference](docs/dsl.md#identity).
