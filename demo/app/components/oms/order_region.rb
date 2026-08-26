@@ -7,9 +7,9 @@ module Oms
   # here rather than being written twice.
   #
   # That sharing is load-bearing, not just tidy. Whichever of the two renders
-  # inherits the state its sibling composed, and a component whose own
-  # derivation is shadowed by a *different* one upstream gets a warning about
-  # it. One declaration means the hand-off is agreement.
+  # inherits the state its sibling composed, so one declaration is what makes
+  # the hand-off agreement — rather than two components each holding a private
+  # opinion about how the same order gets loaded.
   class OrderRegion < Weft::Component
     abstract!
 

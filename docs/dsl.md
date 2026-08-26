@@ -215,9 +215,9 @@ That order is what makes *duals* work — declaring a key through two doors so i
 - **`derives` + `receives`** — handed the value when embedded, self-fetching when standalone. A `derives` dual also satisfies the refresh-safety lint.
 - **`param` + `derives`** — use the wire value if present, otherwise derive one.
 
-A derivation that never runs is worth hearing about, so Weft logs a one-time warning for each of the two ways that happens: when an **inherited value** carries a *different* derivation for the same key (the value from above wins, and your block is dead), and when a **verb block in this request** returned the key (an overlay outranks derivations, so the block supplied what yours would have). Neither is an error — both are shapes you may well want — but a silently dead `derives` shouldn't have to be discovered.
+A derivation that doesn't run is the ordinary case, not a problem. Declare one on a component that also gets embedded, and it stays quiet while an ancestor supplies the key — then fires when the same component answers its own refresh. That's the point of writing it: **take the value from above when you're nested, fetch your own when you're standalone.** It costs nothing when it's shadowed, because an unrun derivation is a block nobody called.
 
-Sharing one derivation between components silences the first: a common superclass, or the same block object mixed in, is agreement rather than divergence, and that's the fix when two components legitimately mean the same value.
+The one case Weft mentions is an **overlay**: a verb block earlier in this request returned the key, so it outranks your derivation and supplied what yours would have. Logged once per class and key — not an error, and often just what you meant, but the two sources sit far apart in the code and a `derives` that stopped running is easier to hear about than to notice.
 
 ### Inheritance and the render tree
 
