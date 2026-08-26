@@ -30,6 +30,8 @@ Weft learns to say what a thing *is*: components name their own identity instead
 
 - **Declarations Stop Being Silently Ignored** – `receives :order, type: :uuid` used to be accepted and quietly dropped, because `receives` swallowed any keyword it didn't recognise. Unknown keywords now raise, as they always have on `param` and `derives`.
 
+- **Fallback Derivations Stop Nagging** – A component that declares `derives(:order)` *and* gets embedded under something that already supplies the order is doing the right thing: fetch your own when you're rendered standalone, take the ancestor's when you're nested. Weft used to log a warning every time the second half happened — warning about correct code, and suggesting a fix (share one derivation) that's wrong whenever the two deliberately differ, as when a page eager-loads what a card doesn't. It's gone. The overlay warning stays, because a verb block returning a key really does stop your derivation running for that whole request.
+
 - **Booleans That Understand Forms** – `type: :boolean` now reads the words browsers and humans actually send — `true/false`, `1/0`, `on/off`, `yes/no`, `t/f`, `y/n`, in any case. A bare `<input type="checkbox">` submits `on` when checked, which previously read as **false**; it now reads as true, which is what it plainly meant.
 
 - **Declared Component Identity** (`identifies_by`) – Name the params that distinguish one instance from the next, and read a class body to find out. Full model in [the DSL reference](docs/dsl.md#identity).

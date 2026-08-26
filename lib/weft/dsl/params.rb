@@ -380,9 +380,9 @@ module Weft
       # Branch a copy of the nearest tree-ancestor's bag — the in-page
       # parent-child axis: a component sees everything above it, nothing
       # beside it. At construction the current element IS the future parent,
-      # so the walk works before the tree links this instance in. Returns
-      # [data, provenance]; the copy is thunk-preserving (never forces the
-      # ancestor's lazy entries) and nil-dropping. A root with no tree
+      # so the walk works before the tree links this instance in. The copy is
+      # thunk-preserving (never forces the ancestor's lazy entries) and
+      # nil-dropping. A root with no tree
       # ancestor falls back to the context's branch bag — how an OOB
       # companion inherits from the primary it rides alongside, and how the
       # state a request has already composed reaches the component it renders.

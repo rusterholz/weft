@@ -38,22 +38,16 @@ module Weft
     # @api private
     # Constructed internally (components self-resolve via the source stack;
     # the Router wraps bags for action callables and recovery blocks).
-    # +provenance+ maps derives-born keys to their block's source_location —
-    # retained through forcing so divergence stays detectable.
     # +defaults+ are the declaring class's own fallbacks, consulted when a
     # read finds nothing. They are never stored as values, so they never ride
     # a branch: a default belongs to whoever declared it, and a component
     # deeper in the tree — or downstream of a hand-off — falls back to its
     # own, not to the one above it.
-    def initialize(data, provenance = {}, defaults: {})
+    def initialize(data, defaults: {})
       @data = data
-      @provenance = provenance
       @defaults = defaults
       @forcing = []
     end
-
-    # @api private
-    attr_reader :provenance
 
     # @api private
     # A branchable snapshot for the inheritance axis: forced values and
@@ -67,11 +61,11 @@ module Weft
 
     # @api private
     # A same-bag copy with +values+ overlaid at their keys. Unlike
-    # to_h-then-merge, nothing materializes: untouched thunks stay lazy, nil
-    # entries stay resolved-absent, provenance rides. The plain-context
-    # hand-off fallback lands received values through this.
+    # to_h-then-merge, nothing materializes: untouched thunks stay lazy and
+    # nil entries stay resolved-absent. The plain-context hand-off fallback
+    # lands received values through this.
     def overlay(values)
-      self.class.new(@data.merge(values), @provenance, defaults: @defaults)
+      self.class.new(@data.merge(values), defaults: @defaults)
     end
 
     # nil means no source had this key — so the read falls to the declared

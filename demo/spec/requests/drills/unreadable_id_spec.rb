@@ -39,6 +39,26 @@ RSpec.describe "unreadable ids", type: :request do
     expect(response.body).not_to include("Internal error")
   end
 
+  # Same rule the error page learned: a builder kwarg naming a declared param
+  # renders as an HTML attribute, and the component resolves these from the
+  # request anyway — so handing them over at the call site buys nothing but
+  # the attributes and a warning on every 404.
+  it "paints no auto-injected value onto the not-found component" do
+    body = weft_get("/orders/#{absent_uuid}").body
+
+    expect(body).not_to match(/<[^>]*\bstatus_code=/)
+    expect(body).not_to match(/<[^>]*\brequest_path=/)
+  end
+
+  # The counterweight: the component resolves the path from the request on its
+  # own, so dropping the kwargs took the attributes and nothing else. Without
+  # this, the assertion above would also pass if the value never arrived.
+  it "still shows the requested path in the page text" do
+    body = weft_get("/orders/#{absent_uuid}").body
+
+    expect(body.gsub(/<[^>]*>/, " ")).to include("/orders/#{absent_uuid}")
+  end
+
   it "offers both drills on the drills page" do
     body = weft_get("/drills").body
 

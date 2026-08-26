@@ -11,12 +11,10 @@ class NotFoundPage < ApplicationPage
 
   title "Not found"
 
+  # The component resolves these from the same request, so passing them here
+  # would only paint them onto its wrapper as HTML attributes.
   def build(attributes = {})
     super
-    insert_tag(
-      NotFoundComponent,
-      request_path: @params.request_path,
-      status_code: @params.status_code
-    )
+    insert_tag(NotFoundComponent)
   end
 end

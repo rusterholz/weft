@@ -251,7 +251,10 @@ RSpec.describe Weft::Params::Assembly do
       expect(Weft::Context.new { insert_tag(child) }.to_s).to include("Drivers")
     end
 
-    it "two divergent defines of one key trip the divergence warning like any derivations" do
+    # `defines` stamps the call site as its source, so two classes each
+    # defining the same key always look divergent. They resolve like any
+    # other derivation, and just as quietly.
+    it "two divergent defines of one key resolve to the ancestor's, silently" do
       allow(Weft.logger).to receive(:warn)
       parent_class = Class.new(Weft::Component) { def self.name = "DefiningParent" }
       parent_class.defines(label: "upstream")
@@ -262,9 +265,11 @@ RSpec.describe Weft::Params::Assembly do
         insert_tag(child_class)
       end
 
-      Weft::Context.new { insert_tag(parent_class) }.to_s
+      parent = Weft::Context.new { insert_tag(parent_class) }.children.first
+      child = parent.children.find { |el| el.is_a?(child_class) }
 
-      expect(Weft.logger).to have_received(:warn).with(/DefiningChild.*:label/m)
+      expect(child.params.label).to eq("upstream")
+      expect(Weft.logger).not_to have_received(:warn)
     end
   end
 
@@ -314,7 +319,12 @@ RSpec.describe Weft::Params::Assembly do
     end
   end
 
-  describe "divergent derivation warning" do
+  # Two ways a declared derivation ends up unrun. Being shadowed by an
+  # ancestor's own is the intended fallback idiom — derive for the standalone
+  # render, inherit when nested — and costs nothing, since a derivation that
+  # doesn't run is just a thunk nobody forced. What matters there is which
+  # value wins. An overlay is the one worth saying something about.
+  describe "shadowed derivations" do
     before { allow(Weft.logger).to receive(:warn) }
 
     def embed_under(parent_class, child_class, force: false)
@@ -323,33 +333,35 @@ RSpec.describe Weft::Params::Assembly do
         params.order if force
         insert_tag(child_class)
       end
-      Weft::Context.new { insert_tag(parent_class) }.to_s
+      parent = Weft::Context.new { insert_tag(parent_class) }.children.first
+      parent.children.find { |el| el.is_a?(child_class) }
     end
 
-    it "warns once when an inherited derivation shadows the child's own, divergent one" do
+    it "takes the ancestor's value, and says nothing about it" do
       parent_class = Class.new(Weft::Component) { def self.name = "UpstreamDeriver" }
       parent_class.derives(:order) { |_p| "upstream" }
       child_class = Class.new(Weft::Component) { def self.name = "ShadowedDeriver" }
       child_class.derives(:order) { |_p| "local" }
 
-      embed_under(parent_class, child_class)
-      embed_under(parent_class, child_class)
+      child = embed_under(parent_class, child_class)
 
-      expect(Weft.logger).to have_received(:warn).with(/ShadowedDeriver.*:order/m).once
+      expect(child.params.order).to eq("upstream")
+      expect(Weft.logger).not_to have_received(:warn)
     end
 
-    it "warns even after the ancestor forced its value (provenance survives forcing)" do
+    it "takes the ancestor's value after the ancestor has already forced it" do
       parent_class = Class.new(Weft::Component) { def self.name = "ForcedUpstream" }
       parent_class.derives(:order) { |_p| "upstream" }
       child_class = Class.new(Weft::Component) { def self.name = "ForcedShadowed" }
       child_class.derives(:order) { |_p| "local" }
 
-      embed_under(parent_class, child_class, force: true)
+      child = embed_under(parent_class, child_class, force: true)
 
-      expect(Weft.logger).to have_received(:warn).with(/ForcedShadowed.*:order/m)
+      expect(child.params.order).to eq("upstream")
+      expect(Weft.logger).not_to have_received(:warn)
     end
 
-    it "still warns about a divergent inherited derivation when an overlay took the key" do
+    it "reports only the overlay when a divergent ancestor is in play too" do
       parent_class = Class.new(Weft::Component) { def self.name = "OverlaidUpstream" }
       parent_class.derives(:order) { |_p| "upstream" }
       child_class = Class.new(Weft::Component) { def self.name = "OverlaidShadowed" }
@@ -361,7 +373,8 @@ RSpec.describe Weft::Params::Assembly do
 
       Weft::Context.new({}, nil, overlays: { order: "from-a-verb-block" }) { insert_tag(parent_class) }.to_s
 
-      expect(Weft.logger).to have_received(:warn).with(/OverlaidShadowed.*:order.*shadows/m)
+      expect(Weft.logger).to have_received(:warn).with(/OverlaidShadowed.*:order.*outranks/m)
+      expect(Weft.logger).not_to have_received(:warn).with(/shadows/)
     end
 
     it "warns when a verb block's overlay outranks this class's own derivation" do
@@ -382,59 +395,33 @@ RSpec.describe Weft::Params::Assembly do
       expect(Weft.logger).not_to have_received(:warn)
     end
 
-    it "stays silent for a shared derivation (same proc via a mixin)" do
-      shared = proc { |_p| "current-user" }
-      parent_class = Class.new(Weft::Component) { def self.name = "SharingParent" }
-      parent_class.derives(:current_user, &shared)
-      child_class = Class.new(Weft::Component) { def self.name = "SharingChild" }
-      child_class.derives(:current_user, &shared)
+    it "takes a tree ancestor's value over its own class-ancestry override" do
+      base = Class.new(Weft::Component) { def self.name = "BaseDeriver" }
+      base.derives(:foo) { |_p| "base" }
+      override = Class.new(base) { def self.name = "OverridingDeriver" }
+      override.derives(:foo) { |_p| "overridden" }
+      # only the base inserts — the subclass inherits this build and must not self-insert
+      base.define_method(:build) do |attributes = {}|
+        super(attributes)
+        insert_tag(override) if instance_of?(base)
+      end
 
-      embed_under(parent_class, child_class)
+      parent = Weft::Context.new { insert_tag(base) }.children.first
+      child = parent.children.find { |el| el.is_a?(override) }
 
+      expect(child.params.foo).to eq("base")
       expect(Weft.logger).not_to have_received(:warn)
     end
 
-    it "stays silent when the inherited value came through another door (no derivation to diverge from)" do
-      parent_class = Class.new(Weft::Component) do
-        def self.name = "HandedUpstream"
-        receives :order
-      end
-      child_class = Class.new(Weft::Component) { def self.name = "QuietDeriver" }
-      child_class.derives(:order) { |_p| "local" }
-      parent_class.define_method(:build) do |attributes = {}|
-        super(attributes)
-        insert_tag(child_class)
-      end
+    it "uses its own derivation when nothing above supplies the key" do
+      base = Class.new(Weft::Component) { def self.name = "UnshadowedBase" }
+      base.derives(:foo) { |_p| "base" }
+      override = Class.new(base) { def self.name = "UnshadowedOverride" }
+      override.derives(:foo) { |_p| "overridden" }
 
-      Weft::Context.new { insert_tag(parent_class, order: "handed") }.to_s
+      element = Weft::Context.new { insert_tag(override) }.children.first
 
-      expect(Weft.logger).not_to have_received(:warn)
-    end
-
-    it "warns when a class-ancestry override is shadowed by a tree ancestor of the parent class" do
-      parent_class = Class.new(Weft::Component) { def self.name = "BaseDeriver" }
-      parent_class.derives(:foo) { |_p| "base" }
-      child_class = Class.new(parent_class) { def self.name = "OverridingDeriver" }
-      child_class.derives(:foo) { |_p| "overridden" }
-      # only the parent inserts — the child inherits this build and must not self-insert
-      parent_class.define_method(:build) do |attributes = {}|
-        super(attributes)
-        insert_tag(child_class) if instance_of?(parent_class)
-      end
-
-      Weft::Context.new { insert_tag(parent_class) }.to_s
-
-      expect(Weft.logger).to have_received(:warn).with(/OverridingDeriver.*:foo/m)
-    end
-
-    it "stays silent for a redeclaration rendered without tree shadowing" do
-      parent_class = Class.new(Weft::Component) { def self.name = "UnshadowedBase" }
-      parent_class.derives(:foo) { |_p| "base" }
-      child_class = Class.new(parent_class) { def self.name = "UnshadowedOverride" }
-      child_class.derives(:foo) { |_p| "overridden" }
-
-      Weft::Context.new { insert_tag(child_class) }.to_s
-
+      expect(element.params.foo).to eq("overridden")
       expect(Weft.logger).not_to have_received(:warn)
     end
   end

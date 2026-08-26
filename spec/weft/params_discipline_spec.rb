@@ -14,9 +14,9 @@ RSpec.describe Weft::Params do
     end
 
     it "hand-builds a bag only to stand for the absence of one" do
-      # Params.new with real data yields no thunks, no defaults and no
-      # provenance — a hash wearing a bag's interface, which a verb block
-      # cannot read what it needs from. Assembly builds the real thing;
+      # Params.new with real data yields no thunks and no defaults — a hash
+      # wearing a bag's interface, which a verb block cannot read what it
+      # needs from. Assembly builds the real thing;
       # elsewhere `Params.new({})` says "there was no bag here".
       offenders = lib_lines.select do |file, _line, text|
         file != "weft/params/assembly.rb" &&

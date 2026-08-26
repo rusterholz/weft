@@ -61,14 +61,13 @@ module Weft
         @wire = resolution.coerced
         @violations = resolution.violations
         @inherited = branched_from ? branched_from.branch_data : {}
-        @upstream_provenance = branched_from ? branched_from.provenance : {}
       end
 
       def bag
         data = @inherited.dup
         keys.each { |key| data[key] = stack_value(key) }
         report_shadowed_derivations(data)
-        Weft::Params.new(data, provenance, defaults: declared_defaults)
+        Weft::Params.new(data, defaults: declared_defaults)
       end
 
       private
@@ -114,48 +113,21 @@ module Weft
         @component_class.received_params[key]&.[](:default)
       end
 
-      # Where the derivation in force for each key was declared — a map of
-      # declarations, not of values. It tracks what *would* run, so it
-      # survives the value being forced, and survives another source winning
-      # the key outright: a derivation that lost is still a derivation
-      # someone downstream can collide with. The nearest upstream declaration
-      # wins, since its value is the one that would be inherited.
-      def provenance
-        declared = @upstream_provenance.dup
-        @component_class.derived_params.each do |key, meta|
-          declared[key] ||= meta[:source_location]
-        end
-        declared
-      end
-
-      # Two ways a declared derivation ends up dead, each said once per
-      # (class, key). Neither is an error — both are shapes a component can
-      # legitimately want — but both mean a block someone wrote never runs,
-      # which is better heard than discovered.
+      # A declared derivation that never runs, said once per (class, key).
+      #
+      # Only the overlay case is worth saying anything about. Being shadowed
+      # by an ancestor's own derivation is the intended fallback idiom —
+      # derive for the standalone render, inherit the richer value when
+      # nested — and it is a fact about *this* render, not about the class:
+      # the same component's block runs when it answers its own refresh. It
+      # is also free, since an unrun derivation is a thunk nobody forced.
       def report_shadowed_derivations(data)
         @component_class.derived_params.each do |key, meta|
           next unless @received[key].nil? && @wire[key].nil?
 
-          warn_upstream_derivation(key, meta) unless @inherited[key].nil?
           warn_overlaid_derivation(key, meta) unless @overlays[key].nil?
         end
         data
-      end
-
-      # An inherited value won and was itself derived by a *different* block.
-      # A shared proc (one derivation mixed into many classes) is agreement,
-      # not divergence; values inherited through other doors carry no
-      # derivation provenance and stay silent.
-      def warn_upstream_derivation(key, meta)
-        upstream = @upstream_provenance[key]
-        return if upstream.nil? || upstream == meta[:source_location]
-        return unless warn_once?(:upstream, key)
-
-        Weft.logger.warn(
-          "#{@component_class.name}: inherited #{key.inspect} (derived at #{upstream.join(':')}) " \
-          "shadows this class's own derivation (#{meta[:source_location].join(':')}) — the " \
-          "ancestor's value wins. Use distinct keys or share one derivation if that isn't intended."
-        )
       end
 
       # A verb block earlier in this request returned the key. An overlay
