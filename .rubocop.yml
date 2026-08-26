@@ -92,6 +92,10 @@ RSpec/SpecFilePathFormat:
   Exclude:
     - "spec/integration/**/*"
 
+Style/CaseEquality:
+  # === is a well-defined tool; knowing your tools beats hiding from them.
+  Enabled: false
+
 Style/Documentation:
   Enabled: false
 
@@ -99,6 +103,7 @@ Style/DoubleNegation:
   Enabled: false
 
 Style/EmptyClassDefinition:
+  # Compact error/marker classes: Foo = Class.new(Error).
   EnforcedStyle: class_new
 
 Style/ModuleFunction:
