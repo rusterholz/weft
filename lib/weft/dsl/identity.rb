@@ -39,6 +39,12 @@ module Weft
         @warned_blank_identifiers ||= Set.new
       end
 
+      # Warn-once registry for classes seen emitting one DOM id twice in a
+      # single render, keyed by component class.
+      def self.warned_duplicate_ids
+        @warned_duplicate_ids ||= Set.new
+      end
+
       module ClassMethods
         # Declare which params identify this component — the values its DOM id
         # is built from, in the order they appear in the id.
@@ -103,6 +109,29 @@ module Weft
           declare_identity!(:unique)
         end
 
+        # Assert that this component needs no DOM id at all: nothing routes to
+        # it, refreshes it, pushes to it, or brings it, so the id it would wear
+        # names something no one can address. Chrome repeated down a page is the
+        # case — and an id shared by ten siblings is not merely useless, it is
+        # invalid HTML, which breaks `getElementById` and every `#id` selector
+        # aimed anywhere near it.
+        #
+        #   anonymous!
+        #
+        # The third of three mutually exclusive answers, alongside
+        # `identifies_by` and `unique!` — declaring any of them replaces
+        # whichever an ancestor declared. Weft does NOT infer this: what makes
+        # an id wrong is rendering more than one instance on a page, which is a
+        # property of the render rather than of the class, and two classes
+        # declaring identically can want opposite answers. A singleton keeps its
+        # bare class id, which is the right id for it.
+        def anonymous!
+          declare_identity!(:anonymous)
+        end
+
+        # Whether this component declines a DOM id (own declaration, else inherited).
+        def anonymous? = own_identity == :anonymous
+
         # Whether this component carries a mint (own declaration, else inherited).
         def unique? = own_identity == :unique
 
@@ -146,6 +175,7 @@ module Weft
         # because this is public and a hash is the obvious thing to hand it,
         # and it is assembled into a real bag before any block sees it.
         def weft_dom_id_for(params = {}, mint = nil)
+          return nil if anonymous?
           return block_dom_id(params) if identity_block
           return "#{weft_dom_id_base}-#{mint_segment(mint)}" if unique?
           return weft_dom_id_base if identifiers.empty?

@@ -26,7 +26,26 @@ module Weft
 
         validate_routes!
         validate_id_bases!
+        validate_addressability!
         @registrations_validated = true
+      end
+
+      # A stream addresses its component by DOM id — `sse-swap` carries it — so a
+      # component that declines an id has nowhere for its pushes to land. Checked
+      # here rather than in either macro because `anonymous!` and `pushes` can
+      # appear in a class body in either order.
+      #
+      # `refreshes` is deliberately absent: it renders `hx-swap="outerHTML"` with
+      # no `hx-target`, so it addresses itself positionally and an anonymous
+      # component refreshes perfectly well.
+      def validate_addressability!
+        @components.each do |klass|
+          next unless klass.anonymous? && klass.push_config&.key?(:every)
+
+          raise Weft::InvalidDefinition,
+                "#{klass.name} is anonymous! but declares pushes — a stream swaps by DOM id, " \
+                "so it has nowhere to land. Give the component an identity, or drop the pushes."
+        end
       end
 
       # Build the effective-route table across every routable component (its base

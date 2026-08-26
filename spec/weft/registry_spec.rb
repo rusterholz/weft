@@ -158,6 +158,50 @@ RSpec.describe Weft::Registry do
     end
   end
 
+  # A stream addresses its component by DOM id — `sse-swap` is set from it — so
+  # a component that declines an id has nowhere for its pushes to land. Checked
+  # across the registered set rather than in either macro, because the two
+  # declarations can appear in a class body in either order.
+  describe "anonymous! against pushes" do
+    it "raises when a component both declines an id and pushes" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "SilentTicker"
+        anonymous!
+        pushes every: 5
+      end
+      registry.register(klass)
+
+      expect { registry.lookup("/_components/silent_ticker") }.to raise_error(
+        Weft::InvalidDefinition, /SilentTicker.*anonymous.*pushes/m
+      )
+    end
+
+    it "raises whichever order the two are declared in" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "OtherOrderTicker"
+        pushes every: 5
+        anonymous!
+      end
+      registry.register(klass)
+
+      expect { registry.lookup("/_components/other_order_ticker") }.
+        to raise_error(Weft::InvalidDefinition, /OtherOrderTicker/)
+    end
+
+    # `refreshes` is fine: it renders hx-swap="outerHTML" with no hx-target, so
+    # it addresses itself positionally rather than by id.
+    it "leaves an anonymous component that only refreshes alone" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "QuietRefresher"
+        anonymous!
+        refreshes every: 5
+      end
+      registry.register(klass)
+
+      expect { registry.lookup("/_components/quiet_refresher") }.not_to raise_error
+    end
+  end
+
   describe "DOM id base collision detection" do
     it "raises when two components derive the same id base, routable or not" do
       # The route check is routability-gated, so a non-routable class beside a

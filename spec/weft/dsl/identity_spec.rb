@@ -104,6 +104,195 @@ RSpec.describe Weft::DSL::Identity do
     end
   end
 
+  # The third answer to "what names this component", beside identifying by
+  # params and being issued a mint: nothing does, because nothing addresses it.
+  # A card repeated down a page is chrome — no route, no refresh, no companion —
+  # and an id it shares with nine siblings is not merely useless, it is invalid
+  # HTML that breaks getElementById and every `#id` selector pointed at it.
+  describe ".anonymous!" do
+    let(:chrome) do
+      Class.new(Weft::Component) do
+        def self.name = "DropshipUI::Card"
+        anonymous!
+      end
+    end
+
+    it "marks the class as wanting no identity" do
+      expect(chrome).to be_anonymous
+    end
+
+    it "renders no id attribute at all — not an empty one" do
+      html = render_in_context(chrome).to_s
+
+      expect(html).not_to include("id=")
+    end
+
+    it "still renders its content, having given up only its name" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "QuietCard"
+        anonymous!
+        def build(attributes = {})
+          super
+          text_node "still here"
+        end
+      end
+
+      expect(render_in_context(klass).to_s).to include("still here")
+    end
+
+    it "answers no DOM id from the class path either" do
+      expect(chrome.weft_dom_id_for).to be_nil
+    end
+
+    it "lets many instances share a render without colliding, since none claims a slot" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "RepeatedChrome"
+        anonymous!
+      end
+
+      html = Weft::Context.new({}, nil, slots: Set.new) do
+        3.times { insert_tag(klass) }
+      end.to_s
+
+      expect(html).not_to include("id=")
+    end
+
+    describe "as one of three mutually exclusive declarations" do
+      it "refuses a class that also identifies by params" do
+        expect do
+          Class.new(Weft::Component) do
+            def self.name = "BothWays"
+            identifies_by :order_id
+            anonymous!
+          end
+        end.to raise_error(Weft::InvalidDefinition, /identity twice/)
+      end
+
+      it "refuses a class that is also unique!" do
+        expect do
+          Class.new(Weft::Component) do
+            def self.name = "BothWaysToo"
+            anonymous!
+            unique!
+          end
+        end.to raise_error(Weft::InvalidDefinition, /identity twice/)
+      end
+
+      it "replaces an identity inherited from above" do
+        parent = Class.new(Weft::Component) do
+          def self.name = "IdentifiedParent"
+          param :order_id
+          identifies_by :order_id
+        end
+        child = Class.new(parent) do
+          def self.name = "AnonymousChild"
+          anonymous!
+        end
+
+        expect(child).to be_anonymous
+        expect(child.identifiers).to eq([])
+        expect(parent.identifiers).to eq(%i[order_id])
+      end
+
+      it "is inherited by a subclass that declares no identity of its own" do
+        child = Class.new(chrome) { def self.name = "QuieterCard" }
+
+        expect(child).to be_anonymous
+      end
+    end
+  end
+
+  # Weft cannot infer whether a class needs an id — a singleton and repeated
+  # chrome declare identically and want opposite answers — but it can *observe*
+  # the collision, which is the half inference could never reach. So it says so,
+  # once, naming the class and the three verbs that answer it.
+  describe "the duplicate-id warning" do
+    let(:repeated) do
+      Class.new(Weft::Component) do
+        def self.name = "DropshipUI::Card"
+      end
+    end
+
+    def render_nested(klass, count)
+      Weft::Context.new { div { count.times { insert_tag(klass) } } }.to_s
+    end
+
+    it "warns when one render emits an id twice" do
+      allow(Weft.logger).to receive(:warn)
+
+      render_nested(repeated, 2)
+
+      expect(Weft.logger).to have_received(:warn).once.with(/DropshipUI::Card.*dropship-ui-card/m)
+    end
+
+    it "names the three declarations that answer it" do
+      allow(Weft.logger).to receive(:warn)
+
+      render_nested(repeated, 2)
+
+      expect(Weft.logger).to have_received(:warn).once.with(/identifies_by.*unique!.*anonymous!/m)
+    end
+
+    # Nested rather than top-level on purpose: claim_dom_slot! is gated on
+    # `parent.equal?(arbre_context)`, so chrome inside a wrapper collided
+    # silently — which is exactly where the demo's ten cards were hiding.
+    it "sees a collision at any depth, not only among top-level components" do
+      klass = repeated
+      allow(Weft.logger).to receive(:warn)
+
+      Weft::Context.new do
+        div { div { div { 3.times { insert_tag(klass) } } } }
+      end.to_s
+
+      expect(Weft.logger).to have_received(:warn).once
+    end
+
+    it "says it once per class, however many instances repeat" do
+      allow(Weft.logger).to receive(:warn)
+
+      render_nested(repeated, 9)
+
+      expect(Weft.logger).to have_received(:warn).once
+    end
+
+    it "stays quiet for a singleton, which is the case the bare class id is right for" do
+      allow(Weft.logger).to receive(:warn)
+
+      render_nested(repeated, 1)
+
+      expect(Weft.logger).not_to have_received(:warn)
+    end
+
+    it "stays quiet for components that identify themselves apart" do
+      distinct = Class.new(Weft::Component) do
+        def self.name = "IdentifiedRow"
+        receives :row_id
+        identifies_by :row_id
+      end
+
+      allow(Weft.logger).to receive(:warn)
+
+      Weft::Context.new do
+        div { %w[a b c].each { |id| insert_tag(distinct, row_id: id) } }
+      end.to_s
+
+      expect(Weft.logger).not_to have_received(:warn)
+    end
+
+    it "stays quiet for a class that declined an id outright" do
+      quiet = Class.new(Weft::Component) do
+        def self.name = "QuietChrome"
+        anonymous!
+      end
+
+      allow(Weft.logger).to receive(:warn)
+
+      render_nested(quiet, 5)
+
+      expect(Weft.logger).not_to have_received(:warn)
+    end
+  end
+
   describe ".unique!" do
     let(:badge) do
       Class.new(Weft::Component) do

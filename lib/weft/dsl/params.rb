@@ -106,6 +106,7 @@ module Weft
 
           validate_type!(name, type, nil) unless type.nil?
           validate_digest!(name, digest) if digest
+          refuse_conflicting_type!(name, type)
           meta = { block: block, source_location: block.source_location }
           meta[:type] = type unless type.nil?
           meta[:digest] = digest if digest
@@ -173,6 +174,30 @@ module Weft
         # `default:` is the one option that rides the rest hash, because only
         # `options.key?(:default)` can tell "declared nil" from "not declared" —
         # and that distinction is what makes a hand-off required or optional.
+        # One key is one value, so two doors naming different types for it are
+        # contradictory assertions rather than a precedence puzzle — refuse
+        # rather than pick, exactly as `declare_identity!` does for the identity
+        # verbs. Unlike `default:`, where two doors holding different fallbacks
+        # is meaningful, since they answer for different sources.
+        #
+        # Reads what THIS class body declared, never the inherited merge: a
+        # subclass retyping its parent's key is an override, like redeclaring a
+        # derivation block. And only two *stated* types conflict — a door that
+        # says nothing simply defers to the one that did.
+        def refuse_conflicting_type!(name, type)
+          return if type.nil?
+
+          [own_params, own_received_params, own_derived_params].each do |table|
+            declared = table[name]&.[](:type)
+            next if declared.nil? || declared == type
+
+            raise Weft::InvalidDefinition,
+                  "#{self.name} declares #{name.inspect} as both #{declared.inspect} and " \
+                  "#{type.inspect} — one key holds one value, so name the type once or use " \
+                  "two keys"
+          end
+        end
+
         def validate_received!(name, type, digest, options)
           unknown = options.keys - [:default]
           unless unknown.empty?
@@ -183,12 +208,14 @@ module Weft
 
           validate_type!(name, type, nil) unless type.nil?
           validate_digest!(name, digest) if digest
+          refuse_conflicting_type!(name, type)
         end
 
         def validate_param!(name, default, options)
           validate_type!(name, options[:type], default) unless options[:type].nil?
           validate_digest!(name, options[:digest]) if options[:digest]
           validate_required!(name, default) if options[:required]
+          refuse_conflicting_type!(name, options[:type])
         end
 
         # Only what was actually said: an absent `strict:` has to stay absent
