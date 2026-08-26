@@ -17,6 +17,11 @@ module DropshipUI
     builder_method :tooltip
     adds_children_to :@trigger_container
 
+    # Chrome: no route, no refresh, nothing brings it. Several appear on one
+    # page, and an id they all shared would be invalid HTML naming something
+    # nobody addresses. The popover inside loads by URL, not by id.
+    anonymous!
+
     receives :content
     receives :with, default: {}
 

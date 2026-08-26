@@ -12,6 +12,10 @@ module Drills
   class DrillCard < DropshipUI::Card
     builder_method :drill_card
 
+    # Chrome: no route, no refresh, nothing brings it. An id it shares with
+    # every sibling would be invalid HTML naming something nobody addresses.
+    anonymous!
+
     receives :blurb
 
     def build(attributes = {})
