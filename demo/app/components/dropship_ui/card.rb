@@ -14,6 +14,16 @@ module DropshipUI
     builder_method :card
     adds_children_to :@body
 
+    # A card used directly is chrome — a page renders many, and nothing routes
+    # to, refreshes, or brings any of them, so the id they would all share is
+    # invalid HTML naming something nobody addresses.
+    #
+    # Subclasses that ARE addressed say so and replace this, as ShipmentsCard
+    # and OrderDetailsCard do with `identifies_by :order_id` — both are brought
+    # as companions, which land by DOM id. A new subclass that gets brought must
+    # do the same.
+    anonymous!
+
     receives :title, default: nil
     receives :link_text, default: nil
     receives :link_href, default: nil

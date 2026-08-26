@@ -159,6 +159,70 @@ RSpec.describe Weft::DSL::Params do
       end.to raise_error(Weft::InvalidDefinition, /:rate.*:float.*Integer/m)
     end
 
+    # One key is one value, so two doors naming different types for it are
+    # contradictory assertions rather than a precedence puzzle — the same call
+    # `declare_identity!` makes about `identifies_by` and `unique!`.
+    describe "a key typed differently by two doors" do
+      it "refuses the contradiction rather than picking a winner" do
+        expect do
+          Class.new(base_class) do
+            def self.name = "ContradictedKey"
+            param :order_id, type: :integer
+            derives(:order_id, type: :uuid) { |_p| 1 }
+          end
+        end.to raise_error(Weft::InvalidDefinition, /order_id.*:integer.*:uuid/m)
+      end
+
+      it "refuses it whichever door declares first" do
+        expect do
+          Class.new(base_class) do
+            def self.name = "ContradictedReverse"
+            receives :order_id, type: :uuid
+            param :order_id, type: :integer
+          end
+        end.to raise_error(Weft::InvalidDefinition, /order_id/)
+      end
+
+      it "accepts a second door that agrees" do
+        klass = Class.new(base_class) do
+          def self.name = "AgreeingDoors"
+          param :order_id, type: :uuid
+          derives(:order_id, type: :uuid) { |_p| 1 }
+        end
+
+        expect(klass.declared_type(:order_id)).to eq(:uuid)
+      end
+
+      # Not a contradiction: the derivation simply does not restate the type,
+      # and the reader finds it through the door that did.
+      it "accepts a second door that states nothing" do
+        klass = Class.new(base_class) do
+          def self.name = "SilentSecondDoor"
+          param :order_id, type: :uuid
+          derives(:order_id) { |_p| 1 }
+        end
+
+        expect(klass.declared_type(:order_id)).to eq(:uuid)
+      end
+
+      # A child redeclaring a parent's key is an override, exactly as it is for
+      # a derivation block — so the check reads what THIS class body declared,
+      # never the inherited merge.
+      it "lets a subclass retype a key its parent typed" do
+        parent = Class.new(base_class) do
+          def self.name = "TypedParent"
+          param :order_id, type: :integer
+        end
+        child = Class.new(parent) do
+          def self.name = "RetypingChild"
+          param :order_id, type: :uuid
+        end
+
+        expect(child.declared_type(:order_id)).to eq(:uuid)
+        expect(parent.declared_type(:order_id)).to eq(:integer)
+      end
+    end
+
     it "rejects unknown declaration kwargs" do
       expect do
         Class.new(base_class) do

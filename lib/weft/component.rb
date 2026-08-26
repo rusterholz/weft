@@ -155,8 +155,11 @@ module Weft
       apply_received_fallback(attributes) unless arbre_context.respond_to?(:take_received!)
       warn_declared_chrome_collisions(attributes)
       super
-      self.id = weft_dom_id
+      # Guarded rather than assigned: an anonymous component renders no id
+      # attribute at all, where `self.id = nil` would leave an empty one.
+      self.id = weft_dom_id unless self.class.anonymous?
       claim_dom_slot!
+      warn_duplicate_dom_id!
       apply_refresh_attrs
       apply_push_attrs
     end
@@ -220,7 +223,44 @@ module Weft
     # Only roots arbitrate. Duplicate ids among a fragment's own descendants
     # are that fragment's business, not the response's, and a response that
     # has nothing to arbitrate carries no register at all.
+    # Weft cannot infer whether a class needs a DOM id: what makes one wrong is
+    # rendering more than one instance on a page, which is a property of the
+    # render rather than of the class — a singleton and repeated chrome declare
+    # identically and want opposite answers. But it can *observe* the collision,
+    # which is the half inference could never reach, so it says so from where
+    # the answer actually is. Once per class: a table of a hundred rows would
+    # otherwise say the same thing a hundred times.
+    #
+    # Ids must be unique per document, so this is invalid HTML rather than
+    # untidy HTML — `getElementById` and every `#id` selector aimed at it break.
+    def warn_duplicate_dom_id!
+      return unless claimed_dom_id_twice?
+      return unless Weft::DSL::Identity.warned_duplicate_ids.add?(self.class)
+
+      Weft.logger.warn(
+        "#{self.class.name} rendered more than once with DOM id #{id.inspect}, and an id has to " \
+        "be unique in a document. Declare `identifies_by` to tell the instances apart, `unique!` " \
+        "to be issued a token per instance, or `anonymous!` if nothing addresses it."
+      )
+    end
+
+    # Records this id against the render, answering whether it was already
+    # spoken for. Absent register (a plain Arbre context) means nothing to
+    # compare against, so nothing to report.
+    def claimed_dom_id_twice?
+      return false if self.class.anonymous? || id.nil?
+      return false unless arbre_context.respond_to?(:dom_ids_seen)
+
+      register = arbre_context.dom_ids_seen
+      return true if register.key?(id)
+
+      register[id] = self.class
+      false
+    end
+
     def claim_dom_slot!
+      return if self.class.anonymous?
+
       slots = arbre_context.respond_to?(:slots) && arbre_context.slots
       return unless slots && parent.equal?(arbre_context)
       return if slots.add?(id)

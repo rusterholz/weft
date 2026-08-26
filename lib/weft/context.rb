@@ -49,6 +49,17 @@ module Weft
     # nothing to arbitrate, and nothing is claimed then.
     attr_reader :slots
 
+    # @api private
+    # Every DOM id this render has emitted, at any depth, mapped to the class
+    # that emitted it — the register behind the duplicate-id warning.
+    #
+    # Deliberately separate from {#slots}, which is response-scoped and tracks
+    # ROOT components only, because it exists to catch precisely what slots
+    # cannot see: chrome nested inside a wrapper, colliding silently.
+    def dom_ids_seen
+      @dom_ids_seen ||= {}
+    end
+
     # Thrown with the contested DOM id when a root loses a slot. Caught by
     # whoever asked for the render; nothing partial reaches the tree, because
     # Arbre adds a tag to its parent only after the build returns.

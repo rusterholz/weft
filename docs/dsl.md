@@ -259,11 +259,15 @@ The value may come through **any door**: a `param`, a `derives`, a `defines`, or
 
 ```ruby
 class DriverRow < Weft::Component
-  receives :driver                        # the record itself cannot compose an id
-  derives(:driver_id) { |p| p.driver.id } # the scalar that names it can
+  receives :driver                                   # the record cannot compose an id
+  derives(:driver_id, type: :uuid) { |p| p.driver.id }  # the scalar that names it can
   identifies_by :driver_id
 end
 ```
+
+`type:` and `digest:` are declarable on `derives` and `receives` as well as on `param`, and mean the same thing at each door — so the UUID above keeps its dashes exactly as `param :driver_id, type: :uuid` would, rather than an app carrying two id styles for one kind of value. Weft can do less about them on the server-side doors, since a hand-off or a derivation is already a Ruby object with nothing to coerce: there they say what the value *is*, for the places Weft consults a type. A key declared through two doors may not be given two different types — one key holds one value, so that's refused rather than resolved by precedence.
+
+`defines` takes neither, on purpose: its value is fixed at class-load time, so it is already whatever you wrote. (And a `defines` value can't distinguish instances — every one of them shares it — so identifying by one is a sign the component wants a different identifier.)
 
 An identifying value must be a **scalar** — a String, Symbol, number, boolean, or `nil`. Anything else raises `Weft::InvalidIdentifierValue` naming the component and the param, because an Array or a Hash would otherwise stringify into a selector two instances could share, and a record's default `to_s` carries its memory address, which changes on every request.
 
@@ -288,6 +292,24 @@ end
 ```
 
 It is an alternative to `identifies_by`, not a companion to it — declaring both raises, since they are contradictory claims rather than a precedence puzzle. Like `identifies_by`, it replaces any identity inherited from a superclass. Asking for a slot does not publish a route: a component that wants one declares something that earns it, or says `routable!`.
+
+### `anonymous!` — for a component nothing addresses
+
+The third answer, and the right one for chrome: a card, a tooltip, a wrapper that a page renders many of, where nothing routes to, refreshes, pushes to, or brings any of them.
+
+```ruby
+class Card < Weft::Component
+  anonymous!                     # renders no id attribute at all
+end
+```
+
+An id every instance shares isn't merely useless — ids must be unique within a document, so it's **invalid HTML**, and it breaks `getElementById` and every `#id` selector aimed near it. `anonymous!` renders no `id` attribute at all rather than an empty one.
+
+It's the third of three mutually exclusive declarations, alongside `identifies_by` and `unique!`: declaring any of them replaces whichever an ancestor declared. So a chrome base class can be anonymous while the subclasses that *are* addressed say so — and they must, since a component that gets `brings` along is swapped by DOM id.
+
+Declaring it alongside `pushes` raises when routes are validated: a stream swaps by DOM id, so an anonymous component has nowhere for its pushes to land. `refreshes` is fine — it re-renders itself positionally, with no `hx-target`.
+
+**Weft never infers this.** What makes an id wrong is rendering more than one instance on a page, which is a property of the *render*, not of the class — two classes can declare identically and want opposite answers. A component that declares nothing keeps its bare class id, which is exactly right for one that appears once per page. What Weft does instead is *observe*: render the same id twice and it says so once, naming the class and these three verbs.
 
 ### `digest:` — when the values collide but the instances differ
 
