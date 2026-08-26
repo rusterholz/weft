@@ -45,6 +45,10 @@ Metrics/ClassLength:
 Metrics/MethodLength:
   Max: 20
 
+Style/CaseEquality:
+  # === is a well-defined tool; knowing your tools beats hiding from them.
+  Enabled: false
+
 Style/Documentation:
   Enabled: false
 

@@ -22,9 +22,11 @@ bundle exec appraisal install   # once, and again after dependency changes
 bundle exec appraisal rspec     # the full six-gemfile matrix
 ```
 
-Run the matrix before committing any gem code change — a construct that works on current ActiveSupport can still break the oldest row.
+Run the matrix before committing any gem code change — a construct that works on current ActiveSupport can still break the oldest row. Note that `appraisal install` rewrites the six committed `gemfiles/*.gemfile` from scratch and leaves them failing RuboCop — see [Lockfiles and Platforms](#lockfiles-and-platforms) for the one-line chaser.
 
-The matrix varies dependencies, not Ruby: CI runs all six gemfiles against **each supported Ruby (3.2, 3.3, 3.4)**, while a local run covers only the one in `.ruby-version`. So a Ruby-version-specific failure passes locally and fails in CI — a gem that moved from Ruby's default gems to its bundled ones is the usual cause, since a bundled gem is off the load path under `bundle exec` until the Gemfile names it. Install the other Rubies (`asdf install ruby 3.4.7`) and re-run with `ASDF_RUBY_VERSION=3.4.7 bundle exec appraisal rspec` when a change touches loading or dependencies.
+The matrix varies dependencies, not Ruby: CI runs all six gemfiles against **each supported Ruby (3.2, 3.3, 3.4)**, while a local run covers only the development Ruby. That one is pinned twice — `.ruby-version`, which CI's lint and demo jobs read, and `.tool-versions`, which asdf reads — so move both together or local runs and CI quietly disagree.
+
+The development Ruby is the newest supported one, which is the direction most Ruby-version failures come from: a gem that moved from Ruby's default gems to its bundled ones is off the load path under `bundle exec` until the Gemfile names it, so it breaks on the newest Ruby first. The reverse — a construct an *older* Ruby rejects — still surfaces in CI rather than locally. Install an older one (`asdf install ruby 3.3.10`) and re-run with `ASDF_RUBY_VERSION=3.3.10 bundle exec appraisal rspec` when a change touches loading or dependencies.
 
 **Demo suite** — the demo app (`demo/`) has its own Gemfile and specs:
 
@@ -84,10 +86,12 @@ After changing the `Gemfile`, `Appraisals`, or the gemspec:
 ```bash
 bundle install                      # or bundle exec appraisal install for Appraisals changes
 bundle exec rake gemfile:platforms  # re-adds the ruby/darwin/linux platform variants
-bundle exec rubocop -a Gemfile.lock gemfiles/
+bundle exec rubocop -A gemfiles/    # restyles whatever Appraisal regenerated
 ```
 
-Bundler operations tend to drop platforms from lockfiles; the rake task restores them idempotently, and CI's Linux runners depend on it.
+Bundler operations tend to drop platforms from `Gemfile.lock`; the rake task restores them idempotently, and CI's Linux runners depend on it. Only that lockfile is committed — the Appraisal ones are resolved per machine and gitignored.
+
+The six `gemfiles/*.gemfile` *are* committed, and so they're linted. `appraisal install` writes them from scratch: gems land in declaration order rather than alphabetically, and the `# frozen_string_literal: true` comment goes missing. `-A` rather than `-a` because RuboCop counts adding that comment as an unsafe correction, so a safe-only pass leaves six offenses standing and the lint job red.
 
 ## Require Hygiene
 
