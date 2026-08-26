@@ -19,7 +19,7 @@ RSpec.describe Weft::Params do
   end
 
   describe "declared defaults as read-time fallbacks" do
-    subject(:params) { described_class.new({ view: nil, page: 2 }, {}, defaults: { view: "all", page: 1 }) }
+    subject(:params) { described_class.new({ view: nil, page: 2 }, defaults: { view: "all", page: 1 }) }
 
     it "answers with the default when no source supplied the key" do
       expect(params[:view]).to eq("all")
