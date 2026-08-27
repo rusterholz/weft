@@ -30,9 +30,11 @@ module Weft
 
         # The state a request composes before any component of its own exists —
         # what the first verb block sees. No caller and no enclosing build have
-        # run, so the hand-off door isn't merely unsatisfied, it isn't there:
-        # a `receives`-only key is absent, declared default and all. Dual it
-        # with a `param` or a `defines` to make the key visible here.
+        # run, so the hand-off door isn't merely unsatisfied, it isn't there.
+        # A declared default still answers — a fallback belongs to the class,
+        # not to the door, and writing it a second time as a `defines` would
+        # only invite the two copies to drift. A key that declared none has
+        # nowhere to come from: reading it raises {Weft::UnreachableHandoff}.
         def for_request(component_class, wire_source)
           call(component_class, wire_source, hand_offs: nil)
         end
@@ -67,7 +69,7 @@ module Weft
         data = @inherited.dup
         keys.each { |key| data[key] = stack_value(key) }
         report_shadowed_derivations(data)
-        Weft::Params.new(data, defaults: declared_defaults)
+        Weft::Params.new(data, defaults: declared_defaults, owner: @component_class)
       end
 
       private
@@ -94,9 +96,12 @@ module Weft
 
       # Fallbacks, not values: they ride on the bag rather than in it, so a
       # key nobody supplied reads as this class's default without becoming
-      # something this class hands to anyone downstream.
+      # something this class hands to anyone downstream. Spans every declared
+      # key rather than only the ones this bag holds an entry for — which is
+      # what carries a hand-off's fallback onto the paths where the door
+      # itself is absent.
       def declared_defaults
-        keys.filter_map { |key| [key, default_for(key)] unless default_for(key).nil? }.to_h
+        @component_class.declared_keys.filter_map { |key| declared_default(key) }.to_h
       end
 
       def derived_thunk(key)
@@ -106,11 +111,20 @@ module Weft
 
       # The wire door's default wins for dual keys — its meta always carries
       # one, and the wire door sits above the hand-off's fallback in the stack.
-      def default_for(key)
-        wire_meta = @component_class.params[key]
-        return wire_meta[:default] if wire_meta
+      # Which is also why only `receives` can declare a *nil* fallback: a
+      # param's meta cannot tell a written nil from an unwritten one, and a
+      # hand-off's can, so the two doors answer separately.
+      def declared_default(key)
+        if (wire_meta = @component_class.params[key])
+          [key, wire_meta[:default]] unless wire_meta[:default].nil?
+        else
+          hand_off_default(key)
+        end
+      end
 
-        @component_class.received_params[key]&.[](:default)
+      def hand_off_default(key)
+        meta = @component_class.received_params[key]
+        [key, meta[:default]] if meta&.key?(:default)
       end
 
       # A declared derivation that never runs, said once per (class, key).

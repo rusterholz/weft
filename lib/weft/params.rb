@@ -43,9 +43,12 @@ module Weft
     # a branch: a default belongs to whoever declared it, and a component
     # deeper in the tree — or downstream of a hand-off — falls back to its
     # own, not to the one above it.
-    def initialize(data, defaults: {})
+    # +owner+ is the class the bag was assembled for, carried so that a read
+    # finding nothing can say why instead of naming this class at the adopter.
+    def initialize(data, defaults: {}, owner: nil)
       @data = data
       @defaults = defaults
+      @owner = owner
       @forcing = []
     end
 
@@ -65,7 +68,7 @@ module Weft
     # nil entries stay resolved-absent. The plain-context hand-off fallback
     # lands received values through this.
     def overlay(values)
-      self.class.new(@data.merge(values), defaults: @defaults)
+      self.class.new(@data.merge(values), defaults: @defaults, owner: @owner)
     end
 
     # nil means no source had this key — so the read falls to the declared
@@ -87,16 +90,41 @@ module Weft
     end
 
     def method_missing(name, *args, **kwargs, &block)
-      if key?(name) && args.empty? && kwargs.empty? && !block
-        self[name]
-      elsif @data.respond_to?(name)
-        materialized.public_send(name, *args, **kwargs, &block)
-      else
-        super
-      end
+      return self[name] if bare_read?(name, args, kwargs, block)
+      return materialized.public_send(name, *args, **kwargs, &block) if @data.respond_to?(name)
+
+      super
+    rescue NoMethodError => e
+      raise unless unreachable_handoff?(name, e)
+
+      raise Weft::UnreachableHandoff, unreachable_handoff_message(name), e.backtrace, cause: e
     end
 
     private
+
+    # A declared key asked for as a plain attribute. Anything carrying
+    # arguments or a block means something else and belongs to the Hash API.
+    def bare_read?(name, args, kwargs, block)
+      key?(name) && args.empty? && kwargs.empty? && !block
+    end
+
+    # A key whose only door is `receives` and which declared no fallback: a
+    # call site is its sole possible source, and this bag was assembled where
+    # none exists. Anything else — an undeclared name, a typo — keeps raising
+    # NoMethodError, which is what it is.
+    def unreachable_handoff?(name, error)
+      return false if @owner.nil? || error.name != name || key?(name)
+
+      meta = @owner.received_params[name]
+      !meta.nil? && !meta.key?(:default)
+    end
+
+    def unreachable_handoff_message(name)
+      "#{@owner.name} has not been built here, so nothing handed #{name.inspect} in — a " \
+        "receives value comes from the call site that builds the component. Give " \
+        "#{name.inspect} a default:, or a source that needs no caller: param #{name.inspect} " \
+        "if it can ride a URL, derives(#{name.inspect}) { ... } if the server can fetch it"
+    end
 
     # The bag as a plain hash: every thunk run, every unsupplied key standing
     # at its declared fallback.

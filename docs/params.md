@@ -57,7 +57,7 @@ When a component wants to control a value rather than inherit it, it declares th
 
 A single key can have more than one door, and they resolve in a fixed order — a handed value beats a request overlay (a hash a verb block returned earlier in the request) beats a wire value beats an inherited value beats a derivation beats a default. The [DSL reference](dsl.md#how-the-doors-combine) lays out that precedence and the useful *dual* combinations; the shape to carry away here is that all four doors land in the same `params`, read the same way (`params.name`).
 
-Three of the four are open to every verb block too — an action callable, a `transfers`, `brings` or `recovers` block all read the same `param`, `derives` and `defines` a `build` would. Only `receives` is missing there, and it has to be: a hand-off comes from a call site, and a request arriving over the wire has none. When a block needs such a key, give it a second door.
+Three of the four are open to every verb block too — an action callable, a `transfers`, `brings` or `recovers` block all read the same `param`, `derives` and `defines` a `build` would. `receives` is the one that can't be: a hand-off comes from a call site, and a request arriving over the wire has none. Its *default* still answers there, though — a fallback belongs to the class that declared it, not to the door it was written beside, so `receives :page_num, default: 1` reads as `1` in a callable without you writing the `1` a second time as a `defines`. What a block can't reach is a hand-off with no default: nothing but a caller could have supplied it, and reading it raises `Weft::UnreachableHandoff` naming the key and the two ways out. Give such a key a second door, or a default.
 
 ## What a component keeps for itself
 
