@@ -128,6 +128,88 @@ RSpec.describe Weft::Params::Assembly do
     end
   end
 
+  # The router's class paths: the state a request composes before any component
+  # of its own exists. No call site has run, so the hand-off door is not there.
+  describe "a bag assembled where no call site exists" do
+    def for_request(klass, wire = {}) = Weft::Params::Assembly.for_request(klass, wire)
+
+    let(:required_class) do
+      Class.new(Weft::Component) do
+        def self.name = "OrderSlip"
+        receives :order
+      end
+    end
+
+    it "answers a hand-off's declared default, exactly as a render would" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "SoftSlip"
+        receives :page_num, default: 7
+      end
+
+      expect(for_request(klass).page_num).to eq(7)
+    end
+
+    it "answers an explicitly nil default rather than counting the key absent" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "AccentSlip"
+        receives :accent, default: nil
+      end
+      bag = for_request(klass)
+
+      expect(bag.key?(:accent)).to be(true)
+      expect(bag.accent).to be_nil
+    end
+
+    it "names the failure when a call site was the key's only possible source" do
+      expect { for_request(required_class).order }.
+        to raise_error(Weft::UnreachableHandoff, /OrderSlip has not been built.*:order/m)
+    end
+
+    it "keeps the NoMethodError it replaced as the cause" do
+      for_request(required_class).order
+    rescue Weft::UnreachableHandoff => e
+      expect(e.cause).to be_a(NoMethodError)
+      expect(e.cause.name).to eq(:order)
+    end
+
+    it "raises the same way through a derivation that reads the key" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "DriverRow"
+        receives :driver
+        derives(:driver_id) { |p| p.driver.id }
+      end
+
+      expect { for_request(klass).driver_id }.
+        to raise_error(Weft::UnreachableHandoff, /DriverRow.*:driver\b/)
+    end
+
+    it "is a different failure from the one the same class raises with a call site" do
+      klass = required_class
+
+      expect { Weft::Context.new { insert_tag(klass) } }.to raise_error(Weft::NotReceived)
+      expect { for_request(klass).order }.to raise_error(Weft::UnreachableHandoff)
+    end
+
+    it "says nothing when a second door can supply the key" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "StatusChip"
+        param :status
+        receives :status
+      end
+
+      expect(for_request(klass).status).to be_nil
+    end
+
+    it "leaves [] total, so nothing that read nil starts raising" do
+      expect(for_request(required_class)[:order]).to be_nil
+    end
+
+    it "lets a name nothing declares keep bubbling as a plain NoMethodError" do
+      expect { for_request(required_class).nonesuch }.
+        to raise_error(NoMethodError, /nonesuch/)
+    end
+  end
+
   describe "derives behavior" do
     it "derives from other params at first read, in build, before or after super" do
       klass = Class.new(Weft::Component) do

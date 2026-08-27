@@ -496,18 +496,36 @@ RSpec.describe Weft::Router do
       expect(seen).to eq(["from-derive"])
     end
 
-    it "keeps hand-offs out of a callable's view" do
+    it "answers a hand-off's declared fallback, and will not take one from the wire" do
       seen = []
       Class.new(Weft::Component) do
         def self.name = "HandOffTouchPanel"
         param :order_id, type: :string
         receives :handed, default: "given"
-        performs(:touch) { |params| seen << params.key?(:handed) and nil }
+        performs(:touch) { |params| seen << params.handed and nil }
       end
 
-      post "/_components/hand_off_touch_panel/touch", order_id: "o-3"
+      post "/_components/hand_off_touch_panel/touch", order_id: "o-3", handed: "from-the-wire"
 
-      expect(seen).to eq([false])
+      expect(seen).to eq(["given"])
+    end
+
+    it "names the failure when a callable reads a hand-off with no fallback to fall to" do
+      seen = []
+      Class.new(Weft::Component) do
+        def self.name = "BareHandOffPanel"
+        param :order_id, type: :string
+        receives :handed
+        performs(:touch) { |params| params.handed and nil }
+        recovers from: Weft::UnreachableHandoff do |_params, error|
+          seen << error.message
+          nil
+        end
+      end
+
+      post "/_components/bare_hand_off_panel/touch", order_id: "o-3"
+
+      expect(seen.first).to match(/BareHandOffPanel.*:handed/)
     end
 
     it "walks the recovery chain when a derivation raises inside a callable" do

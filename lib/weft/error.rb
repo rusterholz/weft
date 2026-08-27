@@ -110,4 +110,13 @@ module Weft
   # default ends resolution valueless — the call site didn't hand it over and
   # no other source (wire dual, inherited bag) supplied it.
   NotReceived = Class.new(InvalidUsage)
+
+  # Raised when a verb block reads a key whose only door is `receives`, from a
+  # bag assembled where no call site exists to hand one over — a request has
+  # composed its state, but nothing has been built yet. A declared default
+  # still answers on those paths, so what reaches here is the key a caller
+  # alone could have supplied. Distinct from {NotReceived}, where a call site
+  # did run and left the value out: there the fix is to pass it, here it is to
+  # give the key a source that does not need a caller.
+  UnreachableHandoff = Class.new(InvalidUsage)
 end
