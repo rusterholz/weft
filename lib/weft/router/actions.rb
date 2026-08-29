@@ -108,7 +108,8 @@ module Weft
       # rendered bag (rich values included) and each one branches it.
       def target_companions(action, component_class, primary, composed, overlay)
         context = action.renders.equal?(component_class) ? :action : :transfer
-        env = { universe: filtered_params, overlays: overlay, branch_bag: primary&.params }
+        env = { universe: filtered_params, overlays: overlay,
+                branch_bag: companion_lineage(primary, composed) }
         view = companion_view(primary, composed, overlay)
         applicable_companions(action.renders, context, action.name).map { |inc| [inc, view, env] }
       end
@@ -151,6 +152,13 @@ module Weft
       def companion_view(primary, composed, overlay)
         primary ? primary.params.overlay(overlay) : composed
       end
+
+      # The bag those same companions branch from. It falls back exactly as
+      # the view above does, and has to: a block that reads one picture while
+      # its component inherits another is how a companion ends up re-deriving
+      # what the block just read. The overlay isn't folded in here because it
+      # rides the env separately.
+      def companion_lineage(primary, composed) = primary ? primary.params : composed
 
       # Error handling for actions. Adds HX-Reswap header when the action's
       # swap strategy is destructive (e.g., :delete) so the error fragment

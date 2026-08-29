@@ -2375,6 +2375,41 @@ RSpec.describe Weft::Router do
       expect(last_response.body).not_to include("primary body")
     end
 
+    # No primary rendered, so there is no rendered bag to branch — but the
+    # request composed one all the same, and it is what the companion's own
+    # block is handed. Inheriting anything less would make the companion pay
+    # again for a lookup this response already did.
+    it "gives a delete-swap's companions the state the request composed" do # rubocop:disable RSpec/ExampleLength
+      runs = Hash.new(0)
+      sink = Class.new(Weft::Component) do
+        def self.name = "DismissEchoSink"
+        derives(:cargo) do |_p|
+          runs[:companion] += 1
+          "companion-side"
+        end
+
+        def build(attributes = {})
+          super
+          span "echo-#{params.cargo}"
+        end
+      end
+      source = Class.new(Weft::Component) do
+        def self.name = "DismissEchoSource"
+        param :id
+        derives(:cargo) do |_p|
+          runs[:source] += 1
+          "source-side"
+        end
+        dismisses(:remove) { |params| params.cargo and nil }
+      end
+      source.brings(sink)
+
+      delete "/_components/dismiss_echo_source/remove", id: "1"
+
+      expect(last_response.body).to include("echo-source-side")
+      expect(runs).to eq({ source: 1 })
+    end
+
     it "applies to performs with swap: :delete, not just the sugar" do
       Class.new(Weft::Component) do
         def self.name = "RawDeleteSwap"
