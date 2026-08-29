@@ -116,10 +116,13 @@ module Weft
       # The declaring component's companions on a transfer. This branch
       # forks before the hand-off, so the block reads the declarer's own
       # params plus the callable's overlay — never the target's picture —
-      # and there is no primary bag to branch, because nothing rendered the
-      # declarer and so no rich values exist on this path.
+      # and each companion branches that same bag. Nothing rendered the
+      # declarer, but the request composed its state all the same, and a
+      # derivation the callable forced is memoized in it: a companion that
+      # inherited nothing here would pay a second time for work the response
+      # has already done.
       def declarer_companions(component_class, action_name, composed, overlay)
-        env = { universe: filtered_params, overlays: overlay }
+        env = { universe: filtered_params, overlays: overlay, branch_bag: composed }
         explicitly_named_companions(component_class, action_name).map { |inc| [inc, composed, env] }
       end
 
