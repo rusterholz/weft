@@ -1989,6 +1989,74 @@ RSpec.describe Weft::Router do
       expect(last_response.body).to include('id="boom-companion-7"')
     end
 
+    # A recovery walks the chain of whoever was in charge when the failure
+    # happened, against the state that led to it. For a declarer's companion
+    # that state is the declarer's — the same lineage the build that raised
+    # was given, so the recovery block reads what the failed render read.
+    it "shows a failed declarer companion's recovery the state that led to the failure" do # rubocop:disable RSpec/ExampleLength
+      report = Class.new(Weft::Component) do
+        def self.name = "CargoReport"
+        param :note
+
+        def build(attributes = {})
+          super
+          span "reported-#{params.note}"
+        end
+      end
+      fragile = Class.new(Weft::Component) do
+        def self.name = "FragileEcho"
+        recovers(from: StandardError, with: report) { |params, _e| { note: params.cargo } }
+
+        def build(attributes = {})
+          super
+          raise "companion exploded"
+        end
+      end
+      landing = Class.new(Weft::Component) do
+        def self.name = "CargoLanding"
+        param :order_id
+      end
+      origin = Class.new(Weft::Component) do
+        def self.name = "CargoOrigin"
+        param :order_id
+        derives(:cargo) { |_p| "declarer-side" }
+        transfers(:hand_off, to: landing) { |params| params.cargo and nil }
+      end
+      origin.brings(fragile, on: :hand_off)
+
+      post "/_components/cargo_origin/hand_off", order_id: "o-3"
+
+      expect(last_response.body).to include("reported-declarer-side")
+    end
+
+    it "addresses a failed declarer companion by the identity its lineage gives it" do # rubocop:disable RSpec/ExampleLength
+      fragile = Class.new(Weft::Component) do
+        def self.name = "AddressedEcho"
+        derives(:cargo) { |_p| "companion" }
+        identifies_by :cargo
+
+        def build(attributes = {})
+          super
+          raise "companion exploded"
+        end
+      end
+      landing = Class.new(Weft::Component) do
+        def self.name = "AddressedLanding"
+        param :order_id
+      end
+      origin = Class.new(Weft::Component) do
+        def self.name = "AddressedOrigin"
+        param :order_id
+        derives(:cargo) { |_p| "declarer" }
+        transfers(:hand_off, to: landing) { |params| params.cargo and nil }
+      end
+      origin.brings(fragile, on: :hand_off)
+
+      post "/_components/addressed_origin/hand_off", order_id: "o-4"
+
+      expect(last_response.body).to include('id="addressed-echo-declarer"')
+    end
+
     # The delta decides where the companion was headed, so it has to decide
     # where its failure is reported too.
     it "follows an id-bearing delta when placing the error fragment" do
@@ -2074,6 +2142,45 @@ RSpec.describe Weft::Router do
 
       expect(last_response.body).to include("foo-seer[1|]")
       expect(last_response.body).to include("bar-seer[|2]")
+    end
+
+    # The declarer's own companions are the other half of the same claim: they
+    # ride a response nothing of the declarer's rendered in, but the state the
+    # request composed is still theirs to inherit — it is the very bag their
+    # own `brings` block was handed.
+    it "gives a declarer's companion the state the request composed" do # rubocop:disable RSpec/ExampleLength
+      runs = Hash.new(0)
+      companion = Class.new(Weft::Component) do
+        def self.name = "DepartureEcho"
+        derives(:cargo) do |_p|
+          runs[:companion] += 1
+          "companion-side"
+        end
+
+        def build(attributes = {})
+          super
+          span "echo-#{params.cargo}"
+        end
+      end
+      target = Class.new(Weft::Component) do
+        def self.name = "ArrivalDock"
+        param :order_id
+      end
+      declarer = Class.new(Weft::Component) do
+        def self.name = "DepartureDock"
+        param :order_id
+        derives(:cargo) do |_p|
+          runs[:declarer] += 1
+          "declarer-side"
+        end
+        transfers(:hand_off, to: target) { |params| params.cargo and nil }
+      end
+      declarer.brings(companion, on: :hand_off)
+
+      post "/_components/departure_dock/hand_off", order_id: "o-2"
+
+      expect(last_response.body).to include("echo-declarer-side")
+      expect(runs).to eq({ declarer: 1 })
     end
 
     it "resolves a blockless companion from the request universe, like every other form" do # rubocop:disable RSpec/ExampleLength
@@ -2266,6 +2373,41 @@ RSpec.describe Weft::Router do
       expect(last_response.body).to include('hx-swap-oob="true"')
       expect(last_response.body).to include("sibling update")
       expect(last_response.body).not_to include("primary body")
+    end
+
+    # No primary rendered, so there is no rendered bag to branch — but the
+    # request composed one all the same, and it is what the companion's own
+    # block is handed. Inheriting anything less would make the companion pay
+    # again for a lookup this response already did.
+    it "gives a delete-swap's companions the state the request composed" do # rubocop:disable RSpec/ExampleLength
+      runs = Hash.new(0)
+      sink = Class.new(Weft::Component) do
+        def self.name = "DismissEchoSink"
+        derives(:cargo) do |_p|
+          runs[:companion] += 1
+          "companion-side"
+        end
+
+        def build(attributes = {})
+          super
+          span "echo-#{params.cargo}"
+        end
+      end
+      source = Class.new(Weft::Component) do
+        def self.name = "DismissEchoSource"
+        param :id
+        derives(:cargo) do |_p|
+          runs[:source] += 1
+          "source-side"
+        end
+        dismisses(:remove) { |params| params.cargo and nil }
+      end
+      source.brings(sink)
+
+      delete "/_components/dismiss_echo_source/remove", id: "1"
+
+      expect(last_response.body).to include("echo-source-side")
+      expect(runs).to eq({ source: 1 })
     end
 
     it "applies to performs with swap: :delete, not just the sugar" do
