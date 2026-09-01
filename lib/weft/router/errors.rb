@@ -325,9 +325,13 @@ module Weft
 
       # The target resolves its own schema from the request's universe; the
       # recovery values — block delta plus the auto-injected params — ride
-      # as overlays, reaching any depth of the recovery render. The failing
-      # component's resolution never crowns a new universe, so its defaults
-      # and derivations can't leak into the target's.
+      # as overlays, reaching any depth of the recovery render.
+      #
+      # It inherits no lineage, which keeps the failing class's derivations
+      # from crossing into it. Its *defaults* were never at risk either way:
+      # a default belongs to whoever declared it and never rides a branch.
+      # Note the asymmetry this leaves — the recovery *block* is handed the
+      # failing bag while the render below is not.
       def render_recovery_component(target, block_delta, error, component_ctx:, universe: nil)
         overlays = block_delta.merge(auto_param_overlay(error, component_ctx))
         status component_ctx.fetch(:status) { recovery_status(error) }

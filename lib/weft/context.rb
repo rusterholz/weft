@@ -40,9 +40,11 @@ module Weft
     # the primary's own build.
     attr_reader :branch_bag
 
-    # The DOM ids this RESPONSE has already spoken for — a Set shared across
-    # every context the response builds in, because the primary and each of
-    # its companions get their own. An out-of-band swap is addressed by DOM
+    # The DOM ids this BATCH of fragments has already spoken for — a Set
+    # shared across every context built for one delivery, because the primary
+    # and each of its companions get their own. One delivery is an action
+    # response, or a single SSE frame: a stream mints a fresh Set per frame,
+    # so this is narrower than "the response". An out-of-band swap is addressed by DOM
     # id, so only one fragment per id can land; a root component claims its
     # id as it builds (Component#claim_dom_slot!) and a second claimant
     # abandons its render by throwing SLOT_TAKEN. Absent on renders with
@@ -53,9 +55,9 @@ module Weft
     # Every DOM id this render has emitted, at any depth, mapped to the class
     # that emitted it — the register behind the duplicate-id warning.
     #
-    # Deliberately separate from {#slots}, which is response-scoped and tracks
-    # ROOT components only, because it exists to catch precisely what slots
-    # cannot see: chrome nested inside a wrapper, colliding silently.
+    # Deliberately separate from {#slots}, which spans a whole delivery and
+    # tracks ROOT components only, because it exists to catch precisely what
+    # slots cannot see: chrome nested inside a wrapper, colliding silently.
     def dom_ids_seen
       @dom_ids_seen ||= {}
     end
