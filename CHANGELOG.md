@@ -28,14 +28,6 @@ Weft learns to say what a thing *is*: components name their own identity instead
 
 - **Weft Tells You When Two Elements Share An Id** – Render the same id twice and Weft says so once per class, naming the class, the id, and the three declarations that answer it. It watches the render rather than the class body on purpose: what makes an id wrong is a second instance appearing, which no class body can predict — a component rendered once per page is right to wear its bare class id.
 
-- **A Hand-Off's Default Reaches Everywhere Its Key Does** – `receives :page_num, default: 1` used to answer only where a call site had run. Weft composes a params bag in places where nothing has been built yet — the top of a request, an action callable, a stream frame — and there the fallback simply wasn't there, so the way to make one work in a `performs` block was to write the `1` a second time as a `defines`. Two copies of one fallback, free to drift. A default now answers wherever its key is read, because a fallback belongs to the class that declared it rather than to the door it sits beside.
-  - A hand-off with *no* default genuinely has nowhere to come from in those places, and reading one now raises **`Weft::UnreachableHandoff`** — naming the component, the key, and both ways out — instead of `undefined method 'order' for an instance of Weft::Params`, which named a class you never wrote
-  - `Weft::NotReceived` is unchanged and still means the neighbouring thing: a call site that *did* run and left the value out, where the fix is to pass it
-
-- **Declarations Stop Being Silently Ignored** – `receives :order, type: :uuid` used to be accepted and quietly dropped, because `receives` swallowed any keyword it didn't recognise. Unknown keywords now raise, as they always have on `param` and `derives`.
-
-- **Fallback Derivations Stop Nagging** – A component that declares `derives(:order)` *and* gets embedded under something that already supplies the order is doing the right thing: fetch your own when you're rendered standalone, take the ancestor's when you're nested. Weft used to log a warning every time the second half happened — warning about correct code, and suggesting a fix (share one derivation) that's wrong whenever the two deliberately differ, as when a page eager-loads what a card doesn't. It's gone. The overlay warning stays, because a verb block returning a key really does stop your derivation running for that whole request.
-
 - **Booleans That Understand Forms** – `type: :boolean` now reads the words browsers and humans actually send — `true/false`, `1/0`, `on/off`, `yes/no`, `t/f`, `y/n`, in any case. A bare `<input type="checkbox">` submits `on` when checked, which previously read as **false**; it now reads as true, which is what it plainly meant.
 
 - **Declared Component Identity** (`identifies_by`) – Name the params that distinguish one instance from the next, and read a class body to find out. Full model in [the DSL reference](docs/dsl.md#identity).
@@ -62,6 +54,14 @@ Weft learns to say what a thing *is*: components name their own identity instead
   - Worth knowing: if the derivation that raised is the one your error rendering reads, it raises again. Derivations are lazy, so this only reaches a target whose job is to re-render the very thing that just failed to load
 
 - **A Broken Error Page Reports The Right Error** – When a page's recovery rendering itself raised, Weft reported *that* error and lost the one that actually broke the page — so a bug in your error page hid the bug you were looking for, and the failing page's own `recovers` chain was abandoned on the way. Page recoveries now stop where component recoveries always have: the second failure is logged, and what you're shown is the original.
+
+- **A Hand-Off's Default Reaches Everywhere Its Key Does** – `receives :page_num, default: 1` used to answer only where a call site had run. Weft composes a params bag in places where nothing has been built yet — the top of a request, an action callable, a stream frame — and there the fallback simply wasn't there, so the way to make one work in a `performs` block was to write the `1` a second time as a `defines`. Two copies of one fallback, free to drift. A default now answers wherever its key is read, because a fallback belongs to the class that declared it rather than to the door it sits beside.
+  - A hand-off with *no* default genuinely has nowhere to come from in those places, and reading one now raises **`Weft::UnreachableHandoff`** — naming the component, the key, and both ways out — instead of `undefined method 'order' for an instance of Weft::Params`, which named a class you never wrote
+  - `Weft::NotReceived` is unchanged and still means the neighbouring thing: a call site that *did* run and left the value out, where the fix is to pass it
+
+- **Declarations Stop Being Silently Ignored** – `receives :order, type: :uuid` used to be accepted and quietly dropped, because `receives` swallowed any keyword it didn't recognise. Unknown keywords now raise, as they always have on `param` and `derives`.
+
+- **Fallback Derivations Stop Nagging** – A component that declares `derives(:order)` *and* gets embedded under something that already supplies the order is doing the right thing: fetch your own when you're rendered standalone, take the ancestor's when you're nested. Weft used to log a warning every time the second half happened — warning about correct code, and suggesting a fix (share one derivation) that's wrong whenever the two deliberately differ, as when a page eager-loads what a card doesn't. It's gone. The overlay warning stays, because a verb block returning a key really does stop your derivation running for that whole request.
 
 ### Breaking Changes:
 
