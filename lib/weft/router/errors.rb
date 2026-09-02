@@ -60,15 +60,36 @@ module Weft
         return htmx_redirect_to_error_page(error) if d1_applies?(entry, error)
 
         target = root.resolve_recovery_target(entry)
-        block_delta = invoke_recovery_block(entry, originating_params || Weft::Params.new({}), error)
+        # One lineage for both halves: the block reads this bag, and the render
+        # below inherits it with the block's return riding over it as an
+        # overlay. An empty delta leaves the two identical; a non-empty one is
+        # what the block is for. An absent originating bag is an empty one
+        # rather than nil, so the inheritance is unconditional.
+        state = originating_params || Weft::Params.new({})
+        block_delta = invoke_recovery_block(entry, state, error)
 
+        dispatch_page_target(target, block_delta, error, entry,
+                             universe: originating_wire, branch_bag: state)
+      end
+
+      # The recovery render is caught here, where the failing page's state is
+      # still in scope. Letting it unwind reaches the Sinatra-level handler,
+      # which re-enters this method holding neither a bag nor the originating
+      # class — and reports the RECOVERY's error, hiding the one that broke
+      # the page. Mirrors render_error: log the second failure, surface the
+      # first, and stop rather than recurse.
+      def dispatch_page_target(target, block_delta, error, entry, universe:, branch_bag:)
         if page_target?(target)
-          dispatch_page_recovery(target, block_delta, error, entry, universe: originating_wire)
+          dispatch_page_recovery(target, block_delta, error, entry,
+                                 universe: universe, branch_bag: branch_bag)
         else
           render_recovery_component(target, block_delta, error,
                                     component_ctx: { status: recovery_status(error, entry) },
-                                    universe: originating_wire)
+                                    universe: universe, branch_bag: branch_bag)
         end
+      rescue StandardError => e
+        Weft.logger.error("Page recovery render failed: #{e.class}: #{e.message}")
+        page_safety_net(error)
       end
 
       # Render or redirect for a Page recovery target. htmx requests get the
@@ -76,25 +97,31 @@ module Weft
       # document. Status comes from the exception, or the entry's override.
       # The page renders against the request's universe; the recovery values
       # ride as overlays (one universe per request).
-      def dispatch_page_recovery(page_class, block_delta, error, entry = nil, universe: nil)
+      def dispatch_page_recovery(page_class, block_delta, error, entry = nil, universe: nil, branch_bag: nil)
         wire_status = recovery_status(error, entry)
         overlays = block_delta.merge(auto_param_overlay(error, { status: wire_status }))
         status wire_status
         wire = universe || filtered_params
-        htmx_request? ? page_body_html(page_class, wire, overlays) : render_full_page(page_class, wire, overlays)
+        if htmx_request?
+          page_body_html(page_class, wire, overlays, branch_bag)
+        else
+          render_full_page(page_class, wire, overlays, branch_bag)
+        end
       end
 
-      def render_full_page(page_class, wire_params, overlays)
+      def render_full_page(page_class, wire_params, overlays, branch_bag = nil)
         klass = page_class
-        Weft::Context.new({}, nil, wire_params: wire_params, overlays: overlays) { insert_tag(klass) }.to_s
+        Weft::Context.new({}, nil, wire_params: wire_params, overlays: overlays,
+                                   branch_bag: branch_bag) { insert_tag(klass) }.to_s
       end
 
       # Extract the rendered HTML inside a Page's <body>. For htmx fragment
       # responses to full-document failures — the surrounding doc shell is
       # already on the client; only the body content should swap.
-      def page_body_html(page_class, wire_params, overlays)
+      def page_body_html(page_class, wire_params, overlays, branch_bag = nil)
         klass = page_class
-        ctx = Weft::Context.new({}, nil, wire_params: wire_params, overlays: overlays) { insert_tag(klass) }
+        ctx = Weft::Context.new({}, nil, wire_params: wire_params, overlays: overlays,
+                                         branch_bag: branch_bag) { insert_tag(klass) }
         page_instance = ctx.children.first
         body_el = page_instance.children.find { |c| c.respond_to?(:tag_name) && c.tag_name == "body" }
         body_el ? body_el.children.join : page_instance.to_s
@@ -185,7 +212,7 @@ module Weft
         if page_target?(target)
           redirect_to_recovery_page(target, wire.merge(block_result), error, component_ctx)
         else
-          render_recovery_component(target, block_result, error, component_ctx: component_ctx)
+          render_recovery_component(target, block_result, error, component_ctx: component_ctx, branch_bag: state)
         end
       end
 
@@ -320,22 +347,25 @@ module Weft
           status: recovery_status(error, entry)
         }
         overlays = block_delta.merge(auto_param_overlay(error, component_ctx))
-        build_component_with_wire(target, filtered_params, overlays: overlays).content
+        build_component_with_wire(target, filtered_params, overlays: overlays, branch_bag: state).content
       end
 
       # The target resolves its own schema from the request's universe; the
       # recovery values — block delta plus the auto-injected params — ride
       # as overlays, reaching any depth of the recovery render.
       #
-      # It inherits no lineage, which keeps the failing class's derivations
-      # from crossing into it. Its *defaults* were never at risk either way:
-      # a default belongs to whoever declared it and never rides a branch.
-      # Note the asymmetry this leaves — the recovery *block* is handed the
-      # failing bag while the render below is not.
-      def render_recovery_component(target, block_delta, error, component_ctx:, universe: nil)
+      # It inherits the same lineage the recovery block read, with that block's
+      # return riding over it as an overlay — so the two cannot disagree about
+      # anything the block did not deliberately change. A key the exchange
+      # already worked out is inherited rather than derived a second time. A
+      # target wanting its own value regardless declares that derivation under
+      # a key of its own — inheriting outranks deriving, as it does for a
+      # nested child.
+      def render_recovery_component(target, block_delta, error, component_ctx:, universe: nil, branch_bag: nil)
         overlays = block_delta.merge(auto_param_overlay(error, component_ctx))
         status component_ctx.fetch(:status) { recovery_status(error) }
-        component = build_component_with_wire(target, universe || filtered_params, overlays: overlays)
+        component = build_component_with_wire(target, universe || filtered_params,
+                                              overlays: overlays, branch_bag: branch_bag)
         claim_dom_id(component, component_ctx[:originating_id]).to_s
       end
 
