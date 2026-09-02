@@ -597,6 +597,37 @@ RSpec.describe Weft::Router do
       expect(seen).to eq(["from-callable"])
     end
 
+    # The two specs above cover the block. This is the render below it: the
+    # component standing in for the failure resolves against the same state,
+    # so a value the request already worked out is inherited rather than
+    # recomputed — and cannot disagree with what the block was shown.
+    it "renders the recovery target against that same state" do # rubocop:disable RSpec/ExampleLength
+      target = Class.new(Weft::Component) do
+        def self.name = "RecoveredOrderCard"
+        derives(:order) { |_p| "FRESH" }
+
+        def build(attributes = {})
+          super
+          span "order=#{params.order}"
+        end
+      end
+      Class.new(Weft::Component) do
+        def self.name = "InheritingFailurePanel"
+        param :order_id, type: :string
+        derives(:order) { |p| "ORDER(#{p.order_id})" }
+        recovers(from: StandardError, with: target)
+
+        def build(attributes = {})
+          super
+          raise "build boom"
+        end
+      end
+
+      get "/_components/inheriting_failure_panel", order_id: "o-8"
+
+      expect(last_response.body).to include("order=ORDER(o-8)")
+    end
+
     it "walks the rendering component's chain when a transfer's build fails" do # rubocop:disable RSpec/ExampleLength
       recovery = Class.new(Weft::Component) do
         def self.name = "TargetsOwnRecovery"
@@ -1268,6 +1299,37 @@ RSpec.describe Weft::Router do
       expect(out[0]).to include("temporarily unavailable")
       expect(out[0]).not_to include("stream-notice-card") # like-for-like: no recovery wrapper
       expect(out[1]).to eq("event: weft:close\ndata: \n\n") # bare data line so EventSource dispatches
+    end
+
+    # The frame's recovery block already reads the state the failed push
+    # composed; the fragment shipped in that frame reads the same one.
+    it "renders a push recovery against the state the failed push composed" do # rubocop:disable RSpec/ExampleLength
+      notice = Class.new(Weft::Component) do
+        def self.name = "PushLineageNotice"
+        derives(:signal) { |_p| "notice-side" }
+
+        def build(attributes = {})
+          super
+          span "signal=#{params.signal}"
+        end
+      end
+      component_class = Class.new(Weft::Component) do
+        def self.name = "PushLineageCard"
+        pushes every: 5, attempts: 1
+        derives(:signal) { |_p| "card-side" }
+
+        def build(attributes = {})
+          super
+          raise "boom"
+        end
+      end
+      component_class.recovers(from: StandardError, with: notice)
+      out = frame_sink
+      allow(router).to receive(:stream).and_yield(out)
+
+      router.send(:stream_component, component_class)
+
+      expect(out[0]).to include("signal=card-side")
     end
 
     it "closes after the declared attempts budget of consecutive failures, and says so in the log" do
@@ -2055,6 +2117,80 @@ RSpec.describe Weft::Router do
       post "/_components/addressed_origin/hand_off", order_id: "o-4"
 
       expect(last_response.body).to include('id="addressed-echo-declarer"')
+    end
+
+    # The recovery block already reads the state the failure happened in. The
+    # component rendering below it must read the same one — a fragment showing
+    # the block's value beside a freshly re-derived one is two pictures of a
+    # single request.
+    it "renders a failed companion's recovery against the state its own block read" do # rubocop:disable RSpec/ExampleLength
+      report = Class.new(Weft::Component) do
+        def self.name = "LineageReport"
+        param :note
+        derives(:cargo) { |_p| "report-side" }
+
+        def build(attributes = {})
+          super
+          span "note=#{params.note}|cargo=#{params.cargo}"
+        end
+      end
+      fragile = Class.new(Weft::Component) do
+        def self.name = "LineageEcho"
+        recovers(from: StandardError, with: report) { |params, _e| { note: params.cargo } }
+
+        def build(attributes = {})
+          super
+          raise "companion exploded"
+        end
+      end
+      host = Class.new(Weft::Component) do
+        def self.name = "LineageHost"
+        param :order_id
+        derives(:cargo) { |_p| "host-side" }
+        performs(:advance) { nil }
+      end
+      host.brings(fragile, on: :advance)
+
+      post "/_components/lineage_host/advance", order_id: "h-1"
+
+      expect(last_response.body).to include("note=host-side|cargo=host-side")
+    end
+
+    # Two lineages are in scope where a companion recovers: the host's bag
+    # (what the companion branched) and the companion's own (what it resolved
+    # from that). The block gets the latter, so the render must too — pinned
+    # with a key only the companion declares, which is the one case where the
+    # two answer differently.
+    it "gives that recovery the failed companion's own bag, not the host's" do # rubocop:disable RSpec/ExampleLength
+      report = Class.new(Weft::Component) do
+        def self.name = "CrateReport"
+        derives(:crate) { |_p| "report-side" }
+
+        def build(attributes = {})
+          super
+          span "crate=#{params.crate}"
+        end
+      end
+      fragile = Class.new(Weft::Component) do
+        def self.name = "CrateEcho"
+        derives(:crate) { |_p| "companion-side" }
+        recovers(from: StandardError, with: report)
+
+        def build(attributes = {})
+          super
+          raise "companion exploded"
+        end
+      end
+      host = Class.new(Weft::Component) do
+        def self.name = "CrateHost"
+        param :order_id
+        performs(:advance) { nil }
+      end
+      host.brings(fragile, on: :advance)
+
+      post "/_components/crate_host/advance", order_id: "h-2"
+
+      expect(last_response.body).to include("crate=companion-side")
     end
 
     # The delta decides where the companion was headed, so it has to decide
@@ -3066,6 +3202,102 @@ RSpec.describe Weft::Router do
       # order_id belongs to the originating page's schema, not the recovery
       # page's — it must not land on the <html> element.
       expect(last_response.body).not_to include("order_id=")
+    end
+  end
+
+  # The page half of the same claim the component paths make: whatever stands
+  # in for a failed page resolves against the state that page had composed,
+  # rather than working it out again from the wire.
+  describe "page recovery renders against the failing page's state" do
+    def failing_page(name, path, target)
+      Class.new(Weft::Page) do
+        define_singleton_method(:name) { name }
+        self.page_path = path
+        param :order_id
+        derives(:banner) { |p| "failing-#{p.order_id}" }
+        recovers(from: StandardError, with: target)
+
+        def build(attributes = {})
+          super
+          raise "page boom"
+        end
+      end
+    end
+
+    def recovery_page(name, path)
+      Class.new(Weft::Page) do
+        define_singleton_method(:name) { name }
+        self.page_path = path
+        derives(:banner) { |_p| "recovery-side" }
+
+        def build(attributes = {})
+          super
+          div { text_node "banner=#{params.banner}" }
+        end
+      end
+    end
+
+    it "gives a full-document recovery page the state the failing page composed" do
+      failing_page("DocLineageFailingPage", "/doc-lineage-failing/:order_id",
+                   recovery_page("DocLineageRecoveryPage", "/doc-lineage-recovery"))
+
+      get "/doc-lineage-failing/77"
+
+      expect(last_response.body).to include("banner=failing-77")
+    end
+
+    it "gives an htmx body-fragment recovery page that same state" do
+      failing_page("FragLineageFailingPage", "/frag-lineage-failing/:order_id",
+                   recovery_page("FragLineageRecoveryPage", "/frag-lineage-recovery"))
+
+      get "/frag-lineage-failing/88", {}, { "HTTP_HX_REQUEST" => "true" }
+
+      expect(last_response.body).to include("banner=failing-88")
+    end
+
+    it "gives a component recovery target on a page chain that same state" do
+      target = Class.new(Weft::Component) do
+        def self.name = "PageChainNoticeCard"
+        derives(:banner) { |_p| "recovery-side" }
+
+        def build(attributes = {})
+          super
+          span "banner=#{params.banner}"
+        end
+      end
+      failing_page("CompLineageFailingPage", "/comp-lineage-failing/:order_id", target)
+
+      get "/comp-lineage-failing/99"
+
+      expect(last_response.body).to include("banner=failing-99")
+    end
+
+    # Same claim, one level up. A recovery render that raises must be caught
+    # where the failing page's state is still in scope — unwinding past it
+    # reaches a handler holding no bag and no originating class, which is how
+    # the state gets lost rather than merely unused. The component path has
+    # caught locally all along; this is the page path catching up, and it
+    # reports the ORIGINAL error, as that one does.
+    it "catches a raising page recovery locally and reports the original error" do
+      allow(Weft.logger).to receive(:error)
+      exploding = Class.new(Weft::Page) do
+        def self.name = "ExplodingRecoveryPage"
+        self.page_path = "/exploding-recovery"
+
+        def build(attributes = {})
+          super
+          raise "recovery page boom"
+        end
+      end
+      failing_page("SafetyNetFailingPage", "/safety-net-failing/:order_id", exploding)
+
+      get "/safety-net-failing/5"
+
+      # Spelled with the class prefix: "page boom" alone is a substring of
+      # "recovery page boom" and would pass on the very body it must reject.
+      expect(last_response.body).to include("RuntimeError: page boom")
+      expect(last_response.body).not_to include("recovery page boom")
+      expect(Weft.logger).to have_received(:error).with(/Page recovery render failed/)
     end
   end
 

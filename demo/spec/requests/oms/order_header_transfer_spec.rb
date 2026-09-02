@@ -85,6 +85,16 @@ RSpec.describe "Order header edit round trip", type: :request do
     it "keeps what the user typed rather than reverting the field" do
       expect(response.body).to include('value="   "')
     end
+
+    # The leg every other one here already pins, on the path that used to be
+    # the exception. The editor re-renders as its own recovery target and
+    # shows the order's status badge, so it genuinely needs the record — and
+    # gets the one the failed callable already loaded rather than fetching it
+    # again to report that the save failed.
+    it "loads the order once for the failed save and the re-render together" do
+      selects = count_selects("oms_orders") { response }
+      expect(selects).to eq(1)
+    end
   end
 
   describe "POST the cancel transfer" do

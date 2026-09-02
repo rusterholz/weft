@@ -9,6 +9,13 @@ module Weft
   # declared param names win, then the underlying Hash API is available
   # for any name not declared as a param.
   #
+  # One exception, and it is a defect rather than a rule: a name this class
+  # defines as a real method (`overlay`, `branch_data`, `to_h`, `key?`)
+  # never reaches method_missing, so declaring it as a param shadows the
+  # declaration instead of winning. The internal two are the ones that
+  # matter — they have no business occupying the adopter's namespace, and
+  # are slated to become operators, which cannot collide.
+  #
   # Entries may be lazy: a `derives` declaration registers a Thunk that runs
   # (at most once per bag) when its key is first read, and never runs if the
   # key goes unread. `to_h` and delegated Hash-API calls materialize every

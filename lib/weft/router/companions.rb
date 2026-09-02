@@ -117,6 +117,11 @@ module Weft
       # The recovery renders without the slot register: it inherits the failed
       # companion's claim rather than competing with it, since a build that
       # raised after claiming its slot still holds one.
+      #
+      # Two lineages are in scope here and the choice is load-bearing: the
+      # target branches the failed companion's OWN bag, not the host's that
+      # the companion branched. That is the lineage the recovery block read,
+      # and the block's return rides over it as an overlay.
       def recovered_companion(companion, env, overlays, error)
         klass = companion[:component_class]
         log_companion_failure(companion, error)
@@ -124,10 +129,10 @@ module Weft
         return nil unless entry
 
         dom_id = failed_companion_dom_id(klass, env, overlays)
-        recovery_overlays = companion_recovery_overlays(klass, companion_state(klass, env, overlays),
-                                                        entry, error, dom_id)
-        component = build_component_with_wire(klass.resolve_recovery_target(entry),
-                                              companion_universe(env), overlays: recovery_overlays)
+        state = companion_state(klass, env, overlays)
+        recovery_overlays = companion_recovery_overlays(klass, state, entry, error, dom_id)
+        component = build_component_with_wire(klass.resolve_recovery_target(entry), companion_universe(env),
+                                              overlays: recovery_overlays, branch_bag: state)
         as_companion(claim_dom_id(component, dom_id))
       rescue StandardError => e
         Weft.logger.error("Companion recovery render failed: #{e.class}: #{e.message}")
