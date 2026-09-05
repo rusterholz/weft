@@ -310,13 +310,7 @@ module Weft
       # built anywhere else has no hand-off door at all, and a declared
       # `receives` reports as unsatisfied rather than going unchecked.
       def assembled_params
-        resolve_bag(received: staged_hand_offs)
-      end
-
-      def staged_hand_offs
-        return {} unless arbre_context.respond_to?(:take_received!)
-
-        arbre_context.take_received!(self.class) || {}
+        resolve_bag(received: arbre_context.take_received!(self.class) || {})
       end
 
       # Uses the Assembly object rather than `.call` because construction needs
@@ -364,7 +358,7 @@ module Weft
       end
 
       def context_overlays
-        arbre_context.respond_to?(:overlays) ? arbre_context.overlays : {}
+        arbre_context.overlays
       end
 
       # Checks required_hand_off? before reading the key: a required hand-off
@@ -377,7 +371,7 @@ module Weft
       end
 
       def wire_source
-        arbre_context.respond_to?(:wire_params) ? arbre_context.wire_params : {}
+        arbre_context.wire_params
       end
 
       # Branch a copy of the nearest tree-ancestor's bag — the in-page
@@ -396,7 +390,7 @@ module Weft
 
           el = el.parent
         end
-        arbre_context.respond_to?(:branch_bag) ? arbre_context.branch_bag : nil
+        arbre_context.branch_bag
       end
 
       # A hand-off is required when `receives` is its only door and no

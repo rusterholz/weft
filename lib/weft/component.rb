@@ -244,11 +244,9 @@ module Weft
     end
 
     # Records this id against the render, answering whether it was already
-    # spoken for. A context with no register has nothing to compare against,
-    # so there is nothing to report.
+    # spoken for.
     def claimed_dom_id_twice?
       return false if self.class.anonymous? || id.nil?
-      return false unless arbre_context.respond_to?(:dom_ids_seen)
 
       register = arbre_context.dom_ids_seen
       return true if register.key?(id)
@@ -260,7 +258,7 @@ module Weft
     def claim_dom_slot!
       return if self.class.anonymous?
 
-      slots = arbre_context.respond_to?(:slots) && arbre_context.slots
+      slots = arbre_context.slots
       return unless slots && parent.equal?(arbre_context)
       return if slots.add?(id)
 
