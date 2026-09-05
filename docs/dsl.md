@@ -142,7 +142,7 @@ Declaring a param has a routing consequence: a component with params (or any ver
 derives(:order) { |params| Oms::Order.find(params.order_id) }
 ```
 
-A derivation is a value the component computes for itself — the replacement for the find-by-id dance at the top of every `build`. Declaring one registers the block; it runs **at most once per render**, when `params.order` is first read, and **never runs if nothing reads it**. The result is memoized for the rest of that render.
+A derivation is a value the component computes for itself — the replacement for the find-by-id dance at the top of every `build`. Declaring one registers the block; it runs **at most once per request**, when `params.order` is first read, and **never runs if nothing reads it**. The outcome settles there and then: whatever the block returned is the answer everywhere that derivation reaches, for the rest of the request.
 
 Derivations chain lazily. A block that reads another derived key forces it on demand:
 
@@ -155,7 +155,24 @@ Reading `params.shipments` forces `shipments`, which reads `params.order` and fo
 
 **The block is a `(params) -> value` pure function.** It runs against a sandboxed `self`: `params` and lexical constants are in reach, and `Kernel` stays available (`raise`, `format`, `Integer()`), but nothing component-specific is — a bare method call raises `NameError`, which keeps a derivation portable and side-effect-free. Each block runs in its own fresh, disposable context, so scratch instance variables are allowed but never outlive the one execution. If the derivation belongs to a service, call it explicitly: `derives(:report) { |p| ReportService.call(p.account_id) }`.
 
-A failing derivation raises at *first read* — which lands inside the `recovers`-wrapped render, so `recovers from: ActiveRecord::RecordNotFound` and friends handle it the same way they handle a failure in `build`. A derivation nobody reads never raises. (Failures aren't memoized: like an RSpec `let`, a re-read runs the block again.)
+A failing derivation raises at *first read* — which lands inside the `recovers`-wrapped render, so `recovers from: ActiveRecord::RecordNotFound` and friends handle it the same way they handle a failure in `build`. A derivation nobody reads never raises. A failure settles like any other outcome: the same exception is raised again on every later read, and the block does not run a second time. A lookup that can fail costs you one attempt, not one per reader.
+
+#### Whose value is it?
+
+By default a derivation belongs to the class that declares it. Compute it once, and everything rendered inside that component sees that value — including a component that declares the same key for itself. That's the fallback idiom: declare `derives(:order)` so you work when rendered standalone, and inherit the richer value when you're nested inside something that already has one.
+
+Two keywords change that, and both are opt-in:
+
+```ruby
+derives(:label, contextual: true) { |p| "#{p.count} of #{p.total}" }
+derives(:user, override: true)    { |p| Customer.find(p.customer_id) }
+```
+
+**`contextual: true`** makes the value a function of *where it is read* rather than something the declaring class owns. Every component inheriting it computes its own, so a derivation that reads a key its readers differ on gives each of them the right answer. The cost is real: it runs once per reader, **even when nothing it reads has changed**. Keep contextual derivations cheap and pure — nothing expensive, nothing that can disagree with itself between runs, nothing with side effects.
+
+**`override: true`** claims the key for this component and everything it contains, against an ancestor that also supplies it. It's how you say "inside here, `:user` means the customer being viewed, not the person viewing" — computed once, seen throughout that subtree, and invisible outside it. It lifts the derivation above the *inherited* value only: a wire value still wins, and so does a key returned by a verb block.
+
+`contextual` implies `override` — a contextual derivation that deferred to an ancestor could never run at all — so `contextual: true, override: false` is refused rather than silently ignored.
 
 `params.to_h` and any delegated Hash-API call materialize every remaining derivation first — the eager escape hatch when you genuinely want the whole bag.
 

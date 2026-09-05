@@ -263,7 +263,7 @@ RSpec.describe Weft::Params::Assembly do
       expect(runs).to eq(1)
     end
 
-    it "works in a plain Arbre::Context (registration is receiver-side)" do
+    it "works with no wire source at all (registration is receiver-side)" do
       klass = Class.new(Weft::Component) do
         def self.name = "PlainDerives"
         derives(:greeting) { |_p| "hello" }
@@ -274,7 +274,7 @@ RSpec.describe Weft::Params::Assembly do
         end
       end
 
-      expect(Arbre::Context.new { insert_tag(klass) }.to_s).to include("hello")
+      expect(Weft::Context.new { insert_tag(klass) }.to_s).to include("hello")
     end
 
     it "does not force derivations for serialization surfaces" do
@@ -508,7 +508,7 @@ RSpec.describe Weft::Params::Assembly do
     end
   end
 
-  describe "derives across the inheritance axis (copy-on-branch memo)" do
+  describe "derives across the inheritance axis (whose value a derivation is)" do
     def embed_pair(parent_class, *child_classes)
       parent_class.define_method(:build) do |attributes = {}|
         super(attributes)
@@ -547,20 +547,171 @@ RSpec.describe Weft::Params::Assembly do
       expect(runs).to eq(0)
     end
 
-    it "re-derives per branch when siblings force an inherited thunk independently" do
+    # Was: "re-derives per branch when siblings force an inherited thunk
+    # independently", asserting two runs. It protected the copy-on-branch memo
+    # — a forced value belonged to the forcing bag alone. That is the behavior
+    # this mission removes, and the spec never checked what the siblings
+    # actually saw, only how often the block ran. Both are asserted now: the
+    # declaration is the parent's, so its value is the parent's, once.
+    it "derives once for the whole tree when siblings share an inherited thunk" do # rubocop:disable RSpec/ExampleLength
       runs = 0
-      parent_class = Class.new(Weft::Component) { def self.name = "SharedThunkParent" }
-      parent_class.derives(:order) { |_p| runs += 1 }
+      seen = []
+      parent_class = Class.new(Weft::Component) do
+        def self.name = "SharedThunkParent"
+        param :side, default: "parent"
+      end
+      parent_class.derives(:order) { |p| runs += 1 and "order-for-#{p.side}" }
       # params resolve at construction, so a reader needn't even call super
-      reader = proc { |_attributes = {}| params.order }
-      first_child = Class.new(Weft::Component) { def self.name = "GreedySiblingA" }
+      reader = proc { |_attributes = {}| seen << params.order }
+      first_child = Class.new(Weft::Component) do
+        def self.name = "GreedySiblingA"
+        param :side, default: "a"
+      end
       first_child.define_method(:build, &reader)
-      second_child = Class.new(Weft::Component) { def self.name = "GreedySiblingB" }
+      second_child = Class.new(Weft::Component) do
+        def self.name = "GreedySiblingB"
+        param :side, default: "b"
+      end
       second_child.define_method(:build, &reader)
 
       embed_pair(parent_class, first_child, second_child).to_s
 
+      expect(runs).to eq(1)
+      expect(seen).to eq(%w[order-for-parent order-for-parent])
+    end
+
+    # The opt-out: a derivation that is a function of where it is read rather
+    # than a value the declarer owns. Each branch gets an unforced copy, so the
+    # block answers for the bag reading it.
+    it "re-derives per branch for a contextual declaration" do # rubocop:disable RSpec/ExampleLength
+      runs = 0
+      seen = []
+      parent_class = Class.new(Weft::Component) do
+        def self.name = "ContextualParent"
+        param :side, default: "parent"
+      end
+      parent_class.derives(:label, contextual: true) { |p| runs += 1 and "label-for-#{p.side}" }
+      reader = proc { |_attributes = {}| seen << params.label }
+      left = Class.new(Weft::Component) do
+        def self.name = "ContextualLeft"
+        param :side, default: "left"
+      end
+      left.define_method(:build, &reader)
+      right = Class.new(Weft::Component) do
+        def self.name = "ContextualRight"
+        param :side, default: "right"
+      end
+      right.define_method(:build, &reader)
+
+      embed_pair(parent_class, left, right).to_s
+
+      expect(seen).to eq(%w[label-for-left label-for-right])
       expect(runs).to eq(2)
+    end
+
+    # Duplicating at force time would leave the old read-order dependence
+    # alive: a bag that forces first, and is branched from afterwards, would
+    # hand its memo down. A contextual memo must never cross a branch.
+    it "gives a branch its own copy even when the parent forced first" do # rubocop:disable RSpec/ExampleLength
+      seen = []
+      parent_class = Class.new(Weft::Component) do
+        def self.name = "EagerContextualParent"
+        param :side, default: "parent"
+      end
+      parent_class.derives(:label, contextual: true) { |p| "label-for-#{p.side}" }
+      child_class = Class.new(Weft::Component) do
+        def self.name = "EagerContextualChild"
+        param :side, default: "child"
+      end
+      child_class.define_method(:build) { |_attributes = {}| seen << params.label }
+      parent_class.define_method(:build) do |_attributes = {}|
+        seen << params.label
+        insert_tag(child_class)
+      end
+
+      Weft::Context.new { insert_tag(parent_class) }.to_s
+
+      expect(seen).to eq(%w[label-for-parent label-for-child])
+    end
+
+    # Re-rooting a key for a subtree: still computed once, but the value inside
+    # this component is its own rather than the one it would have inherited.
+    # Not expressible without `override:` — a plain redeclaration is a fallback.
+    it "lets an overriding declaration claim the key for its own subtree" do
+      seen = []
+      grandchild = Class.new(Weft::Component) { def self.name = "RerootGrandchild" }
+      grandchild.define_method(:build) { |_attributes = {}| seen << params.who }
+      child_class = Class.new(Weft::Component) { def self.name = "RerootChild" }
+      child_class.derives(:who, override: true) { |_p| "child" }
+      child_class.define_method(:build) do |_attributes = {}|
+        seen << params.who
+        insert_tag(grandchild)
+      end
+      parent_class = Class.new(Weft::Component) { def self.name = "RerootParent" }
+      parent_class.derives(:who) { |_p| "parent" }
+      outsider = Class.new(Weft::Component) { def self.name = "RerootOutsider" }
+      outsider.define_method(:build) { |_attributes = {}| seen << params.who }
+
+      embed_pair(parent_class, child_class, outsider).to_s
+
+      # The override reaches everything the child contains, and nothing else.
+      expect(seen).to eq(%w[child child parent])
+    end
+
+    # The implication doing its work: a contextual declaration on a DESCENDANT
+    # of a class that already supplies the key. If it yielded like a plain
+    # redeclaration it could never run, and the adopter's `contextual: true`
+    # would be a silent no-op.
+    it "lets a descendant's contextual declaration claim a key an ancestor supplies" do
+      seen = []
+      child_class = Class.new(Weft::Component) do
+        def self.name = "ContextualClaimChild"
+        param :side, default: "child"
+      end
+      child_class.derives(:label, contextual: true) { |p| "label-for-#{p.side}" }
+      child_class.define_method(:build) { |_attributes = {}| seen << params.label }
+      parent_class = Class.new(Weft::Component) do
+        def self.name = "ContextualClaimParent"
+        param :side, default: "parent"
+      end
+      parent_class.derives(:label) { |p| "ancestor-#{p.side}" }
+
+      embed_pair(parent_class, child_class).to_s
+
+      expect(seen).to eq(["label-for-child"])
+    end
+
+    it "leaves a plain redeclaration as a fallback, shadowed when nested" do
+      seen = []
+      child_class = Class.new(Weft::Component) { def self.name = "FallbackChild" }
+      child_class.derives(:who) { |_p| "child" }
+      child_class.define_method(:build) { |_attributes = {}| seen << params.who }
+      parent_class = Class.new(Weft::Component) { def self.name = "FallbackParent" }
+      parent_class.derives(:who) { |_p| "parent" }
+
+      embed_pair(parent_class, child_class).to_s
+
+      expect(seen).to eq(["parent"])
+    end
+
+    # `override` lifts a derivation above the inherited value and no further:
+    # a request's own value for a declared key still wins, as it must.
+    it "does not lift an overriding derivation above the wire" do
+      seen = []
+      child_class = Class.new(Weft::Component) do
+        def self.name = "WireBeatsOverrideChild"
+        param :who
+      end
+      child_class.derives(:who, override: true) { |_p| "derived" }
+      child_class.define_method(:build) { |_attributes = {}| seen << params.who }
+      parent_class = Class.new(Weft::Component) { def self.name = "WireBeatsOverrideParent" }
+
+      parent_class.define_method(:build) do |_attributes = {}|
+        insert_tag(child_class)
+      end
+      Weft::Context.new({}, nil, wire_params: { "who" => "from-wire" }) { insert_tag(parent_class) }.to_s
+
+      expect(seen).to eq(["from-wire"])
     end
 
     it "lets an inherited unforced thunk beat the child's own default (it occupies the key)" do
@@ -854,103 +1005,6 @@ RSpec.describe Weft::Params::Assembly do
       end
 
       expect(child_component.params[:label]).to eq("from-tree")
-    end
-  end
-
-  describe "receives in a plain Arbre::Context" do
-    let(:order) { Struct.new(:id, :name).new(11, "Drum of cable") }
-
-    it "extracts handed kwargs at build-top — params, never chrome" do
-      klass = Class.new(Weft::Component) do
-        def self.name = "PlainSlip"
-        receives :order
-
-        def build(attributes = {})
-          super
-          span params.order.name
-        end
-      end
-      handed = order
-      ctx = Arbre::Context.new { insert_tag(klass, order: handed) }
-      component = ctx.children.first
-
-      expect(component.params.order).to be(handed)
-      expect(component.attributes).not_to have_key(:order)
-      expect(ctx.to_s).to include("Drum of cable")
-    end
-
-    it "still raises NotReceived for a required hand-off nobody supplied" do
-      klass = Class.new(Weft::Component) do
-        def self.name = "PlainStrictSlip"
-        receives :order
-      end
-
-      expect { Arbre::Context.new { insert_tag(klass) } }.
-        to raise_error(Weft::NotReceived, /PlainStrictSlip.*:order/)
-    end
-
-    it "lands a handed value over a dual derivation without forcing it" do
-      klass = Class.new(Weft::Component) do
-        def self.name = "PlainDualSlip"
-        receives :order
-        derives(:order) { |_p| raise "standalone-only derivation must not force" }
-
-        def build(attributes = {})
-          super
-          span params.order.name
-        end
-      end
-      handed = order
-      ctx = Arbre::Context.new { insert_tag(klass, order: handed) }
-
-      expect(ctx.to_s).to include("Drum of cable")
-    end
-
-    it "leaves unread lazy derivations unforced through the hand-off door" do
-      klass = Class.new(Weft::Component) do
-        def self.name = "PlainLazySlip"
-        receives :order
-        derives(:audit_trail) { |_p| raise "unread keys must stay lazy" }
-
-        def build(attributes = {})
-          super
-          span params.order.name
-        end
-      end
-      handed = order
-      ctx = Arbre::Context.new { insert_tag(klass, order: handed) }
-
-      expect(ctx.to_s).to include("Drum of cable")
-    end
-
-    it "applies declared defaults when nothing is handed" do
-      klass = Class.new(Weft::Component) do
-        def self.name = "PlainSoftSlip"
-        receives :page_num, default: 1
-      end
-      component = Arbre::Context.new { insert_tag(klass) }.children.first
-
-      expect(component.params.page_num).to eq(1)
-    end
-
-    it "resolves a handed value only at build-top: pre-super reads see the fallback tier" do
-      # The documented edge: staging happens at interception, which never
-      # runs in a plain context. Render receiving components under
-      # Weft::Context when a build body must read hand-offs before super.
-      reads = {}
-      klass = Class.new(Weft::Component) do
-        def self.name = "PlainEagerSlip"
-        receives :label, default: "unset"
-      end
-      klass.define_method(:build) do |attributes = {}|
-        reads[:before] = params.label
-        super(attributes)
-        reads[:after] = params.label
-      end
-
-      Arbre::Context.new { insert_tag(klass, label: "totals") }
-
-      expect(reads).to eq(before: "unset", after: "totals")
     end
   end
 end

@@ -17,9 +17,11 @@ module Weft
   # are slated to become operators, which cannot collide.
   #
   # Entries may be lazy: a `derives` declaration registers a Thunk that runs
-  # (at most once per bag) when its key is first read, and never runs if the
-  # key goes unread. `to_h` and delegated Hash-API calls materialize every
-  # remaining thunk first — the eager escape hatch.
+  # when its key is first read, and never runs if the key goes unread. The
+  # outcome settles on the Thunk rather than in the bag, so every bag holding
+  # that Thunk sees it — one derivation, one answer, per request. `to_h` and
+  # delegated Hash-API calls materialize every remaining thunk first — the
+  # eager escape hatch.
   #
   # Action callables receive a ready-made instance (the sole argument to a
   # +performs+/+transfers+ block); you don't construct these yourself:
@@ -31,14 +33,84 @@ module Weft
   #   params.to_h     # => the underlying hash (explicit escape hatch; materializes)
   class Params
     # @api private
-    # A registered-not-yet-run derivation. Immutable, so branch copies may
-    # share it: forcing replaces the entry in the forcing bag only, which is
-    # what gives copy-on-branch memoization its semantics.
+    # A registered-not-yet-run derivation, and the memo of how it turned out.
+    # The outcome settles exactly once: a result is remembered as {#value}, a
+    # failure as {#error} and re-raised from every later read. Nothing is ever
+    # reattempted, so a derivation cannot answer two different ways within one
+    # request — which is the point, since a block may query, and a second query
+    # can disagree with the first.
+    #
+    # Because the memo lives here rather than in the forcing bag, branches that
+    # share a Thunk share its outcome. Branches that must NOT share one are
+    # given an unforced copy at branch time; see {Assembly}.
     class Thunk
+      # Distinguishes "resolved to nothing" from "not yet run". A derivation
+      # may legitimately produce nil or false, so neither can stand for absence.
+      UNSET = Object.new.freeze
+      private_constant :UNSET
+
+      # Failures worth remembering. StandardError is the ordinary case;
+      # ScriptError is here because an outcome that escapes unrecorded gets
+      # RE-RUN on the next read — a failed autoload or an abstract method would
+      # otherwise reintroduce double execution by the least-expected door.
+      # Signals, Interrupt, SystemExit and NoMemoryError deliberately pass
+      # through: the host is going down, and that is not a derivation result.
+      RECOVERABLE_ERRORS = [StandardError, ScriptError].freeze
+      private_constant :RECOVERABLE_ERRORS
+
       attr_reader :block
 
-      def initialize(block)
+      # The bag this derivation belongs to — the one its declaring component
+      # resolved at construction, which is what its `build` reads. Set once, by
+      # the Assembly that introduced the thunk; an inherited thunk keeps the
+      # home it was given, which is what makes a shared derivation answer with
+      # the declarer's value rather than the first reader's.
+      #
+      # Deliberately not the reading bag: a declaring component with two
+      # companions whose blocks return different deltas could only see one of
+      # them, leaving the other's universe inconsistent and the winner decided
+      # by render order. Seeing neither is the only symmetric answer.
+      attr_accessor :home
+
+      def initialize(block, contextual: false)
         @block = block
+        @contextual = contextual
+        @home = nil
+        @value = UNSET
+        @error = UNSET
+      end
+
+      # Whether this derivation belongs to the bag reading it rather than to
+      # the one that declared it. A contextual thunk is copied into each branch
+      # that inherits it, so no two branches share an outcome.
+      def contextual? = @contextual
+
+      # A fresh, unforced twin for a branch to own.
+      def unforced_copy = self.class.new(@block, contextual: @contextual)
+
+      # The exception this derivation raised, or nil if it hasn't failed.
+      def error = @error.equal?(UNSET) ? nil : @error
+
+      # Whether the outcome has settled, either way.
+      def forced? = !@value.equal?(UNSET) || !@error.equal?(UNSET)
+
+      # The derivation's result, running the block once if it hasn't run.
+      # It runs against {#home} when there is one; +reading_bag+ covers a thunk
+      # assembled by nobody, which only a hand-built bag produces.
+      def value(reading_bag = nil)
+        raise @error unless @error.equal?(UNSET)
+        return @value unless @value.equal?(UNSET)
+
+        force(@home || reading_bag)
+      end
+
+      private
+
+      def force(reading_bag)
+        @value = Weft::DSL::Sandbox.run(reading_bag, &@block)
+      rescue *RECOVERABLE_ERRORS => e
+        @error = e
+        raise
       end
     end
 
@@ -60,11 +132,13 @@ module Weft
     end
 
     # @api private
-    # A branchable snapshot for the inheritance axis: forced values and
-    # still-lazy thunks both ride (thunks are shared objects — forcing
-    # happens per bag, which is what makes the memo copy-on-branch); nils
-    # don't ride (nil means "nobody had it" and must not shadow a
-    # descendant's own defaults).
+    # A branchable snapshot for the inheritance axis. A thunk rides as itself,
+    # carrying whatever outcome it has settled on, so a descendant inherits the
+    # derivation rather than repeating it — including when that outcome was
+    # nil, which is an answer rather than an absence.
+    #
+    # Plain nils still don't ride: there, nil means "no source had this key"
+    # and must not shadow a descendant's own defaults.
     def branch_data
       @data.compact
     end
@@ -72,8 +146,9 @@ module Weft
     # @api private
     # A same-bag copy with +values+ overlaid at their keys. Unlike
     # to_h-then-merge, nothing materializes: untouched thunks stay lazy and
-    # nil entries stay resolved-absent. The plain-context hand-off fallback
-    # lands received values through this.
+    # nil entries stay resolved-absent. Thunk homes are left alone — this
+    # builds the view a verb block reads, and a derivation must not adopt one
+    # block's delta when a sibling block supplied a different one.
     def overlay(values)
       self.class.new(@data.merge(values), defaults: @defaults, owner: @owner)
     end
@@ -136,15 +211,14 @@ module Weft
     # The bag as a plain hash: every thunk run, every unsupplied key standing
     # at its declared fallback.
     def materialized
-      materialize!
-      @defaults.merge(@data) { |_key, fallback, value| value.nil? ? fallback : value }
+      @defaults.merge(resolved_data) { |_key, fallback, value| value.nil? ? fallback : value }
     end
 
-    # Run a thunk with the bag as its argument (derivations chain by reading
-    # sibling keys) and memoize the result in place. A failed derivation is
-    # not memoized — like RSpec's let, it reruns if read again. The in-flight
-    # list turns circular derivations into a clear error instead of a stack
-    # overflow.
+    # Ask a thunk for its outcome, with this bag as the block's argument
+    # (derivations chain by reading sibling keys). The memo lives on the Thunk,
+    # not here, so the entry stays a Thunk and every bag holding that same
+    # instance sees the outcome. The in-flight list turns circular derivations
+    # into a clear error instead of a stack overflow.
     def force!(key, thunk)
       if @forcing.include?(key)
         raise Weft::InvalidUsage,
@@ -154,14 +228,17 @@ module Weft
 
       @forcing << key
       begin
-        @data[key] = Weft::DSL::Sandbox.run(self, &thunk.block)
+        thunk.value(self)
       ensure
         @forcing.pop
       end
     end
 
-    def materialize!
-      @data.each_key { |key| self[key] }
+    # @data with every thunk resolved to its outcome. Read through +[]+ so the
+    # circular guard and the declared fallbacks apply exactly as they do to a
+    # single read.
+    def resolved_data
+      @data.each_key.to_h { |key| [key, self[key]] }
     end
   end
 end

@@ -62,17 +62,43 @@ module Weft
         resolution = Weft::Resolver.resolution(component_class, wire_source)
         @wire = resolution.coerced
         @violations = resolution.violations
-        @inherited = branched_from ? branched_from.branch_data : {}
+        @inherited = branched_from ? branch_copies(branched_from.branch_data) : {}
       end
 
       def bag
         data = @inherited.dup
         keys.each { |key| data[key] = stack_value(key) }
         report_shadowed_derivations(data)
-        Weft::Params.new(data, defaults: declared_defaults, owner: @component_class)
+        adopt_thunks(data, Weft::Params.new(data, defaults: declared_defaults, owner: @component_class))
       end
 
       private
+
+      # What crosses the branch. A contextual thunk crosses as an unforced
+      # twin, so no two branches ever share its outcome; everything else
+      # crosses as itself, carrying whatever it has settled on.
+      #
+      # Copying here — at branch time — rather than when a thunk is forced is
+      # what makes it independent of read order. Copy-on-force would let a bag
+      # that read early hand its memo to anything branching from it afterwards,
+      # which is the behavior this replaces.
+      def branch_copies(inherited)
+        inherited.transform_values do |entry|
+          entry.is_a?(Weft::Params::Thunk) && entry.contextual? ? entry.unforced_copy : entry
+        end
+      end
+
+      # Give this assembly's own thunks a home, so a shared derivation answers
+      # with the value its declaring component sees rather than whichever
+      # branch happens to read it first. Only homeless thunks are adopted:
+      # an inherited one already belongs to the bag that introduced it, and
+      # that is precisely what must not be overwritten here.
+      def adopt_thunks(data, bag)
+        data.each_value do |entry|
+          entry.home = bag if entry.is_a?(Weft::Params::Thunk) && entry.home.nil?
+        end
+        bag
+      end
 
       def keys
         return @component_class.declared_keys if @hand_offs
@@ -87,12 +113,19 @@ module Weft
           @component_class.derived_params.keys
       end
 
+      # An overriding derivation is consulted before the inherited value, so
+      # this class's declaration claims the key for its own subtree. Everything
+      # above `inherited` is untouched: a wire value still wins, and so does a
+      # verb block's overlay, which speaks as the wire.
       def stack_value(key)
         return @received[key] unless @received[key].nil?
 
         wire_level = @overlays.key?(key) ? @overlays[key] : @wire[key]
-        [wire_level, @inherited[key], derived_thunk(key)].find { |v| !v.nil? }
+        levels = overriding?(key) ? [wire_level, derived_thunk(key)] : [wire_level, @inherited[key], derived_thunk(key)]
+        levels.find { |v| !v.nil? }
       end
+
+      def overriding?(key) = @component_class.derived_params[key]&.[](:override) || false
 
       # Fallbacks, not values: they ride on the bag rather than in it, so a
       # key nobody supplied reads as this class's default without becoming
@@ -106,7 +139,7 @@ module Weft
 
       def derived_thunk(key)
         meta = @component_class.derived_params[key]
-        Weft::Params::Thunk.new(meta[:block]) if meta
+        Weft::Params::Thunk.new(meta[:block], contextual: meta[:contextual]) if meta
       end
 
       # The wire door's default wins for dual keys — its meta always carries

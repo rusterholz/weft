@@ -98,19 +98,46 @@ module Weft
         # derived value can be the one a component is identified by — a record
         # handed over cannot compose a DOM id, so the row derives the scalar
         # that names it — and that scalar needs to say it is a uuid.
-        def derives(name, type: nil, digest: false, &block)
+        # `contextual: true` makes the value a function of where it is read
+        # rather than one this class owns: every branch inheriting it gets its
+        # own unforced copy, so the block answers for the reading bag. It runs
+        # more than once by design — even when nothing it reads has changed —
+        # so nothing expensive, inconsistent between runs, or side-effecting
+        # belongs in one.
+        #
+        # `override: true` claims the key against an ancestor that also
+        # supplies it, for this component and everything it contains. Without
+        # it a derivation is a fallback: declare it so you work standalone, and
+        # an ancestor's value wins when you are nested. It lifts the derivation
+        # above the inherited value only — a wire value and a verb block's
+        # overlay still outrank it.
+        #
+        # `contextual` implies `override`, because a contextual derivation that
+        # yielded to an ancestor could never run, and a declaration that
+        # silently does nothing is worse than one that is refused.
+        def derives(name, type: nil, digest: false, contextual: false, override: contextual, &block)
           unless block
             raise Weft::InvalidDefinition,
                   "derives #{name.inspect} requires a block — the derivation is the declaration"
           end
 
+          refuse_yielding_contextual!(name, contextual, override)
           validate_type!(name, type, nil) unless type.nil?
           validate_digest!(name, digest) if digest
           refuse_conflicting_type!(name, type)
+          own_derived_params[name] = derivation_meta(block, type, digest, contextual, override)
+        end
+
+        # Only what was actually declared lands in the meta, so a plain
+        # derivation stays a two-key hash and the modes read as present-or-not
+        # rather than as a pair of falses.
+        def derivation_meta(block, type, digest, contextual, override)
           meta = { block: block, source_location: block.source_location }
           meta[:type] = type unless type.nil?
           meta[:digest] = digest if digest
-          own_derived_params[name] = meta
+          meta[:contextual] = contextual if contextual
+          meta[:override] = override if override
+          meta
         end
 
         # Sugar for statically-known derivations: each pair registers
@@ -184,6 +211,19 @@ module Weft
         # subclass retyping its parent's key is an override, like redeclaring a
         # derivation block. And only two *stated* types conflict — a door that
         # says nothing simply defers to the one that did.
+        # A contextual derivation that yielded to an ancestor's value could
+        # never run at all, so the pair is refused at the declaration rather
+        # than accepted and quietly ignored.
+        def refuse_yielding_contextual!(name, contextual, override)
+          return unless contextual && !override
+
+          raise Weft::InvalidDefinition,
+                "#{self.name} declares #{name.inspect} as contextual but not overriding — a " \
+                "contextual derivation is computed where it is read, so yielding to an " \
+                "ancestor's value would leave it never running. Drop override: false, or drop " \
+                "contextual: true to take the ancestor's value when you are nested"
+        end
+
         def refuse_conflicting_type!(name, type)
           return if type.nil?
 
@@ -266,17 +306,9 @@ module Weft
                 "gem-wide length, or an integer between 1 and #{Weft::Addressing::MAX_DIGEST_LENGTH}"
         end
 
-        def own_params
-          @own_params ||= {}
-        end
-
-        def own_received_params
-          @own_received_params ||= {}
-        end
-
-        def own_derived_params
-          @own_derived_params ||= {}
-        end
+        def own_params = @own_params ||= {}
+        def own_received_params = @own_received_params ||= {}
+        def own_derived_params = @own_derived_params ||= {}
       end
 
       # One-time chrome-collision warnings, keyed [class, key].
@@ -305,21 +337,18 @@ module Weft
       private
 
       # Assemble the bag per the source stack: staged hand-off > own wire
-      # value > inherited bag value > declared default. Staging only happens
-      # under Weft::Context; in a plain Arbre context the hand-off door is a
-      # build-top fallback instead, so hand-off validation waits for it there.
+      # value > inherited bag value > declared default. Staging happens at
+      # interception, which only a Weft::Context performs — so a component
+      # built anywhere else has no hand-off door at all, and a declared
+      # `receives` reports as unsatisfied rather than going unchecked.
       def assembled_params
-        if arbre_context.respond_to?(:take_received!)
-          resolve_bag(received: arbre_context.take_received!(self.class) || {}, validate: true)
-        else
-          resolve_bag(received: {}, validate: false)
-        end
+        resolve_bag(received: arbre_context.take_received!(self.class) || {})
       end
 
       # Uses the Assembly object rather than `.call` because construction needs
       # both halves of what it produced: the bag, and what the wire sent that
       # no declared type could accept.
-      def resolve_bag(received:, validate:)
+      def resolve_bag(received:)
         assembly = Weft::Params::Assembly.new(self.class, wire_source,
                                               hand_offs: received,
                                               overlays: context_overlays,
@@ -327,7 +356,7 @@ module Weft
         bag = assembly.bag
         refuse_violations!(assembly.violations)
         validate_required!(bag)
-        validate_hand_offs!(bag) if validate
+        validate_hand_offs!(bag)
         bag
       end
 
@@ -361,7 +390,7 @@ module Weft
       end
 
       def context_overlays
-        arbre_context.respond_to?(:overlays) ? arbre_context.overlays : {}
+        arbre_context.overlays
       end
 
       # Checks required_hand_off? before reading the key: a required hand-off
@@ -374,7 +403,7 @@ module Weft
       end
 
       def wire_source
-        arbre_context.respond_to?(:wire_params) ? arbre_context.wire_params : {}
+        arbre_context.wire_params
       end
 
       # Branch a copy of the nearest tree-ancestor's bag — the in-page
@@ -393,7 +422,7 @@ module Weft
 
           el = el.parent
         end
-        arbre_context.respond_to?(:branch_bag) ? arbre_context.branch_bag : nil
+        arbre_context.branch_bag
       end
 
       # A hand-off is required when `receives` is its only door and no
@@ -407,18 +436,6 @@ module Weft
         raise Weft::NotReceived,
               "#{self.class.name} expects to receive #{key.inspect}: pass it as a builder kwarg " \
               "at the call site, or declare a default: to make it optional"
-      end
-
-      # Build-top fallback for the hand-off door in plain Arbre contexts,
-      # where interception never runs: pull receives-declared kwargs out of
-      # the attributes hash (they're hand-offs, not chrome), overlay them on
-      # the bag, and run the validation construction had to defer. Handed
-      # nil counts as absence, like everywhere else in the stack.
-      def apply_received_fallback(attributes)
-        keys = self.class.received_params.keys & attributes.keys
-        handed = keys.to_h { |k| [k, attributes.delete(k)] }
-        @params = @params.overlay(handed.compact)
-        validate_hand_offs!(@params)
       end
 
       # A builder kwarg naming a declared param renders as an HTML attribute

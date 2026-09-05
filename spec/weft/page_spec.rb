@@ -4,13 +4,13 @@ require "arbre"
 
 RSpec.describe Weft::Page do
   it "renders as an html element with DOCTYPE" do
-    html = Arbre::Context.new { weft_page }.to_s
+    html = Weft::Context.new { weft_page }.to_s
     expect(html).to start_with("<!DOCTYPE html>")
     expect(html).to include("<html")
   end
 
   it "includes head with meta and title" do
-    html = Arbre::Context.new { weft_page }.to_s
+    html = Weft::Context.new { weft_page }.to_s
     expect(html).to include('<meta charset="utf-8"/>')
     expect(html).to include("<title>Weft</title>")
   end
@@ -22,7 +22,7 @@ RSpec.describe Weft::Page do
         title "Orders"
       end
 
-      html = Arbre::Context.new { insert_tag(page_class) }.to_s
+      html = Weft::Context.new { insert_tag(page_class) }.to_s
       expect(html).to include("<title>Orders</title>")
     end
 
@@ -45,7 +45,7 @@ RSpec.describe Weft::Page do
         def page_helper = "nope"
       end
 
-      expect { Arbre::Context.new { insert_tag(page_class) }.to_s }.
+      expect { Weft::Context.new { insert_tag(page_class) }.to_s }.
         to raise_error(NameError, /page_helper/)
     end
 
@@ -58,7 +58,7 @@ RSpec.describe Weft::Page do
         def self.name = "ChildAppPage"
       end
 
-      html = Arbre::Context.new { insert_tag(child) }.to_s
+      html = Weft::Context.new { insert_tag(child) }.to_s
       expect(html).to include("<title>Base App</title>")
     end
 
@@ -72,7 +72,7 @@ RSpec.describe Weft::Page do
         title { "Dynamic" }
       end
 
-      html = Arbre::Context.new { insert_tag(child) }.to_s
+      html = Weft::Context.new { insert_tag(child) }.to_s
       expect(html).to include("<title>Dynamic</title>")
     end
 
@@ -100,32 +100,32 @@ RSpec.describe Weft::Page do
         title "Declared"
       end
 
-      html = Arbre::Context.new { insert_tag(page_class, title: "Attribute") }.to_s
+      html = Weft::Context.new { insert_tag(page_class, title: "Attribute") }.to_s
       expect(html).to include("<title>Declared</title>")
     end
   end
 
   it "redirects block content into the body" do
-    html = Arbre::Context.new { weft_page { h1 "Hello" } }.to_s
+    html = Weft::Context.new { weft_page { h1 "Hello" } }.to_s
     expect(html).to match(%r{<body>.*<h1>Hello</h1>.*</body>}m)
   end
 
   it "auto-includes htmx script by default" do
-    html = Arbre::Context.new { weft_page }.to_s
+    html = Weft::Context.new { weft_page }.to_s
     expect(html).to include("htmx.org")
   end
 
   it "omits htmx script when include_htmx is false" do
     original = Weft.configuration.include_htmx
     Weft.configuration.include_htmx = false
-    html = Arbre::Context.new { weft_page }.to_s
+    html = Weft::Context.new { weft_page }.to_s
     expect(html).not_to include("htmx.org")
   ensure
     Weft.configuration.include_htmx = original
   end
 
   it "includes htmx responseHandling configuration" do
-    html = Arbre::Context.new { weft_page }.to_s
+    html = Weft::Context.new { weft_page }.to_s
     expect(html).to include("responseHandling")
     expect(html).to include("[45]..")
   end
@@ -134,20 +134,20 @@ RSpec.describe Weft::Page do
     context "with include_sse_ext = :auto (default)" do
       it "omits the sse.js script when no registered component pushes" do
         allow(Weft.registry).to receive(:any_sse_components?).and_return(false)
-        html = Arbre::Context.new { weft_page }.to_s
+        html = Weft::Context.new { weft_page }.to_s
         expect(html).not_to include("htmx-ext-sse")
       end
 
       it "includes the sse.js script when a registered component pushes" do
         allow(Weft.registry).to receive(:any_sse_components?).and_return(true)
-        html = Arbre::Context.new { weft_page }.to_s
+        html = Weft::Context.new { weft_page }.to_s
         expect(html).to include("htmx-ext-sse")
         expect(html).to include(Weft::Page::HTMX_SSE_SRC)
       end
 
       it "emits sse.js after the htmx core script" do
         allow(Weft.registry).to receive(:any_sse_components?).and_return(true)
-        html = Arbre::Context.new { weft_page }.to_s
+        html = Weft::Context.new { weft_page }.to_s
         htmx_index = html.index(Weft::Page::HTMX_SRC)
         sse_index = html.index(Weft::Page::HTMX_SSE_SRC)
         expect(htmx_index).to be < sse_index
@@ -155,7 +155,7 @@ RSpec.describe Weft::Page do
 
       it "pins the sse.js script with subresource integrity" do
         allow(Weft.registry).to receive(:any_sse_components?).and_return(true)
-        html = Arbre::Context.new { weft_page }.to_s
+        html = Weft::Context.new { weft_page }.to_s
         sse_tag = html[/<script[^>]*htmx-ext-sse[^>]*>/]
         expect(sse_tag).to include('integrity="sha384-')
         expect(sse_tag).to include('crossorigin="anonymous"')
@@ -166,7 +166,7 @@ RSpec.describe Weft::Page do
       it "always includes the sse.js script, even when no component pushes" do
         allow(Weft.registry).to receive(:any_sse_components?).and_return(false)
         Weft.configuration.include_sse_ext = true
-        html = Arbre::Context.new { weft_page }.to_s
+        html = Weft::Context.new { weft_page }.to_s
         expect(html).to include("htmx-ext-sse")
       end
     end
@@ -175,7 +175,7 @@ RSpec.describe Weft::Page do
       it "never includes the sse.js script, even when a component pushes" do
         allow(Weft.registry).to receive(:any_sse_components?).and_return(true)
         Weft.configuration.include_sse_ext = false
-        html = Arbre::Context.new { weft_page }.to_s
+        html = Weft::Context.new { weft_page }.to_s
         expect(html).not_to include("htmx-ext-sse")
       end
     end
@@ -188,7 +188,7 @@ RSpec.describe Weft::Page do
         register_stylesheet "https://cdn.example.com/app.css"
       end
 
-      html = Arbre::Context.new { insert_tag(page_class) }.to_s
+      html = Weft::Context.new { insert_tag(page_class) }.to_s
       expect(html).to include('href="https://cdn.example.com/app.css"')
       expect(html).to include('rel="stylesheet"')
     end
@@ -201,7 +201,7 @@ RSpec.describe Weft::Page do
         register_script "https://cdn.example.com/app.js", defer: "defer"
       end
 
-      html = Arbre::Context.new { insert_tag(page_class) }.to_s
+      html = Weft::Context.new { insert_tag(page_class) }.to_s
       expect(html).to include('src="https://cdn.example.com/app.js"')
       expect(html).to include('defer="defer"')
     end
@@ -212,7 +212,7 @@ RSpec.describe Weft::Page do
       klass = Class.new(described_class) { def self.name = "AssetPage" }
       klass.register_stylesheet(stylesheet, assets: stylesheet_assets) if stylesheet
       klass.register_script(script, assets: script_assets) if script
-      Arbre::Context.new { insert_tag(klass) }.to_s
+      Weft::Context.new { insert_tag(klass) }.to_s
     end
 
     context "with no bundles configured" do
@@ -223,7 +223,7 @@ RSpec.describe Weft::Page do
       it "raises if assets: names a bundle that does not exist" do
         klass = Class.new(described_class) { def self.name = "BadPage" }
         klass.register_stylesheet "css/app.css", assets: :missing
-        expect { Arbre::Context.new { insert_tag(klass) }.to_s }.
+        expect { Weft::Context.new { insert_tag(klass) }.to_s }.
           to raise_error(Weft::InvalidUsage, /bundle :missing.*Configured bundles: \[\]/m)
       end
     end
@@ -258,7 +258,7 @@ RSpec.describe Weft::Page do
       it "raises if an absolute URL is registered with an assets: kwarg" do
         klass = Class.new(described_class) { def self.name = "BadAbsolutePage" }
         klass.register_stylesheet "https://cdn.example.com/x.css", assets: :default
-        expect { Arbre::Context.new { insert_tag(klass) }.to_s }.
+        expect { Weft::Context.new { insert_tag(klass) }.to_s }.
           to raise_error(Weft::InvalidUsage, /assets:.*absolute URLs/m)
       end
     end
@@ -277,7 +277,7 @@ RSpec.describe Weft::Page do
       it "raises when assets: names an unknown bundle" do
         klass = Class.new(described_class) { def self.name = "BadAssetsPage" }
         klass.register_stylesheet "css/app.css", assets: :missing
-        expect { Arbre::Context.new { insert_tag(klass) }.to_s }.
+        expect { Weft::Context.new { insert_tag(klass) }.to_s }.
           to raise_error(Weft::InvalidUsage, /bundle :missing.*Configured bundles: \[:app\]/m)
       end
     end
@@ -433,7 +433,7 @@ RSpec.describe Weft::Page do
         register_stylesheet "https://cdn.example.com/child.css"
       end
 
-      html = Arbre::Context.new { insert_tag(child) }.to_s
+      html = Weft::Context.new { insert_tag(child) }.to_s
       expect(html).to include("base.css")
       expect(html).to include("base.js")
       expect(html).to include("child.css")
@@ -447,7 +447,7 @@ RSpec.describe Weft::Page do
         register_inline_css ".foo { color: red; }"
       end
 
-      html = Arbre::Context.new { insert_tag(page_class) }.to_s
+      html = Weft::Context.new { insert_tag(page_class) }.to_s
       expect(html).to match(%r{<head>.*<style>\.foo \{ color: red; \}</style>.*</head>}m)
     end
 
@@ -458,7 +458,7 @@ RSpec.describe Weft::Page do
         register_inline_css ".two { color: blue; }"
       end
 
-      html = Arbre::Context.new { insert_tag(page_class) }.to_s
+      html = Weft::Context.new { insert_tag(page_class) }.to_s
       expect(html).to include("<style>.one { color: red; }</style>")
       expect(html).to include("<style>.two { color: blue; }</style>")
     end
@@ -473,7 +473,7 @@ RSpec.describe Weft::Page do
         register_inline_css ".child { color: blue; }"
       end
 
-      html = Arbre::Context.new { insert_tag(child) }.to_s
+      html = Weft::Context.new { insert_tag(child) }.to_s
       expect(html).to include("<style>.base { color: red; }</style>")
       expect(html).to include("<style>.child { color: blue; }</style>")
     end
@@ -484,7 +484,7 @@ RSpec.describe Weft::Page do
         register_inline_css "/* comment */ a > b::after { content: '>'; }"
       end
 
-      html = Arbre::Context.new { insert_tag(page_class) }.to_s
+      html = Weft::Context.new { insert_tag(page_class) }.to_s
       expect(html).to include("/* comment */ a > b::after { content: '>'; }")
     end
   end
@@ -496,7 +496,7 @@ RSpec.describe Weft::Page do
         register_inline_js "console.log('hi');"
       end
 
-      html = Arbre::Context.new { insert_tag(page_class) }.to_s
+      html = Weft::Context.new { insert_tag(page_class) }.to_s
       expect(html).to match(%r{<head>.*<script>console\.log\('hi'\);</script>.*</head>}m)
     end
 
@@ -507,7 +507,7 @@ RSpec.describe Weft::Page do
         register_inline_js "two();"
       end
 
-      html = Arbre::Context.new { insert_tag(page_class) }.to_s
+      html = Weft::Context.new { insert_tag(page_class) }.to_s
       expect(html).to include("<script>one();</script>")
       expect(html).to include("<script>two();</script>")
     end
@@ -522,7 +522,7 @@ RSpec.describe Weft::Page do
         register_inline_js "child();"
       end
 
-      html = Arbre::Context.new { insert_tag(child) }.to_s
+      html = Weft::Context.new { insert_tag(child) }.to_s
       expect(html).to include("<script>base();</script>")
       expect(html).to include("<script>child();</script>")
     end
@@ -534,7 +534,7 @@ RSpec.describe Weft::Page do
         register_inline_js "lib.start();"
       end
 
-      html = Arbre::Context.new { insert_tag(page_class) }.to_s
+      html = Weft::Context.new { insert_tag(page_class) }.to_s
       expect(html.index("lib.js")).to be < html.index("lib.start();")
     end
 
@@ -544,7 +544,7 @@ RSpec.describe Weft::Page do
         register_inline_js "if (a && b < 2) { go(); }"
       end
 
-      html = Arbre::Context.new { insert_tag(page_class) }.to_s
+      html = Weft::Context.new { insert_tag(page_class) }.to_s
       expect(html).to include("if (a && b < 2) { go(); }")
     end
   end

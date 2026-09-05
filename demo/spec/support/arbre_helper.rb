@@ -1,29 +1,12 @@
 # frozen_string_literal: true
 
-# Test helper for rendering Arbre components in isolation.
+# Test helper for rendering components in isolation.
 #
-# This pattern will eventually become part of Weft's testing support.
-# The idea: render a component in a minimal Arbre::Context, then assert
-# on the HTML output, CSS classes, or content.
+# Everything here renders through Weft::Context, which is the context a
+# request builds. A bare Arbre::Context is deliberately not offered: nothing
+# in the app or the gem ever creates one, so a component tested in one is
+# being exercised down a path no user reaches.
 module ArbreHelper
-  # Renders an Arbre block and returns the first top-level element.
-  #
-  #   component = render_arbre { stat_card label: "Orders", value: 42 }
-  #   expect(component.to_s).to include("42")
-  #
-  def render_arbre(assigns = {}, &)
-    Arbre::Context.new(assigns, nil, &).children.first
-  end
-
-  # Renders an Arbre block and returns the full HTML string.
-  #
-  #   html = render_arbre_html { status_badge "shipped" }
-  #   expect(html).to include("badge-shipped")
-  #
-  def render_arbre_html(assigns = {}, &)
-    Arbre::Context.new(assigns, nil, &).to_s
-  end
-
   # Renders a Weft::Context block and returns the first top-level element.
   # Use for Weft::Components that need action:/trigger: expansion. Pass
   # `wire:` to simulate request params — components resolve their declared

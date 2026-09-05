@@ -8,19 +8,19 @@ RSpec.describe Oms::OrderTable, type: :component do
   end
 
   it "renders as a table" do
-    component = render_arbre { order_table orders: [] }
+    component = render_weft { order_table orders: [] }
     expect(component.tag_name).to eq("table")
   end
 
   it "has the correct column headers" do
-    html = render_arbre_html { order_table orders: [] }
+    html = render_weft_html { order_table orders: [] }
     %w[Order Customer Items Shipments Status Created].each do |header|
       expect(html).to include("<th>#{header}</th>")
     end
   end
 
   it "renders an Oms::OrderRow for each order" do
-    html = render_arbre_html(orders: orders) { order_table orders: orders }
+    html = render_weft_html({ orders: orders }) { order_table orders: orders }
     orders.each do |order|
       expect(html).to include(order.id[..7])
     end

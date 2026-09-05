@@ -10,28 +10,28 @@ RSpec.describe Oms::OrderRow, type: :component do
   end
 
   it "renders as a tr" do
-    component = render_arbre(order: order) { order_row order: order }
+    component = render_weft({ order: order }) { order_row order: order }
     expect(component.tag_name).to eq("tr")
   end
 
   it "shows a truncated order ID linking to the order" do
-    html = render_arbre_html(order: order) { order_row order: order }
+    html = render_weft_html({ order: order }) { order_row order: order }
     expect(html).to include(order.id[..7])
     expect(html).to include("href=\"/orders/#{order.id}\"")
   end
 
   it "shows the customer name" do
-    html = render_arbre_html(order: order) { order_row order: order }
+    html = render_weft_html({ order: order }) { order_row order: order }
     expect(html).to include("Alice Smith")
   end
 
   it "shows a status badge" do
-    html = render_arbre_html(order: order) { order_row order: order }
+    html = render_weft_html({ order: order }) { order_row order: order }
     expect(html).to include("badge-submitted")
   end
 
   it "shows line item count" do
-    html = render_arbre_html(order: order) { order_row order: order }
+    html = render_weft_html({ order: order }) { order_row order: order }
     expect(html).to include("<td class=\"mono\">1</td>")
   end
 
