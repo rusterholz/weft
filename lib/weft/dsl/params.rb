@@ -305,21 +305,24 @@ module Weft
       private
 
       # Assemble the bag per the source stack: staged hand-off > own wire
-      # value > inherited bag value > declared default. Staging only happens
-      # under Weft::Context; in a plain Arbre context the hand-off door is a
-      # build-top fallback instead, so hand-off validation waits for it there.
+      # value > inherited bag value > declared default. Staging happens at
+      # interception, which only a Weft::Context performs — so a component
+      # built anywhere else has no hand-off door at all, and a declared
+      # `receives` reports as unsatisfied rather than going unchecked.
       def assembled_params
-        if arbre_context.respond_to?(:take_received!)
-          resolve_bag(received: arbre_context.take_received!(self.class) || {}, validate: true)
-        else
-          resolve_bag(received: {}, validate: false)
-        end
+        resolve_bag(received: staged_hand_offs)
+      end
+
+      def staged_hand_offs
+        return {} unless arbre_context.respond_to?(:take_received!)
+
+        arbre_context.take_received!(self.class) || {}
       end
 
       # Uses the Assembly object rather than `.call` because construction needs
       # both halves of what it produced: the bag, and what the wire sent that
       # no declared type could accept.
-      def resolve_bag(received:, validate:)
+      def resolve_bag(received:)
         assembly = Weft::Params::Assembly.new(self.class, wire_source,
                                               hand_offs: received,
                                               overlays: context_overlays,
@@ -327,7 +330,7 @@ module Weft
         bag = assembly.bag
         refuse_violations!(assembly.violations)
         validate_required!(bag)
-        validate_hand_offs!(bag) if validate
+        validate_hand_offs!(bag)
         bag
       end
 
@@ -407,18 +410,6 @@ module Weft
         raise Weft::NotReceived,
               "#{self.class.name} expects to receive #{key.inspect}: pass it as a builder kwarg " \
               "at the call site, or declare a default: to make it optional"
-      end
-
-      # Build-top fallback for the hand-off door in plain Arbre contexts,
-      # where interception never runs: pull receives-declared kwargs out of
-      # the attributes hash (they're hand-offs, not chrome), overlay them on
-      # the bag, and run the validation construction had to defer. Handed
-      # nil counts as absence, like everywhere else in the stack.
-      def apply_received_fallback(attributes)
-        keys = self.class.received_params.keys & attributes.keys
-        handed = keys.to_h { |k| [k, attributes.delete(k)] }
-        @params = @params.overlay(handed.compact)
-        validate_hand_offs!(@params)
       end
 
       # A builder kwarg naming a declared param renders as an HTML attribute

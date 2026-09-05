@@ -263,7 +263,7 @@ RSpec.describe Weft::Params::Assembly do
       expect(runs).to eq(1)
     end
 
-    it "works in a plain Arbre::Context (registration is receiver-side)" do
+    it "works with no wire source at all (registration is receiver-side)" do
       klass = Class.new(Weft::Component) do
         def self.name = "PlainDerives"
         derives(:greeting) { |_p| "hello" }
@@ -274,7 +274,7 @@ RSpec.describe Weft::Params::Assembly do
         end
       end
 
-      expect(Arbre::Context.new { insert_tag(klass) }.to_s).to include("hello")
+      expect(Weft::Context.new { insert_tag(klass) }.to_s).to include("hello")
     end
 
     it "does not force derivations for serialization surfaces" do
@@ -854,103 +854,6 @@ RSpec.describe Weft::Params::Assembly do
       end
 
       expect(child_component.params[:label]).to eq("from-tree")
-    end
-  end
-
-  describe "receives in a plain Arbre::Context" do
-    let(:order) { Struct.new(:id, :name).new(11, "Drum of cable") }
-
-    it "extracts handed kwargs at build-top — params, never chrome" do
-      klass = Class.new(Weft::Component) do
-        def self.name = "PlainSlip"
-        receives :order
-
-        def build(attributes = {})
-          super
-          span params.order.name
-        end
-      end
-      handed = order
-      ctx = Arbre::Context.new { insert_tag(klass, order: handed) }
-      component = ctx.children.first
-
-      expect(component.params.order).to be(handed)
-      expect(component.attributes).not_to have_key(:order)
-      expect(ctx.to_s).to include("Drum of cable")
-    end
-
-    it "still raises NotReceived for a required hand-off nobody supplied" do
-      klass = Class.new(Weft::Component) do
-        def self.name = "PlainStrictSlip"
-        receives :order
-      end
-
-      expect { Arbre::Context.new { insert_tag(klass) } }.
-        to raise_error(Weft::NotReceived, /PlainStrictSlip.*:order/)
-    end
-
-    it "lands a handed value over a dual derivation without forcing it" do
-      klass = Class.new(Weft::Component) do
-        def self.name = "PlainDualSlip"
-        receives :order
-        derives(:order) { |_p| raise "standalone-only derivation must not force" }
-
-        def build(attributes = {})
-          super
-          span params.order.name
-        end
-      end
-      handed = order
-      ctx = Arbre::Context.new { insert_tag(klass, order: handed) }
-
-      expect(ctx.to_s).to include("Drum of cable")
-    end
-
-    it "leaves unread lazy derivations unforced through the hand-off door" do
-      klass = Class.new(Weft::Component) do
-        def self.name = "PlainLazySlip"
-        receives :order
-        derives(:audit_trail) { |_p| raise "unread keys must stay lazy" }
-
-        def build(attributes = {})
-          super
-          span params.order.name
-        end
-      end
-      handed = order
-      ctx = Arbre::Context.new { insert_tag(klass, order: handed) }
-
-      expect(ctx.to_s).to include("Drum of cable")
-    end
-
-    it "applies declared defaults when nothing is handed" do
-      klass = Class.new(Weft::Component) do
-        def self.name = "PlainSoftSlip"
-        receives :page_num, default: 1
-      end
-      component = Arbre::Context.new { insert_tag(klass) }.children.first
-
-      expect(component.params.page_num).to eq(1)
-    end
-
-    it "resolves a handed value only at build-top: pre-super reads see the fallback tier" do
-      # The documented edge: staging happens at interception, which never
-      # runs in a plain context. Render receiving components under
-      # Weft::Context when a build body must read hand-offs before super.
-      reads = {}
-      klass = Class.new(Weft::Component) do
-        def self.name = "PlainEagerSlip"
-        receives :label, default: "unset"
-      end
-      klass.define_method(:build) do |attributes = {}|
-        reads[:before] = params.label
-        super(attributes)
-        reads[:after] = params.label
-      end
-
-      Arbre::Context.new { insert_tag(klass, label: "totals") }
-
-      expect(reads).to eq(before: "unset", after: "totals")
     end
   end
 end

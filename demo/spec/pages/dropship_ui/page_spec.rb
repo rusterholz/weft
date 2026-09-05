@@ -12,7 +12,7 @@ RSpec.describe DropshipUI::Page, type: :component do
 
   def render_concrete(**attrs)
     klass = concrete_page
-    render_arbre_html { insert_tag(klass, **attrs) }
+    render_weft_html { insert_tag(klass, **attrs) }
   end
 
   it "renders as an html element with DOCTYPE" do
@@ -32,7 +32,7 @@ RSpec.describe DropshipUI::Page, type: :component do
     end
     klass = subclass
 
-    html = render_arbre_html { insert_tag(klass) }
+    html = render_weft_html { insert_tag(klass) }
     expect(html).to include("<title>Specific Page</title>")
   end
 

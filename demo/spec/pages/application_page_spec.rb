@@ -20,17 +20,17 @@ RSpec.describe ApplicationPage, type: :component do
   end
 
   it "inherits the company default title from DropshipUI::Page" do
-    html = render_arbre_html { application_page }
+    html = render_weft_html { application_page }
     expect(html).to include("<title>Dropship Co.</title>")
   end
 
   it "renders with the gem-emitted htmx-ext-sse script (registered components push)" do
-    html = render_arbre_html { application_page }
+    html = render_weft_html { application_page }
     expect(html).to include("htmx-ext-sse")
   end
 
   it "renders the navbar with all five navigable sections" do
-    html = render_arbre_html { application_page }
+    html = render_weft_html { application_page }
     expect(html).to include('class="navbar-brand"')
     ["Dashboard", "Orders", "Shipments", "Drivers", "Error Drills"].each do |label|
       expect(html).to include(label)
@@ -42,12 +42,12 @@ RSpec.describe ApplicationPage, type: :component do
       def self.name = "NavStubPage"
       def current_path = "/orders"
     end
-    html = render_arbre_html { insert_tag(page_class) }
+    html = render_weft_html { insert_tag(page_class) }
     expect(html).to include('class="nav-link active" href="/orders"')
   end
 
   it "redirects block content into the main container" do
-    html = render_arbre_html { application_page { h1 "Welcome" } }
+    html = render_weft_html { application_page { h1 "Welcome" } }
     expect(html).to match(/container-fluid.*Welcome/m)
   end
 end

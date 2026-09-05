@@ -135,7 +135,7 @@ RSpec.describe Weft::Component do
       expect(ctx.children.first.class_list).to include("pre-hot")
     end
 
-    it "falls back to defaults in a plain Arbre::Context (no wire source)" do
+    it "falls back to defaults when the context carries no wire source" do
       component_class = Class.new(Weft::Component) do
         def self.name = "TestCard"
         param :status, default: "pending"
@@ -146,7 +146,7 @@ RSpec.describe Weft::Component do
         end
       end
 
-      html = Arbre::Context.new { insert_tag(component_class) }.to_s
+      html = Weft::Context.new { insert_tag(component_class) }.to_s
 
       expect(html).to include("status=pending")
     end
@@ -218,7 +218,7 @@ RSpec.describe Weft::Component do
         end
       end
 
-      html = Arbre::Context.new { insert_tag(component_class) }.to_s
+      html = Weft::Context.new { insert_tag(component_class) }.to_s
 
       expect(html).to include("<div")
       expect(html).to include("<span>hello</span>")
