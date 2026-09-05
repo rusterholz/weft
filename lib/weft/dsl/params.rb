@@ -98,19 +98,46 @@ module Weft
         # derived value can be the one a component is identified by — a record
         # handed over cannot compose a DOM id, so the row derives the scalar
         # that names it — and that scalar needs to say it is a uuid.
-        def derives(name, type: nil, digest: false, &block)
+        # `contextual: true` makes the value a function of where it is read
+        # rather than one this class owns: every branch inheriting it gets its
+        # own unforced copy, so the block answers for the reading bag. It runs
+        # more than once by design — even when nothing it reads has changed —
+        # so nothing expensive, inconsistent between runs, or side-effecting
+        # belongs in one.
+        #
+        # `override: true` claims the key against an ancestor that also
+        # supplies it, for this component and everything it contains. Without
+        # it a derivation is a fallback: declare it so you work standalone, and
+        # an ancestor's value wins when you are nested. It lifts the derivation
+        # above the inherited value only — a wire value and a verb block's
+        # overlay still outrank it.
+        #
+        # `contextual` implies `override`, because a contextual derivation that
+        # yielded to an ancestor could never run, and a declaration that
+        # silently does nothing is worse than one that is refused.
+        def derives(name, type: nil, digest: false, contextual: false, override: contextual, &block)
           unless block
             raise Weft::InvalidDefinition,
                   "derives #{name.inspect} requires a block — the derivation is the declaration"
           end
 
+          refuse_yielding_contextual!(name, contextual, override)
           validate_type!(name, type, nil) unless type.nil?
           validate_digest!(name, digest) if digest
           refuse_conflicting_type!(name, type)
+          own_derived_params[name] = derivation_meta(block, type, digest, contextual, override)
+        end
+
+        # Only what was actually declared lands in the meta, so a plain
+        # derivation stays a two-key hash and the modes read as present-or-not
+        # rather than as a pair of falses.
+        def derivation_meta(block, type, digest, contextual, override)
           meta = { block: block, source_location: block.source_location }
           meta[:type] = type unless type.nil?
           meta[:digest] = digest if digest
-          own_derived_params[name] = meta
+          meta[:contextual] = contextual if contextual
+          meta[:override] = override if override
+          meta
         end
 
         # Sugar for statically-known derivations: each pair registers
@@ -184,6 +211,19 @@ module Weft
         # subclass retyping its parent's key is an override, like redeclaring a
         # derivation block. And only two *stated* types conflict — a door that
         # says nothing simply defers to the one that did.
+        # A contextual derivation that yielded to an ancestor's value could
+        # never run at all, so the pair is refused at the declaration rather
+        # than accepted and quietly ignored.
+        def refuse_yielding_contextual!(name, contextual, override)
+          return unless contextual && !override
+
+          raise Weft::InvalidDefinition,
+                "#{self.name} declares #{name.inspect} as contextual but not overriding — a " \
+                "contextual derivation is computed where it is read, so yielding to an " \
+                "ancestor's value would leave it never running. Drop override: false, or drop " \
+                "contextual: true to take the ancestor's value when you are nested"
+        end
+
         def refuse_conflicting_type!(name, type)
           return if type.nil?
 
@@ -266,17 +306,9 @@ module Weft
                 "gem-wide length, or an integer between 1 and #{Weft::Addressing::MAX_DIGEST_LENGTH}"
         end
 
-        def own_params
-          @own_params ||= {}
-        end
-
-        def own_received_params
-          @own_received_params ||= {}
-        end
-
-        def own_derived_params
-          @own_derived_params ||= {}
-        end
+        def own_params = @own_params ||= {}
+        def own_received_params = @own_received_params ||= {}
+        def own_derived_params = @own_derived_params ||= {}
       end
 
       # One-time chrome-collision warnings, keyed [class, key].

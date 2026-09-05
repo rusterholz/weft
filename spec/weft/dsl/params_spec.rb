@@ -404,6 +404,31 @@ RSpec.describe Weft::DSL::Params do
       expect(parent.derived_params[:foo][:block].call(nil)).to eq("parent")
       expect(child.derived_params[:foo][:block].call(nil)).to eq("child")
     end
+
+    it "records contextual and override on the declaration" do
+      klass = Class.new(base_class) do
+        def self.name = "ModedDerives"
+        derives(:plain) { |_p| 1 }
+        derives(:ctx, contextual: true) { |_p| 2 }
+        derives(:owned, override: true) { |_p| 3 }
+      end
+
+      expect(klass.derived_params[:plain]).not_to include(:contextual, :override)
+      expect(klass.derived_params[:ctx]).to include(contextual: true, override: true)
+      expect(klass.derived_params[:owned]).to include(override: true)
+      expect(klass.derived_params[:owned]).not_to include(:contextual)
+    end
+
+    # Accepting the pair would register a declaration that can never run: it
+    # is computed where it is read, and yielding means it is never read.
+    it "refuses a contextual derivation that yields to an ancestor" do
+      expect do
+        Class.new(base_class) do
+          def self.name = "YieldingContextual"
+          derives(:label, contextual: true, override: false) { |_p| "x" }
+        end
+      end.to raise_error(Weft::InvalidDefinition, /contextual.*never running/m)
+    end
   end
 
   describe ".defines" do
