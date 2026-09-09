@@ -163,6 +163,43 @@ module Weft
       apply_push_attrs
     end
 
+    # Render a body that can survive a derivation blowing up under it. The
+    # block is yielded a `{key => exception}` hash of the derivations known to
+    # have failed, and may read anything it likes; if a read it did not expect
+    # raises, the abandoned attempt is rewound and the block runs again with
+    # that key now named in the hash. So a recovery target renders what
+    # survived without wrapping every read in a rescue.
+    #
+    #   despite_derivation_errors do |errors|
+    #     h2 errors.key?(:title) ? "Unavailable" : params.title
+    #   end
+    #
+    # Rewinding to a mark rather than clearing: whatever `super` and the build
+    # body already put in the tree has to survive, and only what this block
+    # emitted may be taken back. The mark is taken on whichever element is
+    # being built into, so the helper works nested inside chrome — which is
+    # where an error component actually uses it — and not only at build's top.
+    #
+    # An error no derivation caused — a bug in the block itself — is re-raised
+    # untouched, because retrying it would turn a typo into a silent loop. The
+    # test is whether a key entered the set, which also means a failure inside a
+    # nested CHILD component re-raises: its derivations belong to its own bag.
+    def despite_derivation_errors
+      into = arbre_context.current_arbre_element
+      mark = into.children.size
+      known = params.send(:derivation_errors)
+      begin
+        yield known
+      rescue StandardError, ScriptError
+        fresh = params.send(:derivation_errors)
+        raise if fresh.size == known.size
+
+        known = fresh
+        into.children.slice!(mark..)
+        retry
+      end
+    end
+
     # URL to this component's Weft route with current params as query string.
     # Pass overrides to change specific param values in the URL.
     #

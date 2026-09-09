@@ -165,14 +165,16 @@ module Weft
       @data.key?(key) || @defaults.key?(key)
     end
 
-    def to_h = materialized
-
     def respond_to_missing?(name, include_private = false)
       key?(name) || @data.respond_to?(name, include_private) || super
     end
 
     def method_missing(name, *args, **kwargs, &block)
       return self[name] if bare_read?(name, args, kwargs, block)
+
+      lazy = lazy_hash_answer(name, args, kwargs, block)
+      return lazy unless lazy.nil?
+
       return materialized.public_send(name, *args, **kwargs, &block) if @data.respond_to?(name)
 
       super
@@ -183,6 +185,37 @@ module Weft
     end
 
     private
+
+    # Hash-API answers that need no derivation run, or not every one. They live
+    # here rather than as real methods so that a param declared with the same
+    # name still wins at bare_read? above — a real method would never reach
+    # method_missing, which is how `overlay` and `branch_data` came to shadow
+    # the declarations they collide with.
+
+    # nil means "not one of these" — safe as a sentinel because `keys` always
+    # answers an Array and `any?` always a boolean.
+    def lazy_hash_answer(name, args, kwargs, block)
+      return unless args.empty? && kwargs.empty?
+
+      case name
+      when :keys then lazy_keys if block.nil?
+      when :any? then lazy_any?(&block) if block
+      end
+    end
+
+    # Every key the bag can answer for. A thunk occupies its key whether or not
+    # it has run, so this costs nothing and works on a bag whose derivation
+    # already failed.
+    def lazy_keys = @data.keys | @defaults.keys
+
+    # Forces one key at a time and stops at the first truthy yield, so a
+    # satisfied `any?` never pays for the rest of the bag — and never trips
+    # over a derivation it did not need. The pair is yielded as an array, which
+    # is what Hash does, so one- and two-argument blocks both read naturally.
+    def lazy_any?
+      lazy_keys.each { |key| return true if yield([key, self[key]]) }
+      false
+    end
 
     # A declared key asked for as a plain attribute. Anything carrying
     # arguments or a block means something else and belongs to the Hash API.
@@ -212,6 +245,26 @@ module Weft
     # at its declared fallback.
     def materialized
       @defaults.merge(resolved_data) { |_key, fallback, value| value.nil? ? fallback : value }
+    end
+
+    # @api private
+    # Every key whose derivation has been forced and failed, mapped to what it
+    # raised. Only outcomes that have actually settled appear: an unforced
+    # derivation might yet succeed, so reporting it would be a guess.
+    #
+    # Private on purpose. A real public method never reaches method_missing, so
+    # it would shadow a param an adopter declared with the same name — the
+    # defect this avoids. Weft reaches it with `send`; a private method called
+    # with an explicit receiver still routes through method_missing, so the
+    # adopter's declaration keeps winning.
+    #
+    # Needs no registry of its own: a thunk is one object across every bag that
+    # inherits it, so a failure anywhere in a lineage is visible everywhere it
+    # reaches, by identity.
+    def derivation_errors
+      @data.each_with_object({}) do |(key, entry), errors|
+        errors[key] = entry.error if entry.is_a?(Thunk) && entry.error
+      end
     end
 
     # Ask a thunk for its outcome, with this bag as the block's argument
