@@ -174,7 +174,11 @@ derives(:user, override: true)    { |p| Customer.find(p.customer_id) }
 
 `contextual` implies `override` — a contextual derivation that deferred to an ancestor could never run at all — so `contextual: true, override: false` is refused rather than silently ignored.
 
-`params.to_h` and any delegated Hash-API call materialize every remaining derivation first — the eager escape hatch when you genuinely want the whole bag.
+`params.to_h` and most delegated Hash-API calls materialize every remaining derivation first — the eager escape hatch when you genuinely want the whole bag. That is inherent: they promise every value, so every derivation has to run, and one that raises takes the whole call with it.
+
+Two are answered without that. `params.keys` reads the declarations, so it costs nothing and works even when a derivation has already failed; a thunk occupies its key whether or not it has run. `params.any?` forces one key at a time and stops at the first match, so a satisfied `any?` never pays for the rest of the bag.
+
+And as everywhere else, a declaration wins: declare `param :keys` and `params.keys` is your value, not the bag's key list.
 
 ### `defines` — static values
 
