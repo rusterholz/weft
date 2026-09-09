@@ -156,6 +156,7 @@ DEPENDENCIES
   activerecord (~> 8.0)
   arbre (~> 2.2)
   clockwork (~> 4.0)
+  json (< 3)
   openssl (>= 3.2.2)
   puma (~> 8.0)
   rackup (~> 2.2)

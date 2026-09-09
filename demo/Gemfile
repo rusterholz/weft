@@ -5,6 +5,10 @@ source "https://rubygems.org"
 gem "activerecord", "~> 8.0", require: "active_record"
 gem "arbre", "~> 2.2"
 gem "clockwork", "~> 4.0"
+# json 3 made JSON.parse's options keyword-only; ActiveSupport::JSON.decode still
+# passes them positionally through 8.1.3.1, so every json-column read raises
+# ArgumentError. Rails main already splats them — drop this when that ships.
+gem "json", "< 3"
 gem "puma", "~> 8.0"
 gem "rackup", "~> 2.2"
 gem "rake", "~> 13.0"
