@@ -224,4 +224,176 @@ RSpec.describe Weft::Component do
       expect(html).to include("<span>hello</span>")
     end
   end
+
+  describe "#despite_derivation_errors" do
+    def render(klass) = Weft::Context.new { insert_tag(klass) }.to_s
+
+    it "runs the block once and yields an empty hash when nothing has failed" do
+      runs = 0
+      klass = Class.new(Weft::Component) do
+        def self.name = "CalmCard"
+        derives(:fine) { |_p| "ok" }
+      end
+      klass.define_method(:build) do |attributes = {}|
+        super(attributes)
+        despite_derivation_errors do |errors|
+          runs += 1
+          span "errors=#{errors.size} fine=#{params.fine}"
+        end
+      end
+
+      expect(render(klass)).to include("errors=0 fine=ok")
+      expect(runs).to eq(1)
+    end
+
+    # The point of the helper: the block steps on a mine, and gets to run again
+    # knowing where it is, without the adopter writing the loop.
+    it "re-runs the block with the failure reported, so it can render around it" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "MinedCard"
+        derives(:safe) { |_p| "ok" }
+        derives(:mine) { |_p| raise "mine exploded" }
+      end
+      klass.define_method(:build) do |attributes = {}|
+        super(attributes)
+        despite_derivation_errors do |errors|
+          span "safe=#{params.safe}"
+          span errors.key?(:mine) ? "mine unavailable: #{errors[:mine].message}" : "mine=#{params.mine}"
+        end
+      end
+
+      html = render(klass)
+
+      expect(html).to include("safe=ok")
+      expect(html).to include("mine unavailable: mine exploded")
+    end
+
+    # Arbre appends children as they are created, so a naive retry stacks the
+    # abandoned attempt on top of the next one.
+    it "leaves no trace of the abandoned attempt" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "NoTraceCard"
+        derives(:mine) { |_p| raise "boom" }
+      end
+      klass.define_method(:build) do |attributes = {}|
+        super(attributes)
+        despite_derivation_errors do |errors|
+          span "attempt"
+          span params.mine unless errors.key?(:mine)
+        end
+      end
+
+      expect(render(klass).scan("<span>attempt</span>").size).to eq(1)
+    end
+
+    # It rewinds only what the block emitted: whatever super and the build body
+    # put in the tree before the block was entered has to survive.
+    it "keeps what was rendered before the block" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "PreambleCard"
+        derives(:mine) { |_p| raise "boom" }
+      end
+      klass.define_method(:build) do |attributes = {}|
+        super(attributes)
+        span "preamble"
+        despite_derivation_errors do |errors|
+          span params.mine unless errors.key?(:mine)
+          span "body"
+        end
+      end
+
+      html = render(klass)
+
+      expect(html.scan("<span>preamble</span>").size).to eq(1)
+      expect(html).to include("<span>body</span>")
+    end
+
+    # Real error components wrap their body in chrome, so the helper is used
+    # inside an element block far more often than at the top of build. The
+    # rewind has to take back what was emitted *there*, not the component's
+    # own children.
+    it "rewinds correctly when used inside a nested element" do # rubocop:disable RSpec/ExampleLength
+      klass = Class.new(Weft::Component) do
+        def self.name = "NestedCard"
+        derives(:mine) { |_p| raise "boom" }
+      end
+      klass.define_method(:build) do |attributes = {}|
+        super(attributes)
+        div(class: "wrapper") do
+          span "chrome"
+          despite_derivation_errors do |errors|
+            span "attempt"
+            span params.mine unless errors.key?(:mine)
+          end
+        end
+      end
+
+      html = render(klass)
+
+      expect(html.scan("<span>chrome</span>").size).to eq(1)
+      expect(html.scan("<span>attempt</span>").size).to eq(1)
+    end
+
+    it "finds every mine, however many the block steps on" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "MinefieldCard"
+        derives(:a) { |_p| raise "a" }
+        derives(:b) { |_p| raise "b" }
+        derives(:c) { |_p| raise "c" }
+      end
+      klass.define_method(:build) do |attributes = {}|
+        super(attributes)
+        despite_derivation_errors do |errors|
+          %i[a b c].each { |k| span "#{k}=#{params.public_send(k)}" unless errors.key?(k) }
+          span "found=#{errors.keys.sort.join(',')}"
+        end
+      end
+
+      expect(render(klass)).to include("found=a,b,c")
+    end
+
+    # An ordinary bug in the block is not a derivation failure, and retrying it
+    # would turn a typo into a confusing loop.
+    it "re-raises an error that no derivation caused" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "BuggyCard"
+      end
+      klass.define_method(:build) do |attributes = {}|
+        super(attributes)
+        despite_derivation_errors { |_errors| raise ArgumentError, "my own bug" }
+      end
+
+      expect { render(klass) }.to raise_error(ArgumentError, "my own bug")
+    end
+
+    # The rescue here has to cover whatever a Thunk records, or a failure it
+    # remembered would escape the loop that exists to handle it.
+    it "handles a ScriptError from a derivation, as the thunk records one" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "AbstractDerivationCard"
+        derives(:mine) { |_p| raise NotImplementedError, "todo" }
+      end
+      klass.define_method(:build) do |attributes = {}|
+        super(attributes)
+        despite_derivation_errors do |errors|
+          span errors.key?(:mine) ? "mine unavailable" : "mine=#{params.mine}"
+        end
+      end
+
+      expect(render(klass)).to include("mine unavailable")
+    end
+
+    it "re-raises a derivation failure the block never learns to avoid" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "StubbornCard"
+        derives(:mine) { |_p| raise "boom" }
+      end
+      klass.define_method(:build) do |attributes = {}|
+        super(attributes)
+        despite_derivation_errors { |_errors| span params.mine }
+      end
+
+      expect { render(klass) }.to raise_error(RuntimeError, "boom")
+    end
+  end
 end

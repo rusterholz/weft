@@ -34,6 +34,39 @@ RSpec.describe ErrorComponent, type: :component do
     expect(html).not_to include("Retry")
   end
 
+  # The push error card names the component that went quiet, so a page
+  # streaming several of them says which one stopped. That title is a
+  # derivation of the failing card — and on the outage drill it is derived from
+  # the very query that broke, so reading it bare would re-raise.
+  describe "naming the card that went quiet" do
+    let(:order) { Oms::Order.create!(customer_name: "Acme", lat: 0.0, lon: 0.0, status: "processing") }
+
+    def render_push_error_for(card_class, order_id)
+      state = Weft::Params::Assembly.for_request(card_class, { "order_id" => order_id })
+      Weft::Context.new({}, nil,
+                        wire_params: { attempts_remaining: 2, status_code: 500 },
+                        branch_bag: state) { insert_tag(ErrorComponent) }.to_s
+    end
+
+    it "uses the failed card's own title when the derivation still answers" do
+      html = render_push_error_for(Logistics::ShipmentsCard, order.id)
+
+      expect(html).to include("Shipments (0)")
+      expect(html).to match(/interrupted/i)
+    end
+
+    it "falls back to the plain wording when that title is what failed" do
+      Logistics::ShipmentFeedOutage.toggle! unless Logistics::ShipmentFeedOutage.active?
+
+      html = render_push_error_for(Logistics::ShipmentsCard, order.id)
+
+      expect(html).to match(/live updates interrupted/i)
+      expect(html).not_to include("Shipments (")
+    ensure
+      Logistics::ShipmentFeedOutage.toggle! if Logistics::ShipmentFeedOutage.active?
+    end
+  end
+
   it "renders the retrying live-updates state while push attempts remain" do
     html = render_error(exception: RuntimeError.new("feed down"),
                         attempts_remaining: 2, retry_url: "/x", status_code: 500)

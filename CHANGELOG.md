@@ -44,6 +44,20 @@ Weft learns to say what a thing *is*: components name their own identity instead
 
 - **Collision Detection Covers DOM Ids** – Two components whose ids would collide are caught when routes are validated, alongside the route checks — so a fragment that could only ever land on another component's element is a startup error, not a mystery in the browser.
 
+- **Render Around A Derivation That Broke** (`despite_derivation_errors`) – A recovery component inherits the state the failure happened in, which is what lets it show the record your callable had already loaded — and also means that reading the derivation which *caused* the failure raises again. Guarding every read with a `rescue` was the only answer, and a shared error component doesn't know which key is the bad one, so that meant guarding all of them.
+
+  ```ruby
+  despite_derivation_errors do |errors|
+    h2 errors.key?(:title) ? "Unavailable" : params.title
+  end
+  ```
+
+  The block is handed the derivations known to have failed and reads whatever it likes; an unexpected failure takes back what the block had rendered and runs it again with that key named, so you find out by asking rather than by stepping on it. A failed derivation never re-runs, and what `build` rendered before the block — `super` included — is untouched.
+  - An error no derivation caused is re-raised as itself, since a bug in your own block is not something to retry
+  - It covers the component's own derivations; a nested child's live in that child's bag, so give it its own `recovers` edge if it needs to survive on its own
+
+- **A Bag Can Answer Without Running Everything** – `params.keys` now reads the declarations instead of materializing the bag, so it costs nothing and still answers after a derivation has failed. `params.any?` forces one key at a time and stops at the first match rather than computing the whole bag to check. `to_h` and the other whole-hash calls still promise every value, so they still run every derivation — that one is inherent, and now documented rather than surprising.
+
 - **Say Where A Derived Value Belongs** (`contextual:`/`override:` on `derives`) – Two keywords for the cases the default doesn't fit. `contextual: true` makes a value a function of *where it's read*, so each component inheriting it computes its own — right for a label assembled from keys its readers differ on, and it runs once per reader even when nothing changed, so keep those cheap and pure. `override: true` claims the key for one component and everything inside it: "in here, `:user` is the customer being viewed, not the person viewing," computed once, invisible outside that subtree. It outranks an inherited value and nothing else — a wire value still wins, and so does a key a verb block returned.
   - `contextual` implies `override`, since a contextual derivation that deferred to an ancestor could never run; declaring `contextual: true, override: false` is refused rather than quietly ignored
 

@@ -72,7 +72,29 @@ The `params` it gets are **the state the request had reached when it broke**, wi
 
 Inheriting outranks deriving, exactly as it does for a component nested inside another's build. If your recovery target declares `derives :order` and the exchange that broke already had an `:order`, the inherited value wins and the target's own derivation doesn't run — usually what you want, since it's the same fallback idiom a nested component relies on: derive when rendering standalone, inherit when rendering inside something richer. When a recovery target genuinely needs to work out its own value regardless, give that derivation a key of its own rather than one it will inherit.
 
-One sharp edge follows from inheriting a bag that belongs to a failure: **if the derivation that raised is the one your recovery rendering reads, it raises again** — the same exception, without re-running the block, because a failure settles once like any other outcome. So the failing lookup doesn't happen twice, but the error rendering does inherit the failure. Derivations are lazy, so a poisoned one nobody reads is inert, and the ordinary cases — showing the exception, offering a retry, rendering the record the callable had already loaded — never touch it. The case to watch is a recovery target whose job is to re-render the very thing that just failed to load. Keep that read out of the error rendering, or recover to a target that doesn't depend on it.
+One sharp edge follows from inheriting a bag that belongs to a failure: **if the derivation that raised is the one your recovery rendering reads, it raises again** — the same exception, without re-running the block, because a failure settles once like any other outcome. So the failing lookup doesn't happen twice, but the error rendering does inherit the failure. Derivations are lazy, so a poisoned one nobody reads is inert, and the ordinary cases — showing the exception, offering a retry, rendering the record the callable had already loaded — never touch it. The case to watch is a recovery target whose job is to re-render the very thing that just failed to load.
+
+### Rendering around a failed derivation
+
+You could guard every read with a `rescue`, but a recovery target usually doesn't know *which* derivation broke — so that means guarding all of them. `despite_derivation_errors` does it once:
+
+```ruby
+def build(attributes = {})
+  super
+  despite_derivation_errors do |errors|
+    h2 errors.key?(:title) ? "Unavailable" : params.title
+    para "Couldn't load the order." if errors.key?(:order)
+  end
+end
+```
+
+The block is handed a `{key => exception}` hash of the derivations known to have failed, and may read whatever it likes. If a read it *didn't* expect raises, Weft takes back what the block had rendered so far and runs it again with that key now named in the hash — so you find out by asking, rather than by stepping on it. Each failure is discovered at most once, and a derivation that already failed never re-runs.
+
+Three things worth knowing:
+
+- **Only what the block rendered is taken back.** Whatever `build` emitted before the block — including anything from `super` — stays put, and the block can sit inside your own chrome rather than at the top of `build`.
+- **An error no derivation caused is re-raised untouched.** A bug in your own block is not something to retry, so it surfaces as itself rather than looping.
+- **It covers this component's derivations, not a nested child's.** A child component's derivations live in its own params bag, so a failure inside one re-raises here rather than appearing in the hash. Give that child its own `recovers` edge if it needs to survive independently.
 
 Edges are consulted in a defined order: a class's own declarations first (in declaration order), then its ancestors' — so subclass declarations beat inherited ones, and within a class, first match wins. Put more-specific edges before catch-alls.
 

@@ -217,4 +217,131 @@ RSpec.describe Weft::Params do
       expect(described_class.new({ n: thunk { |_p| 5 } }).map { |k, v| [k, v] }).to eq([[:n, 5]])
     end
   end
+
+  describe "the hash API against unforced derivations" do
+    def thunk(&block) = described_class::Thunk.new(block)
+
+    it "answers keys without forcing anything" do
+      runs = 0
+      bag = described_class.new({ status: "hot", order: thunk { |_p| runs += 1 } })
+
+      expect(bag.keys).to eq(%i[status order])
+      expect(runs).to eq(0)
+    end
+
+    it "includes keys that only a declared default supplies" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "DefaultedKeys"
+        param :status, default: "hot"
+      end
+
+      expect(Weft::Params::Assembly.for_request(klass, {}).keys).to eq([:status])
+    end
+
+    it "stops forcing as soon as any? is satisfied" do
+      runs = []
+      bag = described_class.new({ first: thunk { |_p| runs << :first and true },
+                                  second: thunk { |_p| runs << :second and true } })
+
+      expect(bag.any? { |_k, v| v }).to be(true)
+      expect(runs).to eq([:first])
+    end
+
+    it "still forces everything when any? is never satisfied" do
+      runs = []
+      bag = described_class.new({ a: thunk { |_p| runs << :a and false },
+                                  b: thunk { |_p| runs << :b and false } })
+
+      expect(bag.any? { |_k, v| v }).to be(false)
+      expect(runs).to eq(%i[a b])
+    end
+
+    # keys is answered from the declarations, so a poisoned derivation is no
+    # obstacle to asking what the bag holds.
+    it "answers keys on a bag whose derivation has failed" do
+      bag = described_class.new({ ok: 1, bad: thunk { |_p| raise "poisoned" } })
+
+      expect { bag.bad }.to raise_error(RuntimeError)
+      expect(bag.keys).to eq(%i[ok bad])
+    end
+
+    it "lets a declared param named keys win over the hash API" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "KeysParam"
+        param :keys, default: "mine"
+      end
+
+      expect(Weft::Params::Assembly.for_request(klass, {}).keys).to eq("mine")
+    end
+
+    it "lets a declared param named to_h win over the hash API" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "ToHParam"
+        param :to_h, default: "mine"
+      end
+
+      expect(Weft::Params::Assembly.for_request(klass, {}).to_h).to eq("mine")
+    end
+  end
+
+  describe "reporting derivations that have failed" do
+    def thunk(&block) = described_class::Thunk.new(block)
+
+    def errors_in(bag) = bag.send(:derivation_errors)
+
+    it "reports nothing while every derivation is unforced" do
+      bag = described_class.new({ order: thunk { |_p| raise "boom" } })
+
+      expect(errors_in(bag)).to eq({})
+    end
+
+    it "reports the exception once a derivation has failed" do
+      bag = described_class.new({ order: thunk { |_p| raise "lookup exploded" } })
+
+      expect { bag.order }.to raise_error(RuntimeError)
+
+      expect(errors_in(bag).keys).to eq([:order])
+      expect(errors_in(bag)[:order]).to be_a(RuntimeError)
+      expect(errors_in(bag)[:order].message).to eq("lookup exploded")
+    end
+
+    it "leaves a derivation that succeeded out of the report" do
+      bag = described_class.new({ ok: thunk { |_p| "fine" }, bad: thunk { |_p| raise "no" } })
+
+      bag.ok
+      expect { bag.bad }.to raise_error(RuntimeError)
+
+      expect(errors_in(bag).keys).to eq([:bad])
+    end
+
+    it "ignores plain values, which cannot have failed" do
+      bag = described_class.new({ status: "hot" })
+
+      expect(errors_in(bag)).to eq({})
+    end
+
+    # A branch shares the thunk object, so a failure anywhere in the lineage is
+    # the same failure everywhere it reaches — no registry, just identity.
+    it "sees a failure a branch caused, because the thunk is one object" do
+      poisoned = thunk { |_p| raise "boom" }
+      parent = described_class.new({ order: poisoned })
+      child = described_class.new(parent.branch_data)
+
+      expect { child.order }.to raise_error(RuntimeError)
+
+      expect(errors_in(parent).keys).to eq([:order])
+    end
+
+    # Private on purpose: a real public method would never reach method_missing,
+    # so it would shadow a param of the same name — the defect this avoids.
+    it "does not shadow a declared param of the same name" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "ShadowProbe"
+        param :derivation_errors, default: "mine"
+      end
+      bag = Weft::Params::Assembly.for_request(klass, {})
+
+      expect(bag.derivation_errors).to eq("mine")
+    end
+  end
 end
