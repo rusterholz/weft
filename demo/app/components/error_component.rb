@@ -45,7 +45,13 @@ class ErrorComponent < Weft::Defaults::ErrorComponent
     stopped = @params.attempts_remaining.zero?
     div(class: "content-card weft-error") do
       div(class: "content-card-header", style: "background:#fef2f2; border-color:#fecaca") do
-        h2(style: "color:#991b1b") { text_node stopped ? "Live updates stopped" : "Live updates interrupted" }
+        # Name the card that went quiet, so a page streaming several of them
+        # says which one stopped. The title is a derivation of the failing
+        # component, and on this drill it is derived from the very query that
+        # broke — so reading it bare would re-raise. The block gets to try.
+        despite_derivation_errors do |errors|
+          h2(style: "color:#991b1b") { text_node push_heading(stopped, errors) }
+        end
         span(class: "badge-status badge-busy") { text_node stopped ? "Stopped" : "Retrying" }
       end
       div(class: "content-card-body") do
@@ -53,6 +59,15 @@ class ErrorComponent < Weft::Defaults::ErrorComponent
         render_resume_button if stopped && @params.retry_url
       end
     end
+  end
+
+  # "Shipments (4) — live updates interrupted" when the failing card can still
+  # say what it was, and the plain wording when it cannot.
+  def push_heading(stopped, errors)
+    state = stopped ? "Live updates stopped" : "Live updates interrupted"
+    return state if errors.key?(:title) || !@params.key?(:title)
+
+    "#{@params.title} — #{state.sub('Live updates ', '')}"
   end
 
   def render_verbose_body
