@@ -9,12 +9,18 @@ module Weft
   # declared param names win, then the underlying Hash API is available
   # for any name not declared as a param.
   #
-  # One exception, and it is a defect rather than a rule: a name this class
-  # defines as a real method (`branch_data`, `to_h`, `key?`) never reaches
-  # method_missing, so declaring it as a param shadows the declaration instead
-  # of winning. `branch_data` is the one that matters — it has no business
-  # occupying the adopter's namespace, and answers with weft's internal hash
-  # rather than erroring.
+  # The rule holds for every name that reaches method_missing, which is every
+  # name this class does not define as a real public method. The few it does
+  # define (`to_h`, `key?`) are the Hash API a bag deliberately answers for, and
+  # a param declared with one of those names loses to it.
+  #
+  # Weft's own internals stay out of that namespace entirely: they are private,
+  # and a private method called with an explicit receiver still routes through
+  # method_missing, so a declared param keeps winning. `overlay` and
+  # `branch_data` were public here once and shadowed the declarations they
+  # collided with — `branch_data` silently, by answering with weft's internal
+  # hash. What replaced the first is an operator, which cannot collide because
+  # nobody can declare `param :%`.
   #
   # Entries may be lazy: a `derives` declaration registers a Thunk that runs
   # when its key is first read, and never runs if the key goes unread. The
@@ -161,18 +167,6 @@ module Weft
                                                  overlay: @overlay.merge(delta))
     end
 
-    # @api private
-    # A branchable snapshot for the inheritance axis. A thunk rides as itself,
-    # carrying whatever outcome it has settled on, so a descendant inherits the
-    # derivation rather than repeating it — including when that outcome was
-    # nil, which is an answer rather than an absence.
-    #
-    # Plain nils still don't ride: there, nil means "no source had this key"
-    # and must not shadow a descendant's own defaults.
-    def branch_data
-      @data.compact
-    end
-
     # nil means no source had this key — so the read falls to the declared
     # fallback, exactly as it falls past a nil at any other level of the stack.
     #
@@ -294,14 +288,24 @@ module Weft
     end
 
     # @api private
-    # The other half of what a crossing branch takes from this bag: the overlay,
-    # which arrives still outranking the crossed-into class's own wire, at level
-    # 2, where {#branch_data} arrives as "inherited" at level 4. Splitting them
-    # is the whole reason a bag holds an overlay slot.
+    # What a crossing branch takes from this bag, in two halves that land on
+    # different levels: the data arrives as "inherited" at level 4, and the
+    # overlay arrives still outranking the crossed-into class's own wire, at
+    # level 2. Splitting them is the whole reason a bag holds an overlay slot.
     #
-    # Private, and reached with +send+, for the same reason {#derivation_errors}
-    # is: a real public method never sees method_missing, so it would shadow a
-    # param an adopter declared with the same name.
+    # A thunk rides in the data as itself, carrying whatever outcome it has
+    # settled on, so a descendant inherits the derivation rather than repeating
+    # it — including when that outcome was nil, which is an answer rather than an
+    # absence. Plain nils don't ride: there, nil means "no source had this key"
+    # and must not shadow a descendant's own defaults.
+    #
+    # Both are private, and reached with +send+, for the same reason
+    # {#derivation_errors} is: a real public method never sees method_missing, so
+    # it would shadow a param an adopter declared with the same name. `overlay`
+    # and `branch_data` were public once and did exactly that.
+    def branch_data = @data.compact
+
+    # @api private
     def overlay_slot = @overlay
 
     # Ask a thunk for its outcome, with this bag as the block's argument

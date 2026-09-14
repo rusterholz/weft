@@ -68,7 +68,7 @@ module Weft
         resolution = Weft::Resolver.resolution(component_class, wire_source)
         @wire = resolution.coerced
         @violations = resolution.violations
-        @inherited = branched_from ? branch_copies(branched_from.branch_data) : {}
+        @inherited = branched_from ? branch_copies(branched_from.send(:branch_data)) : {}
       end
 
       # The overlay rides onto the new bag as well as being consulted here, and

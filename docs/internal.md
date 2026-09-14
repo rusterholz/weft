@@ -6,10 +6,33 @@ is something you have to know before changing how params reach a component.
 This file is written per-area as areas are worked on, so it is deliberately incomplete. What is here
 is true; what is missing is missing, not implied.
 
+## Two words, used precisely
+
+Bags are made in two different ways, and the distinction carries most of this document.
+
+**Assembling** is making a bag from nothing — no parent. It happens at the handful of places a request
+first needs one: the top of a component render, an action, a stream frame, a page failure, and the
+public class-level entry that has to accept a plain hash. Five sites, and that is the whole list.
+
+**Branching** is making a bag from another bag, and it is by far the common case. It comes in two kinds:
+
+- a **crossing** branch enters another component's declarations, so it re-resolves the wire, coerces,
+  re-homes thunks, and demotes everything it inherits to level 4. Every component in a render tree gets
+  its bag this way, from its nearest ancestor's.
+- a **non-crossing** branch (`bag % delta`) keeps the same declarations and layers a delta on top.
+  Nothing demotes, nothing re-resolves.
+
+What separates them is the travel rule below: **a crossing branch demotes; a non-crossing branch does
+not.** That is why they are two operations rather than one with a flag, and why `bag % {}` is not the
+same thing as a crossing branch back into the bag's own class.
+
+*(One residue to know about: the class that implements both is called `Params::Assembly`, and its
+`branched_from:` keyword is what selects between them. The name predates the distinction.)*
+
 ## The params source stack
 
-A component's params bag is composed once, at construction, from six ranked sources. The first one
-that answers for a key wins.
+A component's params bag is composed once, when the branch into that component is taken, from six
+ranked sources. The first one that answers for a key wins.
 
 | # | level | supplied by |
 |---|-------|-------------|
@@ -70,8 +93,8 @@ breaks on reparenting, and breaks as a bare `NoMethodError` rather than an expla
 never rides that component's own URLs, since serialization projects the class's declared params only —
 correct today, a trap if the class later becomes routable.
 
-Inherited values **are** coerced. Coercion runs during assembly, not at read time, so a value does not
-lose its type by crossing a branch.
+Inherited values **are** coerced. Coercion runs when the branch is taken, not at read time, so a value
+does not lose its type by crossing a branch.
 
 ### `override:`
 
@@ -94,9 +117,9 @@ component with a `receives` value and a delta on the same key must *answer* with
 outranks level 2) while still *transmitting* the delta downward, because a hand-off demotes on crossing
 and the overlay does not.
 
-So a read consults the data alone. The delta is already accounted for there — assembly ranked it at
-level 2 while composing, and `%` wrote its values straight in. Consulting the overlay again at read
-time would re-apply level 2 on top of a finished result and quietly beat level 1.
+So a read consults the data alone. The delta is already accounted for there — the crossing branch
+ranked it at level 2, and `%` wrote its values straight in. Consulting the overlay again at read time
+would re-apply level 2 on top of a finished result and quietly beat level 1.
 
 `bag % {}` returns **the same instance**, which lets a call site apply a delta unconditionally without
 paying for a copy. That identity is safe only because **a bag has no writers**: a read forces a Thunk,
@@ -128,11 +151,14 @@ seat, every entry in an ancestor's bag has identical provenance: *someone above 
 Preserving the ancestor's ranking would make a child's resolution depend on how its parent happened to
 obtain a value, and would multiply the stack with depth.
 
+The table is about **rank**, not reach. Everything in a bag except a declared default reaches every
+component below it; what varies is the level it speaks at when it gets there.
+
 | what | on crossing a branch |
 |------|----------------------|
-| a declared `default:` | **does not cross** — which is why a child's own default is sovereign |
-| hand-off values, own wire values, resolved values, thunks | **demote** to level 4, "inherited" |
-| an applied delta (the overlay) | **persists** at level 2, at every depth below |
+| a declared `default:` | **does not cross at all** — which is why a child's own default is sovereign |
+| hand-off values, own wire values, resolved values, thunks | **arrive, demoted** to level 4, "inherited" |
+| an applied delta (the overlay) | **arrives at its own rank**, level 2, at every depth below |
 
 An overlay's authority is **subtree-scoped**: it reaches the bag it was applied to and everything below
 it, and nothing else. Two companions of one primary hold *different* overlays for the same key while
@@ -144,9 +170,27 @@ a rung at all.
 
 ### Hand-offs stay in the middle tier
 
-A `receives` value is not overlay-like, despite outranking everything below it. The difference is whose
-authority it is: an overlay's is scoped to a subtree and never expires, while a hand-off's is scoped to
-the one component it was staged for and is consumed when that component resolves.
+A `receives` value is not overlay-like, despite outranking everything below it. The difference is not
+how far it reaches — **both reach the whole subtree** — but whether its *rank* survives the trip.
+
+Keep those two apart, because the words for them are easy to slur together:
+
+- **Reach** is which components can see the value at all. A hand-off's reach is the subtree, exactly
+  like any other resolved value: a `StatusCard` handed `status:` passes it to the badge it builds
+  inside, and two cards on one page each supply their own. Nothing would work otherwise — the wire is
+  usually empty for a key that arrives by hand-off.
+- **Rank** is which level the value speaks at once it gets there. Here they differ: an overlay stays at
+  level 2 at every depth, while a hand-off is level 1 only for the component it was staged for and
+  arrives everywhere below as ordinary inherited data, at level 4.
+
+What is one-shot is the **staging register**, not the value. `Context#stage_received` holds one entry,
+class-checked, and `take_received!` clears it — which is what stops the *next sibling* from picking up a
+hand-off meant for its neighbour. The value itself is not consumed by anything; it lands in the bag and
+travels down like everything else in there.
+
+So a hand-off's authority decays rather than expiring, and that decay is the whole point: a nested
+component declaring the same key on the wire outranks its ancestor's hand-off (level 3 beats level 4)
+and can still be addressed on its own.
 
 Promoting it would be actively harmful. An ancestor's hand-off would land at a descendant's level 1,
 above the descendant's *own wire* — so a nested component declaring the same key could never be
@@ -172,7 +216,7 @@ declarations: wide source, narrow projection, narrowed per component. That is wh
 never reaches a bag through the wire door.
 
 The universe never occupies a rung, because inheritance moves values and a source is not a value. It is
-handed to each assembly as an argument from the render environment, so a root with no lineage whatever
+handed to each branch as an argument from the render environment, so a root with no lineage whatever
 still has the whole of it.
 
 > **Stated intention, not current structure:** the per-delivery members are hand-threaded today. They
