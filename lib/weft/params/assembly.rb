@@ -24,6 +24,12 @@ module Weft
     # key, and an explicit nil clears — masking the wire so resolution falls
     # below it. A derivation always "produces" (a thunk is never nil), so a
     # same-key default sits unreachable behind one.
+    #
+    # Levels 2 and 4 both arrive on the bag being branched from, and the split is
+    # the point: its data demotes to inherited, its overlay stays at 2. Nothing
+    # passes an overlay in from outside — a call site that wants one applies it
+    # to the bag first (`bag % delta`), which is also what keeps the two rungs
+    # from carrying the same delta at once.
     class Assembly
       class << self
         def call(...) = new(...).bag
@@ -54,22 +60,28 @@ module Weft
       # also what leaves a *populated* bag for recovery to redraw from.
       attr_reader :violations
 
-      def initialize(component_class, wire_source, hand_offs: {}, overlays: {}, branched_from: nil)
+      def initialize(component_class, wire_source, hand_offs: {}, branched_from: nil)
         @component_class = component_class
         @received = hand_offs || {}
         @hand_offs = !hand_offs.nil?
-        @overlays = overlays
+        @overlays = branched_from ? branched_from.send(:overlay_slot) : {}
         resolution = Weft::Resolver.resolution(component_class, wire_source)
         @wire = resolution.coerced
         @violations = resolution.violations
         @inherited = branched_from ? branch_copies(branched_from.branch_data) : {}
       end
 
+      # The overlay rides onto the new bag as well as being consulted here, and
+      # both are load-bearing: consulting it ranks the delta above this class's
+      # own wire, and carrying it is what lets the same delta outrank the wire of
+      # every class below. Data, by contrast, is spent — it arrives as inherited
+      # and leaves as this bag's own.
       def bag
         data = @inherited.dup
         keys.each { |key| data[key] = stack_value(key) }
         report_shadowed_derivations(data)
-        adopt_thunks(data, Weft::Params.new(data, defaults: declared_defaults, owner: @component_class))
+        adopt_thunks(data, Weft::Params.new(data, defaults: declared_defaults,
+                                                  owner: @component_class, overlay: @overlays))
       end
 
       private

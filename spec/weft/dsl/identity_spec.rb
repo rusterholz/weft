@@ -50,7 +50,7 @@ RSpec.describe Weft::DSL::Identity do
     end
 
     def dom_id_for(value)
-      card.weft_dom_id_for(Weft::Params::Assembly.call(card, {}, overlays: { key: value }))
+      card.weft_dom_id_for(Weft::Params::Assembly.call(card, {}) % { key: value })
     end
 
     it "composes a scalar into the id" do
@@ -98,7 +98,7 @@ RSpec.describe Weft::DSL::Identity do
         param :key, digest: true
         identifies_by :key
       end
-      bag = Weft::Params::Assembly.call(digested, {}, overlays: { key: { a: 1 } })
+      bag = Weft::Params::Assembly.call(digested, {}) % { key: { a: 1 } }
 
       expect { digested.weft_dom_id_for(bag) }.to raise_error(Weft::InvalidIdentifierValue)
     end

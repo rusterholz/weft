@@ -42,8 +42,11 @@ RSpec.describe Weft::Params do
       expect(params.branch_data).to eq(page: 2)
     end
 
-    it "carries its defaults through an overlay" do
-      expect(params.overlay(page: 9)[:view]).to eq("all")
+    it "carries its defaults across a non-crossing branch, and the delta with them" do
+      branched = params % { page: 9 }
+
+      expect(branched[:view]).to eq("all")
+      expect(branched[:page]).to eq(9)
     end
   end
 

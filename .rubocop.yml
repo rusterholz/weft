@@ -106,6 +106,15 @@ Style/EmptyClassDefinition:
   # Compact error/marker classes: Foo = Class.new(Error).
   EnforcedStyle: class_new
 
+Style/FormatString:
+  # Weft::Params defines `%` — `bag % delta` applies a delta to a params bag and
+  # has nothing to do with formatting. The cop keys on the argument being a hash
+  # or array literal, so it cannot tell the two apart, and it is worse than a
+  # false positive: it is flagged SAFE, so `rubocop -a` rewrites `bag % {k: v}`
+  # into `format(bag, k: v)` and silently changes what the code does. Weft uses
+  # no format strings at all, so the cop protects nothing here.
+  Enabled: false
+
 Style/ModuleFunction:
   Enabled: false
 

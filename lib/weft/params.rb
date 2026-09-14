@@ -10,11 +10,11 @@ module Weft
   # for any name not declared as a param.
   #
   # One exception, and it is a defect rather than a rule: a name this class
-  # defines as a real method (`overlay`, `branch_data`, `to_h`, `key?`)
-  # never reaches method_missing, so declaring it as a param shadows the
-  # declaration instead of winning. The internal two are the ones that
-  # matter — they have no business occupying the adopter's namespace, and
-  # are slated to become operators, which cannot collide.
+  # defines as a real method (`branch_data`, `to_h`, `key?`) never reaches
+  # method_missing, so declaring it as a param shadows the declaration instead
+  # of winning. `branch_data` is the one that matters — it has no business
+  # occupying the adopter's namespace, and answers with weft's internal hash
+  # rather than erroring.
   #
   # Entries may be lazy: a `derives` declaration registers a Thunk that runs
   # when its key is first read, and never runs if the key goes unread. The
@@ -124,11 +124,41 @@ module Weft
     # own, not to the one above it.
     # +owner+ is the class the bag was assembled for, carried so that a read
     # finding nothing can say why instead of naming this class at the adopter.
-    def initialize(data, defaults: {}, owner: nil)
+    # +overlay+ is the accumulated verb-block delta this bag carries. It is kept
+    # apart from +data+ rather than merged into it because the two travel
+    # differently: data demotes to "inherited" when a branch crosses into
+    # another component's declarations, while the overlay persists at its own
+    # rung all the way down. A bag that held only the merged result could not
+    # express the difference, and every operation on it would silently lose one.
+    def initialize(data, defaults: {}, owner: nil, overlay: {})
       @data = data
       @defaults = defaults
       @owner = owner
+      @overlay = overlay
       @forcing = []
+    end
+
+    # This bag with +values+ layered on — the non-crossing branch: same
+    # declarations, same defaults, a delta on top. Nothing materializes;
+    # untouched thunks stay lazy and keep their homes, so a derivation never
+    # adopts one block's delta when a sibling supplied a different one.
+    #
+    # The delta lands in two places because it does two jobs, and they are not
+    # the same job. Its VALUES go to the data, which is what this bag answers
+    # with. The whole delta goes to the overlay, which is what the next crossing
+    # branch applies at its own rung — nils included, since a nil is an
+    # instruction to suppress a wire value rather than a value itself, and
+    # writing one into the data would destroy the very entry that resolution is
+    # supposed to fall through to.
+    #
+    # An empty delta answers with this same instance. That identity is safe only
+    # because a bag has no writers — a read forces a Thunk, which memoizes on the
+    # Thunk rather than here — so sharing one can never surprise the other holder.
+    def %(delta) # rubocop:disable Naming/BinaryOperatorParameterName
+      return self if delta.empty?
+
+      self.class.new(@data.merge(delta.compact), defaults: @defaults, owner: @owner,
+                                                 overlay: @overlay.merge(delta))
     end
 
     # @api private
@@ -143,18 +173,14 @@ module Weft
       @data.compact
     end
 
-    # @api private
-    # A same-bag copy with +values+ overlaid at their keys. Unlike
-    # to_h-then-merge, nothing materializes: untouched thunks stay lazy and
-    # nil entries stay resolved-absent. Thunk homes are left alone — this
-    # builds the view a verb block reads, and a derivation must not adopt one
-    # block's delta when a sibling block supplied a different one.
-    def overlay(values)
-      self.class.new(@data.merge(values), defaults: @defaults, owner: @owner)
-    end
-
     # nil means no source had this key — so the read falls to the declared
     # fallback, exactly as it falls past a nil at any other level of the stack.
+    #
+    # The overlay is deliberately NOT consulted here. A read asks what THIS bag
+    # resolved, and the answer already accounts for the delta: assembly ranked it
+    # at level 2 while composing the data, and `%` wrote its values straight in.
+    # Consulting it again would re-apply level 2 on top of the finished result —
+    # which a component's own hand-off, at level 1, is entitled to outrank.
     def [](key)
       value = @data[key]
       value = force!(key, value) if value.is_a?(Thunk)
@@ -266,6 +292,17 @@ module Weft
         errors[key] = entry.error if entry.is_a?(Thunk) && entry.error
       end
     end
+
+    # @api private
+    # The other half of what a crossing branch takes from this bag: the overlay,
+    # which arrives still outranking the crossed-into class's own wire, at level
+    # 2, where {#branch_data} arrives as "inherited" at level 4. Splitting them
+    # is the whole reason a bag holds an overlay slot.
+    #
+    # Private, and reached with +send+, for the same reason {#derivation_errors}
+    # is: a real public method never sees method_missing, so it would shadow a
+    # param an adopter declared with the same name.
+    def overlay_slot = @overlay
 
     # Ask a thunk for its outcome, with this bag as the block's argument
     # (derivations chain by reading sibling keys). The memo lives on the Thunk,

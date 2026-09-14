@@ -351,7 +351,6 @@ module Weft
       def resolve_bag(received:)
         assembly = Weft::Params::Assembly.new(self.class, wire_source,
                                               hand_offs: received,
-                                              overlays: context_overlays,
                                               branched_from: inherited_bag)
         bag = assembly.bag
         refuse_violations!(assembly.violations)
@@ -387,10 +386,6 @@ module Weft
                 "#{self.class.name} requires #{key.inspect}, and no source supplied it — the " \
                 "request did not send it and it declares no default"
         end
-      end
-
-      def context_overlays
-        arbre_context.overlays
       end
 
       # Checks required_hand_off? before reading the key: a required hand-off

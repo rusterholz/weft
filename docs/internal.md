@@ -38,14 +38,19 @@ the test is key-presence, not nil-ness:
 ```
 
 So an overlay carrying `{status: nil}` does *not* blank the key and does *not* fall back to the wire —
-it discards the wire value and resolution continues at level 4. Observable:
+it discards the wire value and resolution continues at level 4. Observable, where `%` applies a delta
+to a bag:
 
 ```ruby
 Assembly.call(klass, {status: "from-wire"}, branched_from: ancestor)[:status]
 # => "from-wire"
-Assembly.call(klass, {status: "from-wire"}, overlays: {status: nil}, branched_from: ancestor)[:status]
+Assembly.call(klass, {status: "from-wire"}, branched_from: ancestor % {status: nil})[:status]
 # => "from-ancestor"
 ```
+
+Which is why a nil in a delta reaches the overlay but never the data. It is an instruction to suppress
+a wire value rather than a value of its own, and writing it into the data would erase the very entry
+resolution is being asked to fall through to — the ancestor's, in the example above.
 
 **Undeclared keys ride the bag wholesale.** `Assembly#bag` seeds itself from the inherited hash and
 *then* overwrites the declared keys:
@@ -74,23 +79,34 @@ A derivation declared `override:` lifts above **inherited only** — it does not
 overlay, or the component's own wire. The intent is "I always compute this myself rather than accepting
 my parent's copy," not "I win."
 
-### Known issue: the overlay is transmitted twice
+### The overlay slot, and why a bag holds one
 
-A verb block's delta currently reaches a child by two routes at once — as the `overlays:` kwarg
-(arriving at level 2) and inside the branch bag's data (arriving at level 4), because applying an
-overlay merges into the bag's data hash. Level 2 wins, so nothing is visibly wrong, and removing the
-kwarg today would silently demote every delta to level 4.
+A bag is `(data, overlay, defaults, owner)`. The overlay is the accumulated verb-block delta, and it is
+held apart from the data because the two travel differently: data demotes to "inherited" when a branch
+crosses into another component's declarations, while the overlay persists at level 2 all the way down.
+A bag holding only the merged result could not express that difference — and for a long time weft's
+could not, which is where the delta's rung came from and where it went wrong.
 
-The cause is that `Params` has no overlay slot at all: a bag is data plus defaults plus owner, where
-the data is the flattened winner per key with no record of which rung it came from. An operation on a
-bag therefore *cannot express* "at level 2," and merging into the data is the only expressible thing.
+`bag % delta` applies a delta. It writes the delta's **values** to the data, which is what the bag
+answers with, and the **whole delta** to the overlay, which is what the next crossing branch re-applies
+at level 2. Those are two jobs rather than one, and the hand-off case is where they visibly diverge: a
+component with a `receives` value and a delta on the same key must *answer* with the hand-off (level 1
+outranks level 2) while still *transmitting* the delta downward, because a hand-off demotes on crossing
+and the overlay does not.
 
-The intended fix is a real overlay slot with a single atomic branch-and-overlay operation, after which
-applying an empty delta returns the same instance and applying a non-empty one yields a bag that
-carries the delta as an overlay.
+So a read consults the data alone. The delta is already accounted for there — assembly ranked it at
+level 2 while composing, and `%` wrote its values straight in. Consulting the overlay again at read
+time would re-apply level 2 on top of a finished result and quietly beat level 1.
 
-> The general lesson is worth more than the bug: **if an invariant lives only in the code that builds a
-> value and not in the value itself, every later operation on that value silently discards it.**
+`bag % {}` returns **the same instance**, which lets a call site apply a delta unconditionally without
+paying for a copy. That identity is safe only because **a bag has no writers**: a read forces a Thunk,
+and the Thunk memoizes on itself rather than on the bag. Keep it that way — the moment a bag can be
+mutated, every shared identity becomes an aliasing bug.
+
+> The general lesson outlived the bug that taught it: **if an invariant lives only in the code that
+> builds a value and not in the value itself, every later operation on that value silently discards
+> it.** The delta used to be ranked only while a bag was being composed, so every operation afterwards
+> could merge it into the data and nothing could tell that its rung had been lost.
 
 ## Lineage
 
@@ -147,7 +163,7 @@ Three lifetimes, and conflating them is the most common way to break this area.
 | scope | lives for | holds |
 |-------|-----------|-------|
 | **per-delivery** | one delivered swap-set | the wire universe, the slot register |
-| **per-root** | one root element tree | the branch bag, the applied overlay |
+| **per-root** | one root element tree | the branch bag, and the overlay riding on it |
 | **per-tree** | one element tree | the DOM ids already emitted |
 
 **The wire universe is everything the client sent** — the request's params minus routing internals,

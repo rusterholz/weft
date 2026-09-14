@@ -81,13 +81,12 @@ module Weft
       # gone by now. Companions still ride (a 200, never a 204 — htmx
       # refuses to swap 204s, which would skip the delete itself).
       def render_action_response(action, component_class, state, returned)
-        overlay = returned.is_a?(Hash) ? returned : {}
-        composed = state.overlay(overlay)
+        composed = state % (returned.is_a?(Hash) ? returned : {})
         apply_announcement_header(component_class, action.name)
         slots = Set.new
-        primary = build_action_primary(action, overlay, composed, slots)
+        primary = build_action_primary(action, composed, slots)
         (primary ? primary.to_s : "") +
-          render_companions(action_companions(action, component_class, primary, composed, overlay), slots)
+          render_companions(action_companions(action, component_class, primary, composed), slots)
       rescue StandardError => e
         render_action_error(action, action.renders, composed, e)
       end
@@ -97,21 +96,20 @@ module Weft
       # component's explicitly named ones. One list, so two companions
       # claiming a single DOM id are caught across the two sources and the
       # rendered component's declaration keeps the slot.
-      def action_companions(action, component_class, primary, composed, overlay)
-        target = target_companions(action, component_class, primary, composed, overlay)
+      def action_companions(action, component_class, primary, composed)
+        target = target_companions(action, component_class, primary, composed)
         return target if action.renders.equal?(component_class)
 
-        target + declarer_companions(component_class, action.name, composed, overlay)
+        target + declarer_companions(component_class, action.name, composed)
       end
 
       # The rendered component's companions: its block reads the primary's
       # rendered bag (rich values included) and each one branches it.
-      def target_companions(action, component_class, primary, composed, overlay)
+      def target_companions(action, component_class, primary, composed)
         context = action.renders.equal?(component_class) ? :action : :transfer
-        env = { universe: filtered_params, overlays: overlay,
-                branch_bag: companion_lineage(primary, composed) }
-        view = companion_view(primary, composed, overlay)
-        applicable_companions(action.renders, context, action.name).map { |inc| [inc, view, env] }
+        lineage = companion_lineage(primary, composed)
+        env = { universe: filtered_params, branch_bag: lineage }
+        applicable_companions(action.renders, context, action.name).map { |inc| [inc, lineage, env] }
       end
 
       # The declaring component's companions on a transfer. This branch
@@ -122,8 +120,8 @@ module Weft
       # derivation the callable forced is memoized in it: a companion that
       # inherited nothing here would pay a second time for work the response
       # has already done.
-      def declarer_companions(component_class, action_name, composed, overlay)
-        env = { universe: filtered_params, overlays: overlay, branch_bag: composed }
+      def declarer_companions(component_class, action_name, composed)
+        env = { universe: filtered_params, branch_bag: composed }
         explicitly_named_companions(component_class, action_name).map { |inc| [inc, composed, env] }
       end
 
@@ -139,25 +137,19 @@ module Weft
       # Declared defaults don't ride a branch, so the target's own fallbacks
       # stay its own; to override an inherited value, return the key (an
       # explicit nil clears it).
-      def build_action_primary(action, overlay, composed, slots)
+      def build_action_primary(action, composed, slots)
         return nil if action.swap == :delete
 
-        build_component_with_wire(action.renders, filtered_params, overlays: overlay,
-                                                                   branch_bag: composed, slots: slots)
+        build_component_with_wire(action.renders, filtered_params, branch_bag: composed, slots: slots)
       end
 
-      # The params view a companion block receives: the rendered primary's
-      # bag with the overlay applied (undeclared delta keys stay readable).
-      # On a delete-swap there is no primary — the composed state stands in.
-      def companion_view(primary, composed, overlay)
-        primary ? primary.params.overlay(overlay) : composed
-      end
-
-      # The bag those same companions branch from. It falls back exactly as
-      # the view above does, and has to: a block that reads one picture while
-      # its component inherits another is how a companion ends up re-deriving
-      # what the block just read. The overlay isn't folded in here because it
-      # rides the env separately.
+      # The bag a companion block reads AND the bag its component branches —
+      # now necessarily the same object, because the delta a block needs to see
+      # is carried by that bag rather than handed alongside it. They were two
+      # functions that had to agree; a block reading one picture while its
+      # component inherits another is how a companion ends up re-deriving what
+      # the block just read. On a delete-swap there is no primary, and the
+      # composed state stands in.
       def companion_lineage(primary, composed) = primary ? primary.params : composed
 
       # Error handling for actions. Adds HX-Reswap header when the action's
