@@ -433,21 +433,53 @@ module Weft
               "at the call site, or declare a default: to make it optional"
       end
 
-      # A builder kwarg naming a declared param renders as an HTML attribute
-      # only (params arrive from the wire, not the call site). Warn once per
-      # (class, key): param names legitimately collide with HTML attribute
-      # names (height, title, size, ...), so a standing collision shouldn't
-      # spam every render. Set#add? races just double-warn; harmless.
+      # A builder kwarg naming a key this class declares on any door but
+      # `receives` renders as an HTML attribute only, because neither of the
+      # other doors takes a value from a call site. Said once per call SITE:
+      # the mistake belongs to the line that wrote the kwarg, so two lines
+      # making it are two bugs, where keying by class alone would report only
+      # whichever rendered first. Still bounded — a standing collision says
+      # its piece once rather than once per render, which matters because
+      # param names legitimately collide with attribute names (title, size,
+      # value, ...). Set#add? races just double-warn; harmless.
+      #
+      # Deliberately not suppressed for known HTML attribute names: the kwarg
+      # does reach the DOM as that attribute, so nobody is stuck, and this is
+      # the migration signal for call sites that used to pass params inline.
       def warn_declared_chrome_collisions(attributes)
         attributes.each_key do |key|
-          next unless self.class.params.key?(key)
-          next unless Weft::DSL::Params.warned_collisions.add?([self.class, key])
+          door = collision_door(key) or next
+          next unless Weft::DSL::Params.warned_collisions.add?([self.class, key, kwarg_call_site])
 
           Weft.logger.warn(
-            "#{self.class.name}: builder kwarg #{key.inspect} matches a declared param and " \
-            "renders as an HTML attribute only (params arrive from the wire, not the call site)"
+            "#{self.class.name}: builder kwarg #{key.inspect} matches a declared #{door}, so it " \
+            "renders as an HTML attribute only. Declare `receives #{key.inspect}` to accept it " \
+            "from the call site."
           )
         end
+      end
+
+      # Which door claims the key, phrased for the warning, or nil when the
+      # kwarg is ordinary chrome that collides with nothing.
+      def collision_door(key)
+        return "param, which arrives from the wire rather than the call site" if
+          self.class.params.key?(key)
+
+        "derivation, which is computed rather than passed" if self.class.derived_params.key?(key)
+      end
+
+      # The adopter's line, for the dedup key. `insert_tag` is the seam between
+      # adopter code and Arbre's build machinery, so the frame just past weft's
+      # own interception is the one that wrote the kwarg.
+      #
+      # Nil when there is no seam, which degrades the key to (class, key). No
+      # path in the suite reaches that: every construction goes through weft's
+      # `insert_tag`. It stays because this runs on the way to a log line, and
+      # a diagnostic that raises is worse than one that dedupes coarsely.
+      def kwarg_call_site
+        frames = caller_locations
+        seam = frames.index { |l| l.path.end_with?("weft/context/interception.rb") }
+        frames[seam + 1]&.then { |f| "#{f.path}:#{f.lineno}" } if seam
       end
     end
   end
