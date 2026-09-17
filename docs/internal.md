@@ -36,7 +36,7 @@ ranked sources. The first one that answers for a key wins.
 
 | # | level | supplied by |
 |---|-------|-------------|
-| 1 | **hand-off** | a `receives` value staged by the call site that built this component |
+| 1 | **hand-off** | a `receives` value staged by the call site that built this component, or one an ancestor was handed |
 | 2 | **overlay** | a delta returned by a verb block, applied to this render's root |
 | 3 | **own wire** | this class's declared params, resolved and coerced from the request |
 | 4 | **inherited** | the branch copy of the nearest tree-ancestor's bag |
@@ -51,7 +51,7 @@ is not cosmetic. A default is a property of the *class*, so it must answer even 
 where no call site ran — which is why it is consulted at read time against `@defaults` rather than
 baked into the composed data.
 
-### Two behaviours worth knowing before you touch this
+### Two behaviors worth knowing before you touch this
 
 **An overlay of `nil` suppresses own-wire.** Level 2 and level 3 collapse into a single expression, and
 the test is key-presence, not nil-ness:
@@ -102,24 +102,36 @@ A derivation declared `override:` lifts above **inherited only** — it does not
 overlay, or the component's own wire. The intent is "I always compute this myself rather than accepting
 my parent's copy," not "I win."
 
-### The overlay slot, and why a bag holds one
+### The transmitted slots, and why a bag holds them
 
-A bag is `(data, overlay, defaults, owner)`. The overlay is the accumulated verb-block delta, and it is
-held apart from the data because the two travel differently: data demotes to "inherited" when a branch
-crosses into another component's declarations, while the overlay persists at level 2 all the way down.
-A bag holding only the merged result could not express that difference — and for a long time weft's
-could not, which is where the delta's rung came from and where it went wrong.
+A bag is `(data, overlay, handoff, defaults, owner)`. The overlay is the accumulated verb-block delta
+and the handoff is the accumulated `receives` values; both are held apart from the data because they
+travel differently from it. Data demotes to "inherited" when a branch crosses into another component's
+declarations, while these two persist at their own rungs all the way down. A bag holding only the merged
+result could not express that difference — and for a long time weft's could not, which is where the
+delta's rung came from and where it went wrong.
+
+The rule the two slots share: **a value gets a transmitted slot when its rank has to survive a
+crossing.** Data carries reach, a slot carries rank. Both of these authorities were applied
+deliberately by someone (a verb block returning a key, a call site staging one) and are scoped to a
+subtree, which is what earns them the slot; a value a component merely resolved for itself was nobody's
+deliberate statement about anything below it, and demotes.
 
 `bag % delta` applies a delta. It writes the delta's **values** to the data, which is what the bag
 answers with, and the **whole delta** to the overlay, which is what the next crossing branch re-applies
-at level 2. Those are two jobs rather than one, and the hand-off case is where they visibly diverge: a
-component with a `receives` value and a delta on the same key must *answer* with the hand-off (level 1
-outranks level 2) while still *transmitting* the delta downward, because a hand-off demotes on crossing
-and the overlay does not.
+at level 2. Those are two jobs rather than one: what a bag *answers* and what it *passes down* are
+different questions, and the hand-off case is where the difference shows. A component with a `receives`
+value and a delta on the same key answers with the hand-off, because level 1 outranks level 2, while
+still transmitting the delta to everything below it.
 
 So a read consults the data alone. The delta is already accounted for there — the crossing branch
 ranked it at level 2, and `%` wrote its values straight in. Consulting the overlay again at read time
 would re-apply level 2 on top of a finished result and quietly beat level 1.
+
+`%` carries the handoff slot across untouched, which nothing in the Router exercises today: every call
+site applies a delta to a root's bag, and a root has no hand-offs staged for it. It is there because an
+operation on a bag that dropped one of the bag's own members is precisely the defect the slots exist to
+prevent, and one spec holds it in place.
 
 `bag % {}` returns **the same instance**, which lets a call site apply a delta unconditionally without
 paying for a copy. That identity is safe only because **a bag has no writers**: a read forces a Thunk,
@@ -157,7 +169,8 @@ component below it; what varies is the level it speaks at when it gets there.
 | what | on crossing a branch |
 |------|----------------------|
 | a declared `default:` | **does not cross at all** — which is why a child's own default is sovereign |
-| hand-off values, own wire values, resolved values, thunks | **arrive, demoted** to level 4, "inherited" |
+| own wire values, resolved values, thunks | **arrive, demoted** to level 4, "inherited" |
+| a hand-off (`receives`) | **arrives at its own rank**, level 1, accumulating per key as it descends |
 | an applied delta (the overlay) | **arrives at its own rank**, level 2, at every depth below |
 
 An overlay's authority is **subtree-scoped**: it reaches the bag it was applied to and everything below
@@ -168,37 +181,47 @@ its siblings, which is what keeps universes consistent.
 The one genuinely request-scoped params concept is the **wire universe** (below), and it never occupies
 a rung at all.
 
-### Hand-offs stay in the middle tier
+### Hand-offs keep their rank
 
-A `receives` value is not overlay-like, despite outranking everything below it. The difference is not
-how far it reaches — **both reach the whole subtree** — but whether its *rank* survives the trip.
+A `receives` value is the second thing a bag transmits at its own rung, alongside the overlay. Both
+reach the whole subtree, and both keep the level they speak at the whole way down.
 
-Keep those two apart, because the words for them are easy to slur together:
+Reach and rank are still worth holding apart, because the words for them slur together and because a
+declared default is the case where they come apart:
 
 - **Reach** is which components can see the value at all. A hand-off's reach is the subtree, exactly
   like any other resolved value: a `StatusCard` handed `status:` passes it to the badge it builds
-  inside, and two cards on one page each supply their own. Nothing would work otherwise — the wire is
-  usually empty for a key that arrives by hand-off.
-- **Rank** is which level the value speaks at once it gets there. Here they differ: an overlay stays at
-  level 2 at every depth, while a hand-off is level 1 only for the component it was staged for and
-  arrives everywhere below as ordinary inherited data, at level 4.
+  inside, and two cards on one page each supply their own. Nothing would work otherwise, since the wire
+  is usually empty for a key that arrives by hand-off.
+- **Rank** is which level the value speaks at once it gets there. A hand-off speaks at level 1 at every
+  depth, as an overlay speaks at level 2 at every depth. A declared default, by contrast, has no reach
+  past its own class at all.
+
+So a nested component that declares `param :status` reads its ancestor's hand-off rather than the
+request's own value for that key. What a call site said expressly about that card outranks what the
+page happened to be filtered by. Anything else breaks a collection: four cards built from four statuses,
+each rendering a badge that declares the key, would all read the page's filter, resolve one identity
+between them, and collide on a single DOM id.
+
+The slot **accumulates on the way down**. Each crossing branch merges whatever its call site staged over
+the hand-offs already in force, per key, so the nearest call site wins while keys nobody nearer
+mentioned keep the ancestor's value. That is how a card overrides one child without disturbing the rest
+of its subtree. A staged `nil` steps aside: it clears the inherited hand-off, and resolution continues
+at the component's own wire. Note that this is the mirror image of a nil overlay, which suppresses the
+wire and continues at inherited. Both mean "step aside," they step aside from different things, and the
+two are easy to unify wrongly.
+
+**Independent addressability survives, which is the objection this design has to answer.** A component
+addressed on its own is a root: there is no ancestor, hence no hand-off, and its own wire wins exactly
+as it always did. The cost is narrower than it first appears, and it is a real cost: while nested under
+an ancestor holding the same key, a component cannot read the request's value for that key. Keys are a
+flat namespace, so a component that wants the page's filter regardless of where it sits wants a key of
+its own name rather than the one its ancestors pass around.
 
 What is one-shot is the **staging register**, not the value. `Context#stage_received` holds one entry,
-class-checked, and `take_received!` clears it — which is what stops the *next sibling* from picking up a
-hand-off meant for its neighbour. The value itself is not consumed by anything; it lands in the bag and
-travels down like everything else in there.
-
-So a hand-off's authority decays rather than expiring, and that decay is the whole point: a nested
-component declaring the same key on the wire outranks its ancestor's hand-off (level 3 beats level 4)
-and can still be addressed on its own.
-
-Promoting it would be actively harmful. An ancestor's hand-off would land at a descendant's level 1,
-above the descendant's *own wire* — so a nested component declaring the same key could never be
-addressed independently while nested under that ancestor, silently, as a function of nesting depth.
-That breaks the premise component URLs, refreshes and out-of-band slots all rest on.
-
-The capability it would add already exists, spelled correctly: "this wins over everything downstream"
-is an overlay — return the key from a verb block.
+class-checked, and `take_received!` clears it, which is what stops the *next sibling* from picking up a
+hand-off meant for its neighbor. The register's only job is getting the value into the right bag; the
+slot is what carries it onward from there.
 
 ## Render-time scopes
 
