@@ -23,13 +23,18 @@ module Weft
     # The overlay speaks *as* the wire: its value replaces the wire's for that
     # key, and an explicit nil clears — masking the wire so resolution falls
     # below it. A derivation always "produces" (a thunk is never nil), so a
-    # same-key default sits unreachable behind one.
+    # same-key default sits unreachable behind one. A nil hand-off clears in the
+    # same spirit but from the other end: it steps aside, and resolution
+    # continues at this class's own wire.
     #
-    # Levels 2 and 4 both arrive on the bag being branched from, and the split is
-    # the point: its data demotes to inherited, its overlay stays at 2. Nothing
-    # passes an overlay in from outside — a call site that wants one applies it
-    # to the bag first (`bag % delta`), which is also what keeps the two rungs
-    # from carrying the same delta at once.
+    # Levels 1, 2 and 4 all arrive on the bag being branched from, and the split
+    # is the point: its data demotes to inherited, while its overlay and its
+    # hand-offs keep their own rungs the whole way down. A hand-off accumulates
+    # as it descends — a nearer call site's values merge over an ancestor's, per
+    # key — which is what lets four cards from one collection each hand their own
+    # value to the badge inside them. Nothing passes an overlay in from outside:
+    # a call site that wants one applies it to the bag first (`bag % delta`),
+    # which is also what keeps the two rungs from carrying the same delta at once.
     class Assembly
       class << self
         def call(...) = new(...).bag
@@ -62,8 +67,8 @@ module Weft
 
       def initialize(component_class, wire_source, hand_offs: {}, branched_from: nil)
         @component_class = component_class
-        @received = hand_offs || {}
         @hand_offs = !hand_offs.nil?
+        @received = inherited_handoffs(branched_from).merge(hand_offs || {})
         @overlays = branched_from ? branched_from.send(:overlay_slot) : {}
         resolution = Weft::Resolver.resolution(component_class, wire_source)
         @wire = resolution.coerced
@@ -81,10 +86,19 @@ module Weft
         keys.each { |key| data[key] = stack_value(key) }
         report_shadowed_derivations(data)
         adopt_thunks(data, Weft::Params.new(data, defaults: declared_defaults,
-                                                  owner: @component_class, overlay: @overlays))
+                                                  owner: @component_class, overlay: @overlays,
+                                                  handoff: @received))
       end
 
       private
+
+      # The hand-offs already in force for the subtree this branch lands in.
+      # A nearer call site's staging merges over these, so the innermost
+      # `insert_tag` wins per key while keys nobody nearer mentioned keep the
+      # ancestor's value.
+      def inherited_handoffs(branched_from)
+        branched_from ? branched_from.send(:handoff_slot) : {}
+      end
 
       # What crosses the branch. A contextual thunk crosses as an unforced
       # twin, so no two branches ever share its outcome; everything else

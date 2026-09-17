@@ -778,35 +778,55 @@ RSpec.describe Weft::Params::Assembly do
       expect(ctx.children[1].params.key?(:order)).to be(false)
     end
 
-    it "lets an inherited value beat the child's own default (level 3 over 5)" do
+    it "lets an inherited value beat the child's own default (level 4 over 6)" do
       parent_class = Class.new(Weft::Component) do
         def self.name = "CalmParent"
-        receives :status
+        derives(:status) { |_p| "calm" }
       end
       child_class = Class.new(Weft::Component) do
         def self.name = "DefaultedChild"
         param :status, default: "all"
       end
 
-      child = embed(parent_class, child_class, parent_kwargs: { status: "calm" })
+      child = embed(parent_class, child_class)
 
       expect(child.params.status).to eq("calm")
     end
 
-    it "lets the child's own wire value beat an inherited one (level 2 over 3)" do
+    it "lets the child's own wire value beat an inherited one (level 3 over 4)" do
       parent_class = Class.new(Weft::Component) do
-        def self.name = "HandedParent"
-        receives :status
+        def self.name = "CalmDerivingParent"
+        derives(:status) { |_p| "calm" }
       end
       child_class = Class.new(Weft::Component) do
         def self.name = "WiredChild"
         param :status
       end
 
+      child = embed(parent_class, child_class, wire: { "status" => "hot" })
+
+      expect(child.params.status).to eq("hot")
+    end
+
+    # The exception to the spec above, and the reason it must source the
+    # ancestor's value from a derivation rather than a hand-off: a `receives`
+    # value keeps speaking at level 1 for the whole subtree, so it is the one
+    # inherited thing a descendant's own wire does NOT outrank. What the call
+    # site staged expressly beats what the page happened to be filtered by.
+    it "lets a hand-off keep level 1 below the component it was staged for" do
+      parent_class = Class.new(Weft::Component) do
+        def self.name = "HandedParent"
+        receives :status
+      end
+      child_class = Class.new(Weft::Component) do
+        def self.name = "WiredHandoffChild"
+        param :status
+      end
+
       child = embed(parent_class, child_class,
                     wire: { "status" => "hot" }, parent_kwargs: { status: "calm" })
 
-      expect(child.params.status).to eq("hot")
+      expect(child.params.status).to eq("calm")
     end
 
     it "never lets an ancestor's nil shadow the child's default" do
@@ -961,6 +981,29 @@ RSpec.describe Weft::Params::Assembly do
                                  branched_from: ancestor % { status: nil })
 
       expect(bag[:status]).to eq("from-ancestor")
+    end
+
+    # Layering a delta must not disturb the bag's other members, and the
+    # hand-off slot is the one most easily lost here: no router call site
+    # applies a delta to a bag inside a hand-off subtree today, so this spec is
+    # the only thing that observes the carry. An operation on a bag that
+    # silently drops one of that bag's members is the exact defect the overlay
+    # slot was introduced to fix — the invariant has to live in the value.
+    it "preserves the hand-off slot when a delta is layered on" do
+      card = Class.new(Weft::Component) do
+        def self.name = "HandedAncestor"
+        receives :status
+      end
+      badge = Class.new(Weft::Component) do
+        def self.name = "DeclaringDescendant"
+        param :status, type: :string
+      end
+      handed = described_class.call(card, {}, hand_offs: { status: "handed" })
+
+      bag = described_class.call(badge, { "status" => "from-wire" },
+                                 branched_from: handed % { unrelated: "delta" })
+
+      expect(bag[:status]).to eq("handed")
     end
 
     it "falls from a nil overlay to a derivation on a dual key" do

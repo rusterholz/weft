@@ -582,6 +582,148 @@ RSpec.describe Weft::DSL::Params do
     end
   end
 
+  # A hand-off's rank travels. The value a call site staged for a component
+  # keeps speaking at level 1 through every branch below that component, so a
+  # descendant declaring the same key reads what its ancestor was handed
+  # rather than whatever the page happened to be filtered by.
+  describe "a hand-off's rank below the component it was staged for" do
+    # `param :status` on the descendant is the whole point: an undeclared
+    # reader would inherit the value anyway, so only a declaring one can
+    # demonstrate the rank.
+    let(:badge_class) do
+      Class.new(Weft::Component) do
+        def self.name = "StatusBadge"
+        param :status
+        identifies_by :status
+      end
+    end
+
+    # A descendant with both doors open, so a nearer call site has somewhere to
+    # put a value. `extra` adds wire-only keys, for testing what the slot
+    # carries alongside the key a nearer site overrode.
+    def dual_badge(*extra)
+      Class.new(Weft::Component) do
+        def self.name = "DualBadge"
+        param :status
+        receives :status
+        extra.each { |key| param key }
+      end
+    end
+
+    # A card handed :status (and anything in +receiving+) that builds +badge+
+    # with +kwargs+. Passing none is the plain nested case.
+    def card_handing(badge, kwargs = {}, receiving: %i[status])
+      Class.new(Weft::Component) do
+        def self.name = "StatusCard"
+        receiving.each { |key| receives key }
+        define_method(:build) do |attributes = {}|
+          super(attributes)
+          insert_tag(badge, **kwargs)
+        end
+      end
+    end
+
+    def nested_in(card, badge, wire: {}, **parent_kwargs)
+      ctx = Weft::Context.new({}, nil, wire_params: wire) { insert_tag(card, **parent_kwargs) }
+      ctx.children.first.children.find { |el| el.is_a?(badge) }
+    end
+
+    it "outranks the descendant's own wire value" do
+      badge = badge_class
+      nested = nested_in(card_handing(badge), badge, wire: { "status" => "archived" },
+                                                     status: "shipped")
+
+      expect(nested.params.status).to eq("shipped")
+    end
+
+    it "still loses to the descendant's own hand-off — the nearer call site wins" do
+      badge = dual_badge
+      nested = nested_in(card_handing(badge, { status: "archived" }), badge, status: "shipped")
+
+      expect(nested.params.status).to eq("archived")
+    end
+
+    # A nil means "step aside", on both slots, but they step aside from
+    # different things and the difference is easy to slur together. A nil
+    # overlay suppresses the wire and resolution continues at inherited; a nil
+    # hand-off suppresses the hand-off and resolution continues at the
+    # descendant's own wire. Pinned because two parallel slots invite the
+    # assumption that they behave alike.
+    it "lets a nil at a nearer call site step aside for the descendant's own wire" do
+      badge = dual_badge
+      nested = nested_in(card_handing(badge, { status: nil }), badge,
+                         wire: { "status" => "from-wire" }, status: "handed")
+
+      expect(nested.params.status).to eq("from-wire")
+    end
+
+    it "carries only the keys nobody nearer mentioned" do
+      badge = dual_badge(:region)
+      card = card_handing(badge, { status: "archived" }, receiving: %i[status region])
+      nested = nested_in(card, badge, wire: { "region" => "from-wire" },
+                                      status: "shipped", region: "west")
+
+      expect(nested.params.status).to eq("archived")
+      expect(nested.params.region).to eq("west")
+    end
+
+    # The shape this mission exists for. Four cards from one collection, each
+    # handed its own status, each building a badge that identifies by it. The
+    # page carrying its own filter used to collapse all four badges onto one
+    # value and therefore one DOM id, which is an invalid document and not
+    # merely a wrong reading.
+    describe "a collection of siblings, each handed its own value" do
+      let(:row_class) do
+        badge = badge_class
+        card = card_building_with_own_status(badge)
+        Class.new(Weft::Component) do
+          def self.name = "StatusRow"
+          define_method(:build) do |attributes = {}|
+            super(attributes)
+            %w[new picked shipped delivered].each { |s| insert_tag(card, status: s) }
+          end
+        end
+      end
+
+      def card_building_with_own_status(badge)
+        Class.new(Weft::Component) do
+          def self.name = "RowCard"
+          receives :status
+          identifies_by :status
+          define_method(:build) do |attributes = {}|
+            super(attributes)
+            insert_tag(badge)
+          end
+        end
+      end
+
+      def badges_under(row, badge, wire)
+        ctx = Weft::Context.new({}, nil, wire_params: wire) { insert_tag(row) }
+        ctx.children.first.children.map { |card| card.children.find { |el| el.is_a?(badge) } }
+      end
+
+      it "keeps each badge on its own card's value while the page carries a filter" do
+        badges = badges_under(row_class, badge_class, { "status" => "shipped" })
+
+        expect(badges.map { |b| b.params.status }).to eq(%w[new picked shipped delivered])
+      end
+
+      it "gives each badge its own DOM id, so all four are addressable" do
+        badges = badges_under(row_class, badge_class, { "status" => "shipped" })
+
+        expect(badges.map(&:weft_dom_id).uniq.size).to eq(4)
+      end
+
+      it "stops emitting the duplicate-id warning it used to provoke" do
+        allow(Weft.logger).to receive(:warn)
+
+        badges_under(row_class, badge_class, { "status" => "shipped" }).each(&:weft_dom_id)
+
+        expect(Weft.logger).not_to have_received(:warn).with(/StatusBadge rendered more than once/)
+      end
+    end
+  end
+
   describe "serialization projection" do
     let(:order) { Struct.new(:id, :name).new(9, "Crate") }
 

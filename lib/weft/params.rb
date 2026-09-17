@@ -136,11 +136,17 @@ module Weft
     # another component's declarations, while the overlay persists at its own
     # rung all the way down. A bag that held only the merged result could not
     # express the difference, and every operation on it would silently lose one.
-    def initialize(data, defaults: {}, owner: nil, overlay: {})
+    # +handoff+ is the accumulated `receives` values in force for this subtree,
+    # held apart from +data+ for the same reason the overlay is: a hand-off
+    # keeps speaking at its own rung below the component it was staged for,
+    # while data demotes to "inherited" on the way down. A nearer call site's
+    # values merge over an ancestor's, per key.
+    def initialize(data, defaults: {}, owner: nil, overlay: {}, handoff: {})
       @data = data
       @defaults = defaults
       @owner = owner
       @overlay = overlay
+      @handoff = handoff
       @forcing = []
     end
 
@@ -164,7 +170,7 @@ module Weft
       return self if delta.empty?
 
       self.class.new(@data.merge(delta.compact), defaults: @defaults, owner: @owner,
-                                                 overlay: @overlay.merge(delta))
+                                                 overlay: @overlay.merge(delta), handoff: @handoff)
     end
 
     # nil means no source had this key — so the read falls to the declared
@@ -307,6 +313,11 @@ module Weft
 
     # @api private
     def overlay_slot = @overlay
+
+    # @api private
+    # The hand-off values a crossing branch re-applies at level 1. Private for
+    # the same namespace reason as the two above.
+    def handoff_slot = @handoff
 
     # Ask a thunk for its outcome, with this bag as the block's argument
     # (derivations chain by reading sibling keys). The memo lives on the Thunk,
