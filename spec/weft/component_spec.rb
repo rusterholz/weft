@@ -165,10 +165,30 @@ RSpec.describe Weft::Component do
       expect(component.get_attribute(:status)).to eq("shipped")
     end
 
-    it "warns once per class and key when a param-named kwarg arrives" do
+    # Once per call SITE rather than once per (class, key): the mistake belongs
+    # to the line that wrote the kwarg, so two lines making it are two bugs and
+    # keying by class alone would report only whichever rendered first. Still
+    # bounded — a standing collision says its piece once, not once per render.
+    it "warns once per call site, not once per render" do
       allow(Weft.logger).to receive(:warn)
       component_class = Class.new(Weft::Component) do
         def self.name = "CollideCard"
+        param :title
+      end
+
+      2.times do
+        Weft::Context.new({}, nil) do
+          insert_tag(component_class, title: "a")
+        end.to_s
+      end
+
+      expect(Weft.logger).to have_received(:warn).once.with(/title/)
+    end
+
+    it "warns for each distinct call site that collides" do
+      allow(Weft.logger).to receive(:warn)
+      component_class = Class.new(Weft::Component) do
+        def self.name = "TwoSiteCard"
         param :title
       end
 
@@ -177,7 +197,34 @@ RSpec.describe Weft::Component do
         insert_tag(component_class, title: "b")
       end.to_s
 
-      expect(Weft.logger).to have_received(:warn).once.with(/title/)
+      expect(Weft.logger).to have_received(:warn).twice.with(/title/)
+    end
+
+    # `derives` and `defines` are the same mistake one door over: the value is
+    # computed, so a call site cannot supply it either, and the kwarg silently
+    # became chrome with nothing said about it.
+    it "warns when the colliding key is a derivation rather than a param" do
+      allow(Weft.logger).to receive(:warn)
+      component_class = Class.new(Weft::Component) do
+        def self.name = "DerivedCollideCard"
+        derives(:tally) { |_p| 7 }
+      end
+
+      Weft::Context.new({}, nil) { insert_tag(component_class, tally: 3) }.to_s
+
+      expect(Weft.logger).to have_received(:warn).once.with(/tally/)
+    end
+
+    it "names the way out — declaring the key as a hand-off" do
+      allow(Weft.logger).to receive(:warn)
+      component_class = Class.new(Weft::Component) do
+        def self.name = "RemediableCard"
+        param :status
+      end
+
+      Weft::Context.new({}, nil) { insert_tag(component_class, status: "shipped") }.to_s
+
+      expect(Weft.logger).to have_received(:warn).with(/receives :status/)
     end
 
     it "sets the DOM id from weft_dom_id" do

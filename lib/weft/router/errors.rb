@@ -99,28 +99,31 @@ module Weft
       # ride as overlays (one universe per request).
       def dispatch_page_recovery(page_class, block_delta, error, entry = nil, universe: nil, branch_bag: nil)
         wire_status = recovery_status(error, entry)
-        overlays = block_delta.merge(auto_param_overlay(error, { status: wire_status }))
+        delta = block_delta.merge(auto_param_overlay(error, { status: wire_status }))
         status wire_status
         wire = universe || filtered_params
-        if htmx_request?
-          page_body_html(page_class, wire, overlays, branch_bag)
-        else
-          render_full_page(page_class, wire, overlays, branch_bag)
-        end
+        lineage = recovery_lineage(branch_bag, delta)
+        htmx_request? ? page_body_html(page_class, wire, lineage) : render_full_page(page_class, wire, lineage)
       end
 
-      def render_full_page(page_class, wire_params, overlays, branch_bag = nil)
+      # The bag a recovery render inherits: whatever the request had composed,
+      # with the recovery's own values layered on as an overlay so they outrank
+      # the target's wire at any depth. An absent originating bag is an empty
+      # one rather than nil, so the lineage is unconditional.
+      def recovery_lineage(branch_bag, delta) = (branch_bag || Weft::Params.new({})) % delta
+
+      def render_full_page(page_class, wire_params, branch_bag = nil)
         klass = page_class
-        Weft::Context.new({}, nil, wire_params: wire_params, overlays: overlays,
+        Weft::Context.new({}, nil, wire_params: wire_params,
                                    branch_bag: branch_bag) { insert_tag(klass) }.to_s
       end
 
       # Extract the rendered HTML inside a Page's <body>. For htmx fragment
       # responses to full-document failures — the surrounding doc shell is
       # already on the client; only the body content should swap.
-      def page_body_html(page_class, wire_params, overlays, branch_bag = nil)
+      def page_body_html(page_class, wire_params, branch_bag = nil)
         klass = page_class
-        ctx = Weft::Context.new({}, nil, wire_params: wire_params, overlays: overlays,
+        ctx = Weft::Context.new({}, nil, wire_params: wire_params,
                                          branch_bag: branch_bag) { insert_tag(klass) }
         page_instance = ctx.children.first
         body_el = page_instance.children.find { |c| c.respond_to?(:tag_name) && c.tag_name == "body" }
@@ -236,9 +239,8 @@ module Weft
       # already paid for. Where the same component goes on to render, pass that instance
       # rather than making a second one — the two would carry separate bags,
       # and a derivation behind a declared param would run in each.
-      def unbuilt_instance(component_class, wire_params, overlays: {}, branch_bag: nil)
-        component_class.new(Weft::Context.new({}, nil, wire_params: wire_params,
-                                                       overlays: overlays, branch_bag: branch_bag))
+      def unbuilt_instance(component_class, wire_params, branch_bag: nil)
+        component_class.new(Weft::Context.new({}, nil, wire_params: wire_params, branch_bag: branch_bag))
       rescue StandardError
         nil
       end
@@ -346,8 +348,8 @@ module Weft
           attempts_remaining: attempts_remaining,
           status: recovery_status(error, entry)
         }
-        overlays = block_delta.merge(auto_param_overlay(error, component_ctx))
-        build_component_with_wire(target, filtered_params, overlays: overlays, branch_bag: state).content
+        delta = block_delta.merge(auto_param_overlay(error, component_ctx))
+        build_component_with_wire(target, filtered_params, branch_bag: recovery_lineage(state, delta)).content
       end
 
       # The target resolves its own schema from the request's universe; the
@@ -362,10 +364,10 @@ module Weft
       # a key of its own — inheriting outranks deriving, as it does for a
       # nested child.
       def render_recovery_component(target, block_delta, error, component_ctx:, universe: nil, branch_bag: nil)
-        overlays = block_delta.merge(auto_param_overlay(error, component_ctx))
+        delta = block_delta.merge(auto_param_overlay(error, component_ctx))
         status component_ctx.fetch(:status) { recovery_status(error) }
         component = build_component_with_wire(target, universe || filtered_params,
-                                              overlays: overlays, branch_bag: branch_bag)
+                                              branch_bag: recovery_lineage(branch_bag, delta))
         claim_dom_id(component, component_ctx[:originating_id]).to_s
       end
 

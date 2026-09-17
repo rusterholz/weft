@@ -2,6 +2,8 @@
 
 Setting up a development environment for working on weft, running the test suites, and releasing new versions.
 
+For how the pieces fit together underneath — the params source stack, how bags inherit across a render, and the scopes that render-time state lives in — see [Internals](internal.md).
+
 ## Setup
 
 After checking out the repo, run `bin/setup` to install dependencies, then `bundle exec rake spec` to run the tests. `bin/console` gives you an interactive prompt with the gem loaded.

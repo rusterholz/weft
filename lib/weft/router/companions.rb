@@ -69,7 +69,7 @@ module Weft
       # slots and both ride — which is what makes two of a kind, a left eye
       # and a right eye, a legitimate pair rather than a clash.
       def attempt_companion(companion, view, env, slots, winners)
-        overlays = companion_overlays(companion, view, env)
+        lineage = companion_lineage_for(companion, view, env)
         component = nil
         # Where Component#claim_dom_slot!'s throw surfaces — one catch per
         # companion, so standing down affects only this one. The block's
@@ -77,8 +77,7 @@ module Weft
         # captured by assignment so a successful build can't read as an id.
         contested = catch(Weft::Context::SLOT_TAKEN) do
           component = build_component_with_wire(companion[:component_class], companion_universe(env),
-                                                overlays: overlays, branch_bag: env[:branch_bag],
-                                                slots: slots)
+                                                branch_bag: lineage, slots: slots)
           nil
         end
         return as_companion(component) unless contested
@@ -86,21 +85,26 @@ module Weft
         warn_companion_collision(contested, winners[contested], companion)
         nil
       rescue StandardError => e
-        # A delta block that raised leaves no overlays of its own; the
-        # companion falls back to what it inherited from the response.
-        recovered_companion(companion, env, overlays || env[:overlays] || {}, e)
+        # A delta block that raised leaves no lineage of its own; the companion
+        # falls back to what it inherited from the response.
+        recovered_companion(companion, env, lineage || env[:branch_bag], e)
       end
 
       # Each companion is an OOB-delivered child: it renders against the
       # same request universe, branches the primary's bag (rich values
       # included) exactly like a child built in the primary's own build,
       # and layers its own block delta — blockless is an empty delta.
-      def companion_overlays(companion, view, env)
-        inherited = env[:overlays] || {}
-        return inherited unless companion[:block]
+      #
+      # `%` is what keeps siblings apart: each companion gets a bag of its own
+      # carrying only its own delta, so two of them holding different values for
+      # one key never see each other's. An empty delta hands back the very same
+      # bag, so a blockless companion costs nothing.
+      def companion_lineage_for(companion, view, env)
+        base = env[:branch_bag]
+        return base unless companion[:block]
 
         delta = Weft::DSL::Sandbox.run(view, &companion[:block])
-        delta.is_a?(Hash) ? inherited.merge(delta) : inherited
+        delta.is_a?(Hash) ? base % delta : base
       end
 
       def companion_universe(env) = env.fetch(:universe) { filtered_params }
@@ -122,17 +126,17 @@ module Weft
       # target branches the failed companion's OWN bag, not the host's that
       # the companion branched. That is the lineage the recovery block read,
       # and the block's return rides over it as an overlay.
-      def recovered_companion(companion, env, overlays, error)
+      def recovered_companion(companion, env, lineage, error)
         klass = companion[:component_class]
         log_companion_failure(companion, error)
         entry = klass.component_recovery_for(error)
         return nil unless entry
 
-        dom_id = failed_companion_dom_id(klass, env, overlays)
-        state = companion_state(klass, env, overlays)
-        recovery_overlays = companion_recovery_overlays(klass, state, entry, error, dom_id)
+        dom_id = failed_companion_dom_id(klass, env, lineage)
+        state = companion_state(klass, env, lineage)
         component = build_component_with_wire(klass.resolve_recovery_target(entry), companion_universe(env),
-                                              overlays: recovery_overlays, branch_bag: state)
+                                              branch_bag: companion_recovery_lineage(klass, state, entry, error,
+                                                                                     dom_id))
         as_companion(claim_dom_id(component, dom_id))
       rescue StandardError => e
         Weft.logger.error("Companion recovery render failed: #{e.class}: #{e.message}")
@@ -142,36 +146,35 @@ module Weft
       # Identity comes from exactly what the failed render was given — a delta
       # that moves an id-bearing param moves the slot with it, and an error
       # fragment addressed anywhere else lands on the wrong element.
-      def failed_companion_dom_id(klass, env, overlays)
-        resolved_dom_id(klass, unbuilt_instance(klass, companion_universe(env),
-                                                overlays: overlays, branch_bag: env[:branch_bag]))
+      def failed_companion_dom_id(klass, env, lineage)
+        resolved_dom_id(klass, unbuilt_instance(klass, companion_universe(env), branch_bag: lineage))
       end
 
       # The state the failed build was given — its own wire schema over the
-      # request universe, the companion block's delta on top, branching
-      # whatever the primary composed. Rebuilt rather than read off the
-      # instance because a build that raised leaves none.
+      # request universe, branching the lineage the block left behind (the
+      # companion's delta included, since that bag carries it). Rebuilt rather
+      # than read off the instance because a build that raised leaves none.
       #
-      # Keys the class doesn't declare are laid on afterwards rather than
-      # resolved through the stack, which only visits declared keys — that's
-      # what keeps a companion block's ad-hoc delta readable in the recovery
-      # block, the same way it stays readable in the block that produced it.
-      def companion_state(klass, env, overlays)
-        Weft::Params::Assembly.call(klass, companion_universe(env),
-                                    overlays: overlays, branched_from: env[:branch_bag]).
-          overlay(overlays.except(*klass.declared_keys))
+      # Keys the class doesn't declare need no special handling: resolution
+      # visits declared keys only, but the overlay rides on the bag rather than
+      # in it, so a companion block's ad-hoc delta stays readable in the recovery
+      # block exactly as it was readable in the block that produced it.
+      def companion_state(klass, env, lineage)
+        Weft::Params::Assembly.call(klass, companion_universe(env), branched_from: lineage)
       end
 
-      # The recovery target resolves its own schema from the request universe;
-      # the entry's block delta and the auto-injected values ride as overlays,
-      # exactly as on the primary's recovery path. No status is set — the
-      # response's status belongs to the primary.
-      def companion_recovery_overlays(klass, state, entry, error, dom_id)
+      # The lineage the recovery target branches: the failed companion's own
+      # state with the entry's block delta and the auto-injected values layered
+      # over it, exactly as on the primary's recovery path. Applying the delta
+      # here rather than at the call site is what keeps the two inseparable —
+      # a branch taken without it would render against a state the block never
+      # saw. No status is set: the response's status belongs to the primary.
+      def companion_recovery_lineage(klass, state, entry, error, dom_id)
         component_ctx = { originating_id: dom_id,
                           originating_tag: component_tag_for(klass),
                           retry_url: compute_retry_url(klass, error_wire_params(klass)),
                           status: recovery_status(error, entry) }
-        invoke_recovery_block(entry, state, error).merge(auto_param_overlay(error, component_ctx))
+        state % invoke_recovery_block(entry, state, error).merge(auto_param_overlay(error, component_ctx))
       end
 
       # The marker telling htmx to swap this fragment into the slot its id

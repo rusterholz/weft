@@ -39,11 +39,14 @@ RSpec.describe Weft::Params do
     end
 
     it "does not hand defaults to a branch — a fallback belongs to whoever declared it" do
-      expect(params.branch_data).to eq(page: 2)
+      expect(params.send(:branch_data)).to eq(page: 2)
     end
 
-    it "carries its defaults through an overlay" do
-      expect(params.overlay(page: 9)[:view]).to eq("all")
+    it "carries its defaults across a non-crossing branch, and the delta with them" do
+      branched = params % { page: 9 }
+
+      expect(branched[:view]).to eq("all")
+      expect(branched[:page]).to eq(9)
     end
   end
 
@@ -104,6 +107,22 @@ RSpec.describe Weft::Params do
       no_count = described_class.new({ status: "shipped" })
       # count isn't declared, so Hash#count takes effect
       expect(no_count.count).to eq(1)
+    end
+
+    # Weft's own internals keep out of the adopter's namespace by being private,
+    # and this is the property that makes that work rather than merely look
+    # tidy: a private method called with an EXPLICIT RECEIVER still routes
+    # through method_missing, so the declaration wins while weft keeps reaching
+    # its own method with `send`. Both were public once, and `:branch_data`
+    # answered with weft's internal hash instead of the adopter's value —
+    # silently, which is what made it the worse of the two.
+    %i[branch_data overlay_slot derivation_errors].each do |internal|
+      it "a declared #{internal.inspect} param wins over weft's private method of that name" do
+        bag = described_class.new({ internal => "the adopter's value" })
+
+        expect(bag.public_send(internal)).to eq("the adopter's value")
+        expect(bag.send(internal)).not_to eq("the adopter's value")
+      end
     end
   end
 
@@ -325,7 +344,7 @@ RSpec.describe Weft::Params do
     it "sees a failure a branch caused, because the thunk is one object" do
       poisoned = thunk { |_p| raise "boom" }
       parent = described_class.new({ order: poisoned })
-      child = described_class.new(parent.branch_data)
+      child = described_class.new(parent.send(:branch_data))
 
       expect { child.order }.to raise_error(RuntimeError)
 

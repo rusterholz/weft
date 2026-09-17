@@ -147,12 +147,12 @@ module Weft
     # Build a component in a fresh context carrying the wire source; the
     # component resolves its own declared params from it at construction.
     # Arbre's builder attributes stay pure chrome — params travel their own
-    # channel. `overlays` carries request-scoped verb-block deltas;
-    # `branch_bag` lets the root inherit a primary's bag (OOB companions),
-    # and `slots` arbitrates which root gets to claim a DOM id.
-    def build_component_with_wire(component_class, wire_params, overlays: {}, branch_bag: nil, slots: nil)
+    # channel. `branch_bag` lets the root inherit a primary's bag (OOB
+    # companions), carrying any verb-block delta already applied to it, and
+    # `slots` arbitrates which root gets to claim a DOM id.
+    def build_component_with_wire(component_class, wire_params, branch_bag: nil, slots: nil)
       klass = component_class
-      context = Weft::Context.new({}, nil, wire_params: wire_params, overlays: overlays,
+      context = Weft::Context.new({}, nil, wire_params: wire_params,
                                            branch_bag: branch_bag, slots: slots) { insert_tag(klass) }
       context.children.first
     end

@@ -27,13 +27,6 @@ module Weft
     # instance_evals the construction block — the tree builds during super.
     attr_reader :wire_params
 
-    # Request-scoped overlay values — the accumulated verb-block deltas
-    # (action callable returns, companion deltas, recovery injections). In
-    # the source stack an overlay entry speaks AS the wire for its key:
-    # a value overrides the wire's, a nil clears it (resolution falls
-    # below). One universe per request; these are its amendments.
-    attr_reader :overlays
-
     # A bag for ROOT components to branch from, standing in for the tree
     # ancestor a root doesn't have — how an OOB companion inherits its
     # primary's bag (rich values included) exactly like a child built in
@@ -67,15 +60,14 @@ module Weft
     # Arbre adds a tag to its parent only after the build returns.
     SLOT_TAKEN = :weft_slot_taken
 
-    # Two positional parameters are Arbre's own signature; the four keywords
-    # are Weft's render-scoped channels, each independently optional. That
-    # they have grown to four is a fair signal that they want a render-environment
-    # object of their own — a change that would touch every render path and
-    # a documented constructor, so it belongs with the lifecycle work, not here.
-    def initialize(assigns = {}, helpers = nil, wire_params: nil, overlays: nil,
-                   branch_bag: nil, slots: nil, &)
+    # Two positional parameters are Arbre's own signature; the three keywords
+    # are Weft's render-scoped channels, each independently optional. Verb-block
+    # deltas used to ride a fourth: they now travel on the branch bag itself,
+    # which is where they have to be to outrank each component's own wire at any
+    # depth. The three that remain still want a render-environment object of
+    # their own, which belongs with the lifecycle work rather than here.
+    def initialize(assigns = {}, helpers = nil, wire_params: nil, branch_bag: nil, slots: nil, &)
       @wire_params = wire_params || {}
-      @overlays = overlays || {}
       @branch_bag = branch_bag
       @slots = slots
       super(assigns, helpers, &)

@@ -679,6 +679,70 @@ RSpec.describe Weft::Router do
 
       expect(seen).to eq(["from-brings"])
     end
+
+    # The two below are the same claim from the two recovery families, and they
+    # are about the RENDER rather than the block: a delta the request already
+    # worked out must still outrank the target's own wire, exactly as it does on
+    # the healthy path. Declaring the key is what makes the difference visible —
+    # an undeclared key rides the bag wholesale and never meets the wire.
+    it "lets the callable's delta outrank a recovery target's own wire value" do # rubocop:disable RSpec/ExampleLength
+      target = Class.new(Weft::Component) do
+        def self.name = "DeclaringRecoveryTarget"
+        param :status, type: :string
+
+        def build(attributes = {})
+          super
+          span "status=#{params.status}"
+        end
+      end
+      Class.new(Weft::Component) do
+        def self.name = "DeclaredKeyFailurePanel"
+        param :status, type: :string
+        performs(:touch) { |_p| { status: "from-callable" } }
+        recovers from: StandardError, with: target
+
+        def build(attributes = {})
+          super
+          raise "build boom"
+        end
+      end
+
+      post "/_components/declared_key_failure_panel/touch", status: "from-wire"
+
+      expect(last_response.body).to include("status=from-callable")
+    end
+
+    it "lets it outrank a failing companion's recovery target too" do # rubocop:disable RSpec/ExampleLength
+      recovery = Class.new(Weft::Component) do
+        def self.name = "DeclaringCompanionRecovery"
+        param :status, type: :string
+
+        def build(attributes = {})
+          super
+          span "companion-status=#{params.status}"
+        end
+      end
+      companion = Class.new(Weft::Component) do
+        def self.name = "DeclaredKeyFlakyCompanion"
+        param :status, type: :string
+        recovers from: StandardError, with: recovery
+
+        def build(attributes = {})
+          super
+          raise "companion boom"
+        end
+      end
+      Class.new(Weft::Component) do
+        def self.name = "DeclaredKeyCompanionHost"
+        param :status, type: :string
+        performs(:touch) { |_p| { status: "from-callable" } }
+        brings companion, on: :touch
+      end
+
+      post "/_components/declared_key_companion_host/touch", status: "from-wire"
+
+      expect(last_response.body).to include("companion-status=from-callable")
+    end
   end
 
   describe "cross-component-class param isolation" do
