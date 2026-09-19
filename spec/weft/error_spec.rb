@@ -78,4 +78,14 @@ RSpec.describe Weft::Error do
       end
     end
   end
+
+  describe Weft::UnreadableRequest do
+    it "is a Weft::BadRequest, so an edge declared for the family catches it" do
+      expect(described_class.ancestors).to include(Weft::BadRequest, Weft::HTTPError, Weft::Error)
+    end
+
+    it "reports 400" do
+      expect(described_class.status).to eq(400)
+    end
+  end
 end

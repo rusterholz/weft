@@ -132,4 +132,13 @@ module Weft
   # did run and left the value out: there the fix is to pass it, here it is to
   # give the key a source that does not need a caller.
   UnreachableHandoff = Class.new(InvalidUsage)
+
+  # Raised when the request itself could not be parsed — a query string whose
+  # %-encoding is invalid or whose keys disagree about their own shape, a
+  # multipart body that ends mid-part. The most literal member of its family:
+  # its siblings name a key and a value that arrived and were refused, and
+  # here nothing became keys and values at all, so there is nothing to name
+  # and nothing to hand back to a form. Carries the underlying parse failure
+  # as its `cause`.
+  UnreadableRequest = Class.new(BadRequest)
 end
