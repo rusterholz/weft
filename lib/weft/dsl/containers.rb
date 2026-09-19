@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "weft/error"
+
 module Weft
   module DSL
     # Mixin for the `adds_children_to :@ivar` macro — generates the standard

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "weft/action"
+
 module Weft
   module DSL
     # Mixin for classes that declare user-initiated actions: `performs`,
