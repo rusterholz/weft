@@ -12,6 +12,19 @@ module Weft
       nil
     end
 
+    # What status an exception reports on the wire — asked by the response the
+    # router writes and by `from:` matching alike, so the two cannot disagree.
+    # A weft error carries its own; a foreign one is asked whether it declares
+    # an `http_status`, the convention Sinatra's and Rack's errors already
+    # speak. Silence is a fault, not a client's mistake: an exception that says
+    # nothing about itself reports 500, as does one naming a non-error status.
+    def self.status_for(exception)
+      declared = if exception.is_a?(HTTPError) then exception.status
+                 elsif exception.respond_to?(:http_status) then exception.http_status
+                 end
+      declared.is_a?(Integer) && (400..599).cover?(declared) ? declared : 500
+    end
+
     def status
       self.class.status
     end

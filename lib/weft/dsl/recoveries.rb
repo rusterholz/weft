@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "weft/error"
+
 module Weft
   module DSL
     # Mixin for classes that declare recovery edges via `recovers`.
@@ -23,11 +25,13 @@ module Weft
         #   recovers from: ActiveRecord::RecordNotFound, with: NotFoundPage, status: 404
         #
         # `from:` accepts a Class (subclass-inclusive), Integer (matched against
-        # HTTPError#status), Range, or Array of any of the above.
+        # the status the exception reports — see HTTPError.status_for), Range,
+        # or Array of any of the above.
         # `with:` accepts a Class (Page or Component) or Symbol (resolved against
         # Weft.configuration at error-handling time). Default: self.
-        # `status:` declares what the error means on the wire — recoveries from
-        # errors that aren't Weft::HTTPErrors report 500 without it. Must be an
+        # `status:` declares what the error means on the wire, and wins over
+        # whatever the exception would have reported for itself. Without it, an
+        # error that says nothing about its own status reports 500. Must be an
         # HTTP error status (400..599); raises Weft::InvalidUsage otherwise.
         # The optional block receives `|params, error|` and returns a hash of
         # additional params that merge with the original on the recovery edge.
@@ -52,8 +56,8 @@ module Weft
 
         # Find the first recovery entry whose `from:` matches the given exception.
         # Returns nil if nothing matches. `from:` accepts Class (subclass-inclusive),
-        # Integer (status equality — HTTPError carries .status; non-HTTPError = 500),
-        # Range (status in range), or Array of any of the above (any element matches).
+        # Integer (status equality), Range (status in range), or Array of any of
+        # the above (any element matches). Statuses come from HTTPError.status_for.
         def recovery_for(exception)
           recoveries.find { |entry| recovery_matches?(entry[:from], exception) }
         end
@@ -96,18 +100,18 @@ module Weft
                 "recovers status: must be an HTTP error status (400..599); got #{status.inspect}"
         end
 
+        # Status matching asks the same question the response does, through the
+        # same method — a `from: 400` that matched an error the router then
+        # reported as 500 would be answering about a different exception than
+        # the one it caught.
         def recovery_matches?(from_clause, exception)
           case from_clause
           when Array   then from_clause.any? { |f| recovery_matches?(f, exception) }
           when Class   then exception.is_a?(from_clause)
-          when Integer then recovery_status_of(exception) == from_clause
-          when Range   then from_clause.cover?(recovery_status_of(exception))
+          when Integer then Weft::HTTPError.status_for(exception) == from_clause
+          when Range   then from_clause.cover?(Weft::HTTPError.status_for(exception))
           else false
           end
-        end
-
-        def recovery_status_of(exception)
-          exception.is_a?(Weft::HTTPError) ? exception.status : 500
         end
 
         def page_recovery_target?(target)

@@ -409,10 +409,10 @@ module Weft
         }
       end
 
-      # The matched entry's status: override wins; otherwise the error's own
-      # semantics (HTTPError carries a status, anything else reports 500).
+      # The matched entry's status: an explicit `status:` is the adopter
+      # speaking and wins outright; otherwise the error speaks for itself.
       def recovery_status(error, entry = nil)
-        entry&.[](:status) || (error.is_a?(Weft::HTTPError) ? error.status : 500)
+        entry&.[](:status) || Weft::HTTPError.status_for(error)
       end
 
       def render_generic_error(component_class, error)

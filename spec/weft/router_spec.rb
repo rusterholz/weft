@@ -2965,6 +2965,75 @@ RSpec.describe Weft::Router do
     end
   end
 
+  # Weft used to report 500 for every exception outside its own family, which
+  # overrode a status the exception had already declared. An error that says
+  # nothing about itself is still a fault; one that speaks for itself is taken
+  # at its word.
+  describe "exceptions that declare their own status" do
+    def speaking_error_class(declared)
+      Class.new(StandardError) do
+        define_method(:http_status) { declared }
+      end
+    end
+
+    def card_raising(error_class, class_name, **recovers_opts)
+      Class.new(Weft::Component) do
+        singleton_class.define_method(:name) { class_name }
+        param :note
+
+        recovers(**recovers_opts) { { note: "recovered" } } if recovers_opts.any?
+
+        define_method(:build) do |attributes = {}|
+          super(attributes)
+          raise error_class, "spoke for itself" unless params.note
+
+          div { text_node "note: #{params.note}" }
+        end
+      end
+    end
+
+    it "reports the status the exception declares" do
+      card_raising(speaking_error_class(403), "SpeaksForbidden")
+
+      get "/_components/speaks_forbidden"
+
+      expect(last_response.status).to eq(403)
+    end
+
+    it "matches a recovers edge by that declared status" do
+      card_raising(speaking_error_class(409), "SpeaksConflict", from: 409)
+
+      get "/_components/speaks_conflict"
+
+      expect(last_response.status).to eq(409)
+      expect(last_response.body).to include("note: recovered")
+    end
+
+    it "still reports 500 for an exception that declares nothing" do
+      card_raising(Class.new(StandardError), "SpeaksNothing")
+
+      get "/_components/speaks_nothing"
+
+      expect(last_response.status).to eq(500)
+    end
+
+    it "ignores a declared status outside the error range" do
+      card_raising(speaking_error_class(200), "SpeaksSuccess")
+
+      get "/_components/speaks_success"
+
+      expect(last_response.status).to eq(500)
+    end
+
+    it "lets an explicit recovers status: override what the exception declares" do
+      card_raising(speaking_error_class(403), "SpeaksOverridden", from: 403, status: 503)
+
+      get "/_components/speaks_overridden"
+
+      expect(last_response.status).to eq(503)
+    end
+  end
+
   describe "recovers auto-injected attributes (schema-gated)" do
     it "injects :exception when the target declares it" do
       Class.new(Weft::Component) do
