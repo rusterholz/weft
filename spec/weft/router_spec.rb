@@ -3009,8 +3009,15 @@ RSpec.describe Weft::Router do
       end
     end
 
+    # The malformed query rides in as QUERY_STRING instead of being written
+    # into the URL: Rack::MockRequest parses the URL with URI::Parser, which
+    # on uri < 1.0 (the default gem through Ruby 3.3) is the strict RFC 2396
+    # parser and refuses a bare `%` before any request exists. Production
+    # delivers it this way too — Puma hands the query string over verbatim.
+    def get_unreadable(path) = get(path, {}, "QUERY_STRING" => "note=%")
+
     it "answers 400 for a query string with invalid %-encoding" do
-      get "/_components/unreadable_card?note=%"
+      get_unreadable "/_components/unreadable_card"
 
       expect(last_response.status).to eq(400)
     end
@@ -3030,7 +3037,7 @@ RSpec.describe Weft::Router do
     end
 
     it "walks the addressed component's own chain, since the path is still readable" do
-      get "/_components/unreadable_card?note=%"
+      get_unreadable "/_components/unreadable_card"
 
       expect(last_response.body).to include("unreadable-card")
       expect(last_response.body).to include("note: Weft::UnreadableRequest")
@@ -3049,7 +3056,7 @@ RSpec.describe Weft::Router do
         end
       end
 
-      get "/_components/cause_card?note=%"
+      get_unreadable "/_components/cause_card"
 
       expect(last_response.body).to include("cause: Sinatra::BadRequest")
     end
@@ -3067,7 +3074,7 @@ RSpec.describe Weft::Router do
         end
       end
 
-      get "/_components/family_card?note=%"
+      get_unreadable "/_components/family_card"
 
       expect(last_response.status).to eq(400)
       expect(last_response.body).to include("note: family")
@@ -3086,20 +3093,20 @@ RSpec.describe Weft::Router do
         end
       end
 
-      get "/_components/by_status_card?note=%"
+      get_unreadable "/_components/by_status_card"
 
       expect(last_response.body).to include("note: by status")
     end
 
     it "walks the addressed page's chain for a page path" do
-      get "/unreadable-host?note=%"
+      get_unreadable "/unreadable-host"
 
       expect(last_response.status).to eq(400)
       expect(last_response.body).to include("unreadable-page")
     end
 
     it "falls to the gem-default page chain when the path matches no route" do
-      get "/no-such-route?note=%"
+      get_unreadable "/no-such-route"
 
       expect(last_response.status).to eq(400)
       expect(last_response.body).not_to include("Internal error")
