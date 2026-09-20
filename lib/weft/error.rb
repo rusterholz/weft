@@ -12,8 +12,13 @@ module Weft
       nil
     end
 
-    # What status an exception reports on the wire — asked by the response the
-    # router writes and by `from:` matching alike, so the two cannot disagree.
+    # @api private
+    # Public only because its two callers share no ancestor — the router writes
+    # the response with it, and `recovers from:` matches statuses with it, so
+    # the two cannot disagree about what an exception reports. The *behavior*
+    # is the contract (see docs/error-handling.md); this method is not.
+    #
+    # What status an exception reports on the wire.
     # A weft error carries its own; a foreign one is asked whether it declares
     # an `http_status`, the convention Sinatra's and Rack's errors already
     # speak. Silence is a fault, not a client's mistake: an exception that says

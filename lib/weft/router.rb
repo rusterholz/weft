@@ -3,6 +3,11 @@
 require "sinatra/base"
 require "uri"
 
+require "weft/context"
+require "weft/error"
+require "weft/params"
+require "weft/params/assembly"
+
 module Weft
   # Rack middleware that auto-generates routes for Weft::Components.
   #
