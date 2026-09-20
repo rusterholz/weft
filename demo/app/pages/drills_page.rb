@@ -11,9 +11,9 @@ class DrillsPage < ApplicationPage
   # Every recovery pathway the app can demonstrate, in the order they appear.
   # A new pathway earns a name here and a matching render_<name>_drill method —
   # which is the whole of what "new pathways get a card as they ship" costs.
-  DRILLS = %i[missing_record unreadable_id routing_miss validation component_failure
-              destructive_swap page_failure redirect_recovery companion_failure
-              stream_outage].freeze
+  DRILLS = %i[missing_record unreadable_id unreadable_request routing_miss validation
+              component_failure destructive_swap page_failure redirect_recovery
+              companion_failure stream_outage].freeze
 
   # Well-formed and guaranteed absent. An obviously fake id would leave the
   # drill ambiguous — the branded 404 looks the same whether the route matched
@@ -28,6 +28,11 @@ class DrillsPage < ApplicationPage
 
   # The three detail routes, which the two id drills exercise as a pair.
   DETAIL_ROUTES = { "order" => "/orders", "shipment" => "/shipments", "driver" => "/drivers" }.freeze
+
+  # Two query strings that never become keys and values: a stray percent sign
+  # is invalid encoding, and one key claiming to be both a list and a hash is
+  # a shape nothing can resolve.
+  UNPARSEABLE_QUERIES = { "Invalid encoding" => "q=%", "Conflicting shapes" => "a[]=1&a[b]=2" }.freeze
 
   def build(attributes = {})
     super
@@ -64,6 +69,22 @@ class DrillsPage < ApplicationPage
                     "refuses it before any lookup runs, so the answer is 400 rather than the 404 " \
                     "above: “no such record” and “that is not an id” are different answers, and " \
                     "only one of them needs the database to find out.")
+  end
+
+  # The pair to the drill above, one step further out: there the id was
+  # unreadable, here the whole request is.
+  def render_unreadable_request_drill
+    drill_card(title: "Branded 400 — unreadable request",
+               blurb: "The orders page, asked for with a query string that cannot be parsed at " \
+                      "all. There is no key to name and no value to hand back, so nothing can be " \
+                      "redrawn — but the answer is still the branded page with a genuine 400, " \
+                      "because an unreadable request is the caller's mistake, not the server's.") do
+      div(class: "d-flex gap-2") do
+        UNPARSEABLE_QUERIES.each do |label, query|
+          a label, href: "/orders?#{query}", class: drill_button
+        end
+      end
+    end
   end
 
   def render_routing_miss_drill

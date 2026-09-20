@@ -53,5 +53,39 @@ RSpec.describe Weft::Error do
       expect(custom_klass.status).to eq(404)
       expect(custom_klass.new.status).to eq(404)
     end
+
+    describe ".status_for" do
+      it "takes a weft error at its own word" do
+        expect(described_class.status_for(Weft::Unprocessable.new)).to eq(422)
+      end
+
+      it "takes a foreign error that declares an http_status at its word" do
+        speaks = Class.new(StandardError) { def http_status = 403 }
+        expect(described_class.status_for(speaks.new)).to eq(403)
+      end
+
+      it "reports 500 for an error that declares nothing" do
+        expect(described_class.status_for(StandardError.new)).to eq(500)
+      end
+
+      it "reports 500 for a declared status outside the error range" do
+        speaks = Class.new(StandardError) { def http_status = 200 }
+        expect(described_class.status_for(speaks.new)).to eq(500)
+      end
+
+      it "reports 500 for a status-bearing error that names no status of its own" do
+        expect(described_class.status_for(described_class.new)).to eq(500)
+      end
+    end
+  end
+
+  describe Weft::UnreadableRequest do
+    it "is a Weft::BadRequest, so an edge declared for the family catches it" do
+      expect(described_class.ancestors).to include(Weft::BadRequest, Weft::HTTPError, Weft::Error)
+    end
+
+    it "reports 400" do
+      expect(described_class.status).to eq(400)
+    end
   end
 end

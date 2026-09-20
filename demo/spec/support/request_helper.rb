@@ -41,8 +41,14 @@ module RequestHelper
 
   private
 
+  # An empty params hash is omitted rather than passed along, and that is not
+  # tidiness: given :params at all, Rack::MockRequest parses the query string
+  # in order to merge them, so a query weft is meant to refuse as unparseable
+  # would raise in the harness before the router ever saw the request.
   def weft_request(method, path, params, headers)
     app = Weft::Router.new(PASS_THROUGH)
-    Rack::MockRequest.new(app).public_send(method, path, { params: params, "HTTP_HX_REQUEST" => "true" }.merge(headers))
+    opts = { "HTTP_HX_REQUEST" => "true" }.merge(headers)
+    opts[:params] = params if params.any?
+    Rack::MockRequest.new(app).public_send(method, path, opts)
   end
 end

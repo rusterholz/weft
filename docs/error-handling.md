@@ -24,6 +24,7 @@ Weft ships a small semantic hierarchy rooted at `Weft::Error`:
 | `Weft::BadRequest` | 400 | The request itself couldn't be read. |
 | `Weft::InvalidParamValue` | 400 | A wire value the param's declared `type:` can't represent. Carries the raw values it refused. |
 | `Weft::MissingParam` | 400 | A param declared `required:` that no source supplied. |
+| `Weft::UnreadableRequest` | 400 | The query string or body couldn't be parsed at all, so nothing became params. |
 | `Weft::NotFound` | 404 | The thing addressed doesn't exist. |
 | `Weft::Unauthorized` | 401 | Authentication required. |
 | `Weft::Forbidden` | 403 | Authenticated, but not allowed. |
@@ -32,7 +33,19 @@ Weft ships a small semantic hierarchy rooted at `Weft::Error`:
 
 The `Weft::BadRequest` family is the one Weft raises for you, before any component builds — see [`strict:`](dsl.md#strict--what-a-type-guarantees). It draws a line worth keeping in your own code too: **400 means "I can't read what you sent"; 422 means "I read it fine, and it isn't acceptable."** Refusing an unreadable id and reporting a failed validation are different answers, and only one of them needs a database lookup to find out.
 
-Raise these from your `build` methods and action callables to communicate outcomes with the right status semantics: `raise Weft::NotFound` when a record lookup comes up empty, `raise Weft::Unprocessable` when validation fails. They're a convenience, not a requirement — your code can keep raising its own vocabulary (`ActiveRecord::RecordNotFound`, a domain error) and let a `recovers` edge [declare what it means](#the-recovers-chain) with `status:`. An error that's neither a `Weft::HTTPError` nor mapped by such an edge is treated as status 500.
+`Weft::UnreadableRequest` sits one step further out than its siblings. They name a key and a value that arrived and were refused; it fires when the query string or body never became keys and values at all — invalid `%`-encoding, one key claiming to be both a list and a hash, a multipart body that ends mid-part. So there is nothing for a recovery to redraw a form from, and the underlying parse failure rides along as the error's `cause` if you want to see what went wrong.
+
+Raise these from your `build` methods and action callables to communicate outcomes with the right status semantics: `raise Weft::NotFound` when a record lookup comes up empty, `raise Weft::Unprocessable` when validation fails. They're a convenience, not a requirement — your code can keep raising its own vocabulary (`ActiveRecord::RecordNotFound`, a domain error) and let a `recovers` edge [declare what it means](#the-recovers-chain) with `status:`. An error that's neither a `Weft::HTTPError` nor mapped by such an edge reports 500 — unless it speaks for itself.
+
+**An exception that answers `http_status` is taken at its word.** That's the convention Sinatra's and Rack's own errors already use, and your own can adopt it: give a domain error an `http_status` and every `recovers` edge that catches it reports the right status, instead of threading `status:` through each one separately.
+
+```ruby
+class PaymentDeclined < StandardError
+  def http_status = 402
+end
+```
+
+Only an error status (400–599) is honored that way; anything else, and anything silent, is a 500. An explicit `status:` on a `recovers` edge still wins over both.
 
 A separate branch of the family reports *your* mistakes to you, raised at definition or configuration time rather than during request handling: `Weft::InvalidConfiguration` (a bad value inside `Weft.configure`), `Weft::InvalidDefinition` (a bad class-body declaration, including route collisions), and `Weft::InvalidUsage` (a bad call at render time). These are meant to fail loudly during development, not to be recovery targets.
 
@@ -62,7 +75,7 @@ Each declaration is an edge: *when this kind of error escapes me, render that in
 
 **`with:`** names the recovery target — what renders in place of the failure. It accepts a component or page class, or a symbol naming a [configuration knob](configuration.md#the-four-fallback-targets) (`with: :error_component`), resolved at error-handling time so reconfiguration propagates. Omitted, it defaults to the declaring class itself — "on this error, re-render me" — which pairs naturally with a block that adjusts params.
 
-**`status:`** declares what a matched error *means* on the wire. Weft's own error classes carry their status with them, but your app's errors don't need translating into Weft's — recover from them directly and let the edge supply the semantics, as the `ActiveRecord::RecordNotFound` edge above does: the response status and the auto-injected `:status_code` param both follow it, so the branded rendering is a genuine 404. Without it, a recovered non-`Weft::HTTPError` reports as 500. Only error statuses (400–599) are assignable; an invalid value raises `Weft::InvalidUsage` at declaration time.
+**`status:`** declares what a matched error *means* on the wire. Weft's own error classes carry their status with them, but your app's errors don't need translating into Weft's — recover from them directly and let the edge supply the semantics, as the `ActiveRecord::RecordNotFound` edge above does: the response status and the auto-injected `:status_code` param both follow it, so the branded rendering is a genuine 404. Declaring it is the adopter speaking, so it wins outright — including over a status the exception names for itself. Without it, an error that says nothing about itself reports as 500. Only error statuses (400–599) are assignable; an invalid value raises `Weft::InvalidUsage` at declaration time.
 
 **The block**, if given, receives `(params, error)` — plus the exception — and returns a hash merged into the params the recovery target renders with (returned keys win). It's for *carrying information onto the error rendering*, like the validation messages above; it never returns HTML.
 
@@ -116,11 +129,13 @@ The symbols resolve through `Weft.configuration`, so [reassigning those knobs](c
 
 ## What happens when something raises
 
-**In component context** — a fragment render or an action — the Router walks the failing component's chain and renders the matched target as a fragment, with the response status taken from the exception (`Weft::HTTPError#status`, else 500). On the client, the fragment swaps in where the component's response would have gone, so the error appears exactly where the problem is. If the matched target is a *page* class, the recovery becomes a redirect to that page instead (`HX-Redirect` for htmx requests, 302 otherwise) — the `with: LoginPage` pattern above.
+**In component context** — a fragment render or an action — the Router walks the failing component's chain and renders the matched target as a fragment, with the response status taken from the exception — its own if it is a `Weft::HTTPError`, the `http_status` it declares if it has one, and 500 otherwise. On the client, the fragment swaps in where the component's response would have gone, so the error appears exactly where the problem is. If the matched target is a *page* class, the recovery becomes a redirect to that page instead (`HX-Redirect` for htmx requests, 302 otherwise) — the `with: LoginPage` pattern above.
 
 One wrinkle worth knowing: for actions with a destructive swap (`dismisses`, or any `performs` with `swap: :delete`), a successful response removes the element — which would make an error invisible. Weft overrides the swap on error responses (via `HX-Reswap`) so the error rendering replaces the component instead of vanishing with it. The replacement also arrives correctly shaped: recovery fragments adopt the failing component's wrapper tag (via `:component_tag`, below), so a failed delete on a table row produces an error *row* the table can legally contain.
 
 **In page context** — a full-document render, or a request no route matched — the Router walks the page's chain (for routing misses, the base `Weft::Page` chain, which lands on the not-found page). A traditional request gets the recovery page as a complete document; an htmx request gets just the page's body content, since the document shell is already on the client.
+
+**When the request itself couldn't be read**, the failure happens before Weft has resolved anything, so there is no component or page yet to have failed. The path is still readable, though, and that is what the recovery is routed by: a component path walks that component's chain and answers with a fragment, just as a failed render of it would; a page path walks that page's; and a path Weft doesn't recognize falls to the base `Weft::Page` chain, exactly as a routing miss does. What the recovery target *can't* do is read the request — the params are empty, because nothing parsed.
 
 **If the recovery itself raises** — a bug in your error component, say — Weft stops walking and emits a minimal hardcoded error rendering, logging the recovery failure and surfacing the *original* error. There is always a floor; error handling never recurses into itself.
 

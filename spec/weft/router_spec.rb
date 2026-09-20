@@ -2965,6 +2965,230 @@ RSpec.describe Weft::Router do
     end
   end
 
+  # A request nothing could parse, which is a different failure from a param
+  # whose value a declared type refused: there is no key to name and no value
+  # to hand back, because the query string never became keys and values at all.
+  # It surfaces the first time anything reads `params`, which is weft's own
+  # route handler — before a component or page has been resolved.
+  describe "unreadable requests" do
+    let!(:unreadable_card) do # rubocop:disable RSpec/LetSetup
+      Class.new(Weft::Component) do
+        def self.name = "UnreadableCard"
+        param :note
+
+        recovers(from: Weft::UnreadableRequest) { |_params, error| { note: error.class.name } }
+
+        def build(attributes = {})
+          super
+          div(class: "unreadable-card") { text_node "note: #{params.note}" }
+        end
+      end
+    end
+
+    let!(:unreadable_page_target) do
+      Class.new(Weft::Page) do
+        def self.name = "UnreadablePageTarget"
+        self.page_path = "/unreadable-target"
+
+        def build(attributes = {})
+          super
+          div(class: "unreadable-page") { text_node "page recovery" }
+        end
+      end
+    end
+
+    let!(:unreadable_host_page) do # rubocop:disable RSpec/LetSetup
+      target = unreadable_page_target
+      Class.new(Weft::Page) do
+        def self.name = "UnreadableHostPage"
+        self.page_path = "/unreadable-host"
+
+        recovers(from: Weft::UnreadableRequest, with: target)
+
+        def build(attributes = {}) = super
+      end
+    end
+
+    # The malformed query rides in as QUERY_STRING instead of being written
+    # into the URL: Rack::MockRequest parses the URL with URI::Parser, which
+    # on uri < 1.0 (the default gem through Ruby 3.3) is the strict RFC 2396
+    # parser and refuses a bare `%` before any request exists. Production
+    # delivers it this way too — Puma hands the query string over verbatim.
+    def get_unreadable(path) = get(path, {}, "QUERY_STRING" => "note=%")
+
+    it "answers 400 for a query string with invalid %-encoding" do
+      get_unreadable "/_components/unreadable_card"
+
+      expect(last_response.status).to eq(400)
+    end
+
+    it "answers 400 for a query string whose param types conflict" do
+      get "/_components/unreadable_card?a[]=1&a[b]=2"
+
+      expect(last_response.status).to eq(400)
+    end
+
+    it "answers 400 for a multipart body that ends early" do
+      post "/_components/unreadable_card",
+           "--abc\r\nContent-Disposition: form-data; name=\"x\"\r\n",
+           "CONTENT_TYPE" => "multipart/form-data; boundary=abc"
+
+      expect(last_response.status).to eq(400)
+    end
+
+    it "walks the addressed component's own chain, since the path is still readable" do
+      get_unreadable "/_components/unreadable_card"
+
+      expect(last_response.body).to include("unreadable-card")
+      expect(last_response.body).to include("note: Weft::UnreadableRequest")
+    end
+
+    it "keeps the underlying parse failure as the cause" do
+      Class.new(Weft::Component) do
+        def self.name = "CauseCard"
+        param :note
+
+        recovers(from: Weft::UnreadableRequest) { |_params, error| { note: error.cause.class.name } }
+
+        def build(attributes = {})
+          super
+          div { text_node "cause: #{params.note}" }
+        end
+      end
+
+      get_unreadable "/_components/cause_card"
+
+      expect(last_response.body).to include("cause: Sinatra::BadRequest")
+    end
+
+    it "matches an edge declared from the Weft::BadRequest family" do
+      Class.new(Weft::Component) do
+        def self.name = "FamilyCard"
+        param :note
+
+        recovers(from: Weft::BadRequest) { { note: "family" } }
+
+        def build(attributes = {})
+          super
+          div { text_node "note: #{params.note}" }
+        end
+      end
+
+      get_unreadable "/_components/family_card"
+
+      expect(last_response.status).to eq(400)
+      expect(last_response.body).to include("note: family")
+    end
+
+    it "matches an edge declared by status" do
+      Class.new(Weft::Component) do
+        def self.name = "ByStatusCard"
+        param :note
+
+        recovers(from: 400) { { note: "by status" } }
+
+        def build(attributes = {})
+          super
+          div { text_node "note: #{params.note}" }
+        end
+      end
+
+      get_unreadable "/_components/by_status_card"
+
+      expect(last_response.body).to include("note: by status")
+    end
+
+    it "walks the addressed page's chain for a page path" do
+      get_unreadable "/unreadable-host"
+
+      expect(last_response.status).to eq(400)
+      expect(last_response.body).to include("unreadable-page")
+    end
+
+    it "falls to the gem-default page chain when the path matches no route" do
+      get_unreadable "/no-such-route"
+
+      expect(last_response.status).to eq(400)
+      expect(last_response.body).not_to include("Internal error")
+    end
+
+    it "leaves a readable request alone" do
+      get "/_components/unreadable_card?note=fine"
+
+      expect(last_response.status).to eq(200)
+      expect(last_response.body).to include("note: fine")
+    end
+  end
+
+  # Weft used to report 500 for every exception outside its own family, which
+  # overrode a status the exception had already declared. An error that says
+  # nothing about itself is still a fault; one that speaks for itself is taken
+  # at its word.
+  describe "exceptions that declare their own status" do
+    def speaking_error_class(declared)
+      Class.new(StandardError) do
+        define_method(:http_status) { declared }
+      end
+    end
+
+    def card_raising(error_class, class_name, **recovers_opts)
+      Class.new(Weft::Component) do
+        singleton_class.define_method(:name) { class_name }
+        param :note
+
+        recovers(**recovers_opts) { { note: "recovered" } } if recovers_opts.any?
+
+        define_method(:build) do |attributes = {}|
+          super(attributes)
+          raise error_class, "spoke for itself" unless params.note
+
+          div { text_node "note: #{params.note}" }
+        end
+      end
+    end
+
+    it "reports the status the exception declares" do
+      card_raising(speaking_error_class(403), "SpeaksForbidden")
+
+      get "/_components/speaks_forbidden"
+
+      expect(last_response.status).to eq(403)
+    end
+
+    it "matches a recovers edge by that declared status" do
+      card_raising(speaking_error_class(409), "SpeaksConflict", from: 409)
+
+      get "/_components/speaks_conflict"
+
+      expect(last_response.status).to eq(409)
+      expect(last_response.body).to include("note: recovered")
+    end
+
+    it "still reports 500 for an exception that declares nothing" do
+      card_raising(Class.new(StandardError), "SpeaksNothing")
+
+      get "/_components/speaks_nothing"
+
+      expect(last_response.status).to eq(500)
+    end
+
+    it "ignores a declared status outside the error range" do
+      card_raising(speaking_error_class(200), "SpeaksSuccess")
+
+      get "/_components/speaks_success"
+
+      expect(last_response.status).to eq(500)
+    end
+
+    it "lets an explicit recovers status: override what the exception declares" do
+      card_raising(speaking_error_class(403), "SpeaksOverridden", from: 403, status: 503)
+
+      get "/_components/speaks_overridden"
+
+      expect(last_response.status).to eq(503)
+    end
+  end
+
   describe "recovers auto-injected attributes (schema-gated)" do
     it "injects :exception when the target declares it" do
       Class.new(Weft::Component) do

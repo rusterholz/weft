@@ -3,6 +3,11 @@
 require "sinatra/base"
 require "uri"
 
+require "weft/context"
+require "weft/error"
+require "weft/params"
+require "weft/params/assembly"
+
 module Weft
   # Rack middleware that auto-generates routes for Weft::Components.
   #
@@ -80,6 +85,15 @@ module Weft
       content_type :html
       handle_page_chain_failure(Weft::NotFound.new(request.path),
                                 originating_page_class: nil)
+    end
+
+    # A request nothing could parse. Sinatra raises this the first time
+    # anything reads `params` — which is the route handler above, before any
+    # component or page has been resolved — so the recovery is routed by path
+    # alone. Exact-class key for the same reason as NotFound.
+    error Sinatra::BadRequest do
+      content_type :html
+      handle_unreadable_request(env["sinatra.error"])
     end
 
     # Catch any error escaping a route handler and walk the Weft::Page

@@ -24,7 +24,9 @@ module Weft
     # the component it stands in for.
     #
     # Depends on Router internals: `headers`, `status`, `request`,
-    # `redirect`, `htmx_request?`.
+    # `redirect`, `htmx_request?`, and the action slice's
+    # `find_component_and_action` — an unparseable request has to resolve its
+    # own route, having failed before the router resolved one.
     module Errors # rubocop:disable Metrics/ModuleLength
       # Each entry: { redirect_safe: true } means the auto-injected param is
       # included even when building a redirect URL. The component-context
@@ -46,6 +48,33 @@ module Weft
       private_constant :AUTO_INJECTED_PARAMS
 
       private
+
+      # Recover from a request weft could not parse. The path is the only part
+      # still readable, so it is what the chain is chosen by: a component path
+      # walks that component's own chain and answers with a fragment, exactly
+      # as a failed render of it would; a page path walks that page's; a path
+      # weft doesn't know falls to the gem-default Page chain, as a routing
+      # miss does. The state is an empty bag, since there is no request to
+      # read one from — a recovery here redraws nothing, because nothing
+      # arrived to redraw.
+      def handle_unreadable_request(sinatra_error)
+        error = unreadable_request(sinatra_error)
+        path = request.path_info
+        component_class, = find_component_and_action(path)
+        return render_error(component_class, Weft::Params.new({}), error) if component_class&.routable?
+
+        page_class, = Weft.registry.match_page(path)
+        handle_page_chain_failure(error, originating_page_class: page_class)
+      end
+
+      # Raised and caught rather than constructed, because `cause` can only be
+      # set by `raise` — and the chain is worth keeping: weft's error says the
+      # request was unreadable, and its cause says what found that out.
+      def unreadable_request(sinatra_error)
+        raise Weft::UnreadableRequest, sinatra_error.message, sinatra_error.backtrace, cause: sinatra_error
+      rescue Weft::UnreadableRequest => e
+        e
+      end
 
       # Walk a Page-context recovers chain (B1, B2, C1 page-context, C4).
       # `originating_page_class` is nil for routing misses (no specific Page);
@@ -409,10 +438,10 @@ module Weft
         }
       end
 
-      # The matched entry's status: override wins; otherwise the error's own
-      # semantics (HTTPError carries a status, anything else reports 500).
+      # The matched entry's status: an explicit `status:` is the adopter
+      # speaking and wins outright; otherwise the error speaks for itself.
       def recovery_status(error, entry = nil)
-        entry&.[](:status) || (error.is_a?(Weft::HTTPError) ? error.status : 500)
+        entry&.[](:status) || Weft::HTTPError.status_for(error)
       end
 
       def render_generic_error(component_class, error)
