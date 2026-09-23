@@ -67,6 +67,15 @@ Weft learns to say what a thing *is*: components name their own identity instead
 
 ### Bug Fixes:
 
+- **A Pinned Value Can No Longer Leak Into The Next Request** – A `defines` value is one object shared by every instance of that class for the life of the process, so a `params.nav << "late"` in one render was still sitting there for every request afterwards. Weft now hands out its own frozen copy: the mutation raises `FrozenError` on the line that tried it, and the pin stays what you declared.
+  - Weft copies *before* freezing, so the object you handed it is never frozen. A constant your application also holds and mutates elsewhere keeps working
+  - Shallow, as freezing usually is: `defines nav: [{ n: 1 }]` still shares that inner hash
+  - A `Class` or `Module` passes through untouched, since a copy of one is no longer the class you named
+
+- **A Mistyped `defines` Option Says So** – `defines` takes one hash of pairs, so `defines label: "x", digest: true` quietly declared a key called `digest` instead of refusing an option the way `param` and `derives` do. Weft now warns when a key carries a facet's name *and* holds a value that facet would have accepted, and stays quiet otherwise, because `defines type: "premium"` is a perfectly good key named `type`.
+
+- **Weft's Advice Names The Door You Actually Used** – When an identifying value renders blank, the warning always said to declare `param :label, digest: true`, whichever door the key came through. For a `derives` that pointed at a keyword the wrong verb takes; for a `defines` it worked but quietly made the component routable. It now names the declaring door, and tells a `defines` author the thing actually worth hearing: a pinned value is identical on every instance, so it cannot distinguish them and does not belong in an identity.
+
 - **A Handed Value Reaches Everything The Component Renders** – `status_card(status: "shipped")` told that card its status, and anything the card built inside it went back to reading the page's own `?status=` instead. A component nested in a card you had expressly handed a value showed the page's filter, and the deeper it sat the less the call site meant. A handed value now keeps its place for the whole subtree below the component it was handed to, so what a call site says about a card wins over what the page happened to be filtered by.
 
   This mattered most for a collection, where it was the difference between a working row and an invalid document. Four cards built from four statuses, each rendering a badge that declares `param :status`, used to resolve one status between them the moment the page carried a filter of its own: four badges showing the same value, composing the same DOM id, and Weft's duplicate-id warning firing to say that ids must be unique. Since an out-of-band swap is addressed by id, only one of the four could ever have landed. They now read their own card's value, claim four ids, and are individually addressable.
@@ -108,6 +117,11 @@ Weft learns to say what a thing *is*: components name their own identity instead
 - **Fallback Derivations Stop Nagging** – A component that declares `derives(:order)` *and* gets embedded under something that already supplies the order is doing the right thing: fetch your own when you're rendered standalone, take the ancestor's when you're nested. Weft used to log a warning every time the second half happened — warning about correct code, and suggesting a fix (share one derivation) that's wrong whenever the two deliberately differ, as when a page eager-loads what a card doesn't. It's gone. The overlay warning stays, because a verb block returning a key really does stop your derivation running for that whole request.
 
 ### Breaking Changes:
+
+- **A Pinned Value Wins Against The Page Around It** (`defines`) – `defines label: "Drivers"` used to lose to any ancestor that happened to supply `label`, so a card pinning its own label rendered the page's `?label=` instead. A pin now claims its key for the component and everything it contains, which is the whole reason to reach for `defines` over a plain Ruby constant.
+  - It still yields to the component's *own* wire param, so a routable component keeps answering for itself
+  - This is the one behavior `defines` no longer shares with the `derives` it is sugar for. A derivation yields on purpose, because it is the fallback for standing alone; a pin is the opposite claim
+  - Nothing changes for a subclass pinning over its parent's `derives`, which already worked
 
 - **A Declared Type Is Now A Promise** – `type:` used to be a parsing hint that quietly did its best: `?page=wombat` on `param :page, type: :integer` rendered **page 0**, and `:float`, `:decimal` and `:boolean` invented `0.0`, `0.0` and `false` the same way. A value the type can't represent is now refused with a `Weft::BadRequest`, so a bad request fails at the request instead of surfacing three screens later as "this page is showing the wrong records."
   - `?page=` — an empty value — now falls to the param's declared default. It's a cleared field, and treating it as a value is how `default: 1` used to render page 0

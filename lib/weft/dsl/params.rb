@@ -15,7 +15,111 @@ module Weft
         base.extend(ClassMethods)
       end
 
+      # Everything that refuses a bad declaration while the class body runs.
+      # One job, and the only code here that raises: a declaration weft cannot
+      # honor is a mistake in the source, so it fails at the line that wrote it
+      # rather than at the request that trips over it.
+      module Validations
+        private
+
+        def validate_param!(name, default, options)
+          validate_type!(name, options[:type], default) unless options[:type].nil?
+          validate_digest!(name, options[:digest]) if options[:digest]
+          validate_required!(name, default) if options[:required]
+          refuse_conflicting_type!(name, options[:type])
+        end
+
+        # `receives` reads only `:default` off the rest hash, so anything else
+        # in there was written by someone who expected it to do something.
+        def validate_received!(name, type, digest, options)
+          unknown = options.keys - [:default]
+          unless unknown.empty?
+            raise ArgumentError,
+                  "receives #{name.inspect} got unknown keyword#{'s' if unknown.size > 1} " \
+                  "#{unknown.map(&:inspect).join(', ')}"
+          end
+
+          validate_type!(name, type, nil) unless type.nil?
+          validate_digest!(name, digest) if digest
+          refuse_conflicting_type!(name, type)
+        end
+
+        def validate_type!(name, type, default)
+          entry = Weft::Types.lookup(type)
+          unless entry
+            raise Weft::InvalidDefinition,
+                  "param #{name.inspect} declares unknown type #{type.inspect} — declarable " \
+                  "types are #{Weft::Types.registered.map(&:inspect).join(', ')}"
+          end
+          return if default.nil? || entry.permits_default?(default)
+
+          raise Weft::InvalidDefinition,
+                "param #{name.inspect} declares type #{type.inspect} but its default " \
+                "#{default.inspect} is #{default.class} — make them agree, or drop one"
+        end
+
+        # A declared default answers absence; `required: true` refuses it. Two
+        # answers to one question, so refuse the pair rather than rank them.
+        # `default: nil` is not a declared default — it is the signature's own
+        # value for "none given".
+        def validate_required!(name, default)
+          return if default.nil?
+
+          raise Weft::InvalidDefinition,
+                "param #{name.inspect} is required but declares default #{default.inspect} — a " \
+                "default is what makes a param optional. Drop one of the two"
+        end
+
+        def validate_digest!(name, digest)
+          return if digest == true
+          return if digest.is_a?(Integer) && digest.between?(1, Weft::Addressing::MAX_DIGEST_LENGTH)
+
+          raise Weft::InvalidDefinition,
+                "param #{name.inspect} declares digest #{digest.inspect} — pass true for the " \
+                "gem-wide length, or an integer between 1 and #{Weft::Addressing::MAX_DIGEST_LENGTH}"
+        end
+
+        # One key is one value, so two doors naming different types for it are
+        # contradictory assertions rather than a precedence puzzle — refuse
+        # rather than pick, exactly as `declare_identity!` does for the identity
+        # verbs. Unlike `default:`, where two doors holding different fallbacks
+        # is meaningful, since they answer for different sources.
+        #
+        # Reads what THIS class body declared, never the inherited merge: a
+        # subclass retyping its parent's key is an override, like redeclaring a
+        # derivation block. And only two *stated* types conflict — a door that
+        # says nothing simply defers to the one that did.
+        def refuse_conflicting_type!(name, type)
+          return if type.nil?
+
+          [own_params, own_received_params, own_derived_params].each do |table|
+            declared = table[name]&.[](:type)
+            next if declared.nil? || declared == type
+
+            raise Weft::InvalidDefinition,
+                  "#{self.name} declares #{name.inspect} as both #{declared.inspect} and " \
+                  "#{type.inspect} — one key holds one value, so name the type once or use " \
+                  "two keys"
+          end
+        end
+
+        # A contextual derivation that yielded to an ancestor's value could
+        # never run at all, so the pair is refused at the declaration rather
+        # than accepted and quietly ignored.
+        def refuse_yielding_contextual!(name, contextual, override)
+          return unless contextual && !override
+
+          raise Weft::InvalidDefinition,
+                "#{self.name} declares #{name.inspect} as contextual but not overriding — a " \
+                "contextual derivation is computed where it is read, so yielding to an " \
+                "ancestor's value would leave it never running. Drop override: false, or drop " \
+                "contextual: true to take the ancestor's value when you are nested"
+        end
+      end
+
       module ClassMethods
+        include Validations
+
         # Declare a wire param. `default:` fills the key when no source
         # supplies it; `type:` coerces the wire's string into the declared
         # type (see Resolver::TYPES). The two are orthogonal — an untyped
@@ -44,13 +148,7 @@ module Weft
         end
 
         # Returns all declared params (own + inherited), preserving declaration order.
-        def params
-          if superclass.respond_to?(:params)
-            superclass.params.merge(own_params)
-          else
-            own_params.dup
-          end
-        end
+        def params = with_inherited(:params, own_params)
 
         # Declare a hand-off param: the caller provides the value as a builder
         # kwarg at the call site; it lands in `params`, never in HTML chrome.
@@ -80,13 +178,7 @@ module Weft
         # All declared hand-offs (own + inherited), preserving declaration
         # order. Kept separate from `params` — the wire door and the hand-off
         # door differ in serialization and routability, even for dual keys.
-        def received_params
-          if superclass.respond_to?(:received_params)
-            superclass.received_params.merge(own_received_params)
-          else
-            own_received_params.dup
-          end
-        end
+        def received_params = with_inherited(:received_params, own_received_params)
 
         # Declare a lazy server-side derivation: the block runs (at most once
         # per render) when `params.name` is first read, never if it isn't.
@@ -141,17 +233,26 @@ module Weft
         end
 
         # Sugar for statically-known derivations: each pair registers
-        # `derives(key) { value }`. This is just `derives` — identical
-        # priority, overridability, and laziness; only the value is fixed at
-        # declaration. For anything computed per render (queries, clocks),
-        # use `derives` — an interpolated value here would freeze at
-        # class-load time.
+        # `derives(key) { value }`, with the value fixed at declaration. For
+        # anything computed per render (queries, clocks), use `derives` — an
+        # interpolated value here would freeze at class-load time.
         #   defines label: "Drivers", accent: "available"
+        #
+        # It is not quite `derives`, and the difference is `override`. A
+        # derivation defaults to yielding: it is a fallback for standing alone,
+        # and a richer ancestor's value wins when you are nested. A pin is the
+        # opposite claim — what earns `defines` its keep over a plain constant
+        # is fixing a value some ancestor also supplies, so a pin that yielded
+        # could not do the one job it exists for. It claims the key for this
+        # class and its subtree, and still loses to this component's own wire.
         def defines(pairs)
           site = caller_locations(1, 1).first
           pairs.each do |name, value|
-            own_derived_params[name] = { block: proc { |_p| value },
-                                         source_location: [site.path, site.lineno] }
+            warn_facet_shaped_key(name, value)
+            pinned = pin_value(value)
+            own_derived_params[name] = { block: proc { |_p| pinned },
+                                         source_location: [site.path, site.lineno],
+                                         override: true, pinned: true }
           end
         end
 
@@ -171,15 +272,17 @@ module Weft
         # All declared derivations (own + inherited), preserving declaration
         # order. A child redeclaring a parent's key replaces the block, like
         # a method override.
-        def derived_params
-          if superclass.respond_to?(:derived_params)
-            superclass.derived_params.merge(own_derived_params)
-          else
-            own_derived_params.dup
-          end
-        end
+        def derived_params = with_inherited(:derived_params, own_derived_params)
 
         private
+
+        # All three door tables answer the same way — this class's own
+        # declarations merged over whatever it inherits, so a redeclared key
+        # keeps the position it was first given. Stated once because three
+        # copies of it is three chances to fix a bug in one of them.
+        def with_inherited(reader, own)
+          superclass.respond_to?(reader) ? superclass.public_send(reader).merge(own) : own.dup
+        end
 
         # One key's declarations may be spread across doors — a `param` for the
         # wire shape, a `derives` that computes it — so a consumer that reached
@@ -188,6 +291,23 @@ module Weft
         # render a uuid the same way whether it arrived over the wire, from a
         # caller, or from a derivation.
         #
+        # Which door declared a key. Diagnostics need it because the remedy
+        # they name has to be one the reader can type: `digest:` is spelled
+        # differently at each door, and a pin has no spelling for it at all.
+        # Same wire-first precedence as declared_facet — for a dual key the
+        # wire door is the one a URL round-trips through.
+        #
+        # `defines` and `derives` share one table, so the pin marker is what
+        # separates them; nothing else reads it.
+        def declaring_door(key)
+          return :param if params.key?(key)
+          return :receives if received_params.key?(key)
+
+          meta = derived_params[key] or return nil
+
+          meta[:pinned] ? :defines : :derives
+        end
+
         # Wire first, mirroring Assembly#default_for: its meta is the one a URL
         # round-trips through, so for a dual key it is the one that has to hold.
         def declared_facet(key, facet)
@@ -198,65 +318,57 @@ module Weft
           nil
         end
 
-        # `default:` is the one option that rides the rest hash, because only
-        # `options.key?(:default)` can tell "declared nil" from "not declared" —
-        # and that distinction is what makes a hand-off required or optional.
-        # One key is one value, so two doors naming different types for it are
-        # contradictory assertions rather than a precedence puzzle — refuse
-        # rather than pick, exactly as `declare_identity!` does for the identity
-        # verbs. Unlike `default:`, where two doors holding different fallbacks
-        # is meaningful, since they answer for different sources.
+        # What a facet keyword's value would have to look like for the reader
+        # to have plausibly meant it. `default:` is absent on purpose: every
+        # value is a plausible default, so there is nothing to discriminate on
+        # and the check would fire on every key honestly named `default`.
+        BOOLEAN_FACET = ->(v) { [true, false].include?(v) }
+        FACET_SHAPES = {
+          type: ->(v) { !Weft::Types.lookup(v).nil? },
+          digest: ->(v) { v == true || (v.is_a?(Integer) && v.between?(1, Weft::Addressing::MAX_DIGEST_LENGTH)) },
+          override: BOOLEAN_FACET,
+          contextual: BOOLEAN_FACET,
+          strict: BOOLEAN_FACET,
+          required: BOOLEAN_FACET
+        }.freeze
+        private_constant :BOOLEAN_FACET, :FACET_SHAPES
+
+        # `defines` takes one bare hash, so a facet keyword written beside a
+        # pair lands as a key instead of being refused the way `param` and
+        # `derives` refuse an unknown keyword. Both readings are legitimate —
+        # `defines type: "premium"` is an ordinary key — so the name alone
+        # cannot decide and the value is what tips it: only a value that would
+        # have been *valid* for that keyword is worth saying anything about.
         #
-        # Reads what THIS class body declared, never the inherited merge: a
-        # subclass retyping its parent's key is an override, like redeclaring a
-        # derivation block. And only two *stated* types conflict — a door that
-        # says nothing simply defers to the one that did.
-        # A contextual derivation that yielded to an ancestor's value could
-        # never run at all, so the pair is refused at the declaration rather
-        # than accepted and quietly ignored.
-        def refuse_yielding_contextual!(name, contextual, override)
-          return unless contextual && !override
+        # Said at declaration, which is once per class body by construction,
+        # so no dedup register is needed.
+        def warn_facet_shaped_key(name, value)
+          return unless FACET_SHAPES[name]&.call(value)
 
-          raise Weft::InvalidDefinition,
-                "#{self.name} declares #{name.inspect} as contextual but not overriding — a " \
-                "contextual derivation is computed where it is read, so yielding to an " \
-                "ancestor's value would leave it never running. Drop override: false, or drop " \
-                "contextual: true to take the ancestor's value when you are nested"
+          Weft.logger.warn(
+            "#{self.name}: `defines` takes no keyword options — the value you hand it is already " \
+            "final — so #{name.inspect} is declared as an ordinary key holding #{value.inspect}. " \
+            "If you meant the #{name} option, declare that key through `param`, `derives` or " \
+            "`receives`, which take it. If you meant a key named #{name.inspect}, nothing is wrong."
+          )
         end
 
-        def refuse_conflicting_type!(name, type)
-          return if type.nil?
-
-          [own_params, own_received_params, own_derived_params].each do |table|
-            declared = table[name]&.[](:type)
-            next if declared.nil? || declared == type
-
-            raise Weft::InvalidDefinition,
-                  "#{self.name} declares #{name.inspect} as both #{declared.inspect} and " \
-                  "#{type.inspect} — one key holds one value, so name the type once or use " \
-                  "two keys"
-          end
-        end
-
-        def validate_received!(name, type, digest, options)
-          unknown = options.keys - [:default]
-          unless unknown.empty?
-            raise ArgumentError,
-                  "receives #{name.inspect} got unknown keyword#{'s' if unknown.size > 1} " \
-                  "#{unknown.map(&:inspect).join(', ')}"
-          end
-
-          validate_type!(name, type, nil) unless type.nil?
-          validate_digest!(name, digest) if digest
-          refuse_conflicting_type!(name, type)
-        end
-
-        def validate_param!(name, default, options)
-          validate_type!(name, options[:type], default) unless options[:type].nil?
-          validate_digest!(name, options[:digest]) if options[:digest]
-          validate_required!(name, default) if options[:required]
-          refuse_conflicting_type!(name, options[:type])
-        end
+        # A `defines` value is one object, shared by every instance of the class
+        # for the life of the process, so weft keeps its own frozen copy rather
+        # than the object it was handed. Both halves are load-bearing: without
+        # the freeze, one render's `<<` is read by every later request; without
+        # the copy, freezing would reach into a constant the application also
+        # holds and break code that has nothing to do with weft.
+        #
+        # A Module — and so a Class — is the exemption, because `dup` is wrong
+        # for it rather than merely unnecessary: the copy answers its methods
+        # but is not the original, so `==`, `name` and `is_a?` all disagree with
+        # it, silently. Nothing to protect either way, since a class is already
+        # process-wide.
+        #
+        # Shallow, and named as such in the docs: freezing a container does not
+        # freeze what it holds.
+        def pin_value(value) = value.is_a?(Module) ? value : value.dup.freeze
 
         # Only what was actually said: an absent `strict:` has to stay absent
         # so it can defer to the gem-wide setting, which a stored `false` would
@@ -269,41 +381,6 @@ module Weft
           meta[:strict] = options[:strict] unless options[:strict].nil?
           meta[:required] = true if options[:required]
           meta
-        end
-
-        def validate_type!(name, type, default)
-          entry = Weft::Types.lookup(type)
-          unless entry
-            raise Weft::InvalidDefinition,
-                  "param #{name.inspect} declares unknown type #{type.inspect} — declarable " \
-                  "types are #{Weft::Types.registered.map(&:inspect).join(', ')}"
-          end
-          return if default.nil? || entry.permits_default?(default)
-
-          raise Weft::InvalidDefinition,
-                "param #{name.inspect} declares type #{type.inspect} but its default " \
-                "#{default.inspect} is #{default.class} — make them agree, or drop one"
-        end
-
-        # A declared default answers absence; `required: true` refuses it. Two
-        # answers to one question, so refuse the pair rather than rank them.
-        # `default: nil` is not a declared default — it is the signature's own
-        # value for "none given".
-        def validate_required!(name, default)
-          return if default.nil?
-
-          raise Weft::InvalidDefinition,
-                "param #{name.inspect} is required but declares default #{default.inspect} — a " \
-                "default is what makes a param optional. Drop one of the two"
-        end
-
-        def validate_digest!(name, digest)
-          return if digest == true
-          return if digest.is_a?(Integer) && digest.between?(1, Weft::Addressing::MAX_DIGEST_LENGTH)
-
-          raise Weft::InvalidDefinition,
-                "param #{name.inspect} declares digest #{digest.inspect} — pass true for the " \
-                "gem-wide length, or an integer between 1 and #{Weft::Addressing::MAX_DIGEST_LENGTH}"
         end
 
         def own_params = @own_params ||= {}

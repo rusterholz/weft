@@ -102,6 +102,13 @@ A derivation declared `override:` lifts above **inherited only** — it does not
 overlay, or the component's own wire. The intent is "I always compute this myself rather than accepting
 my parent's copy," not "I win."
 
+`defines` registers with `override: true` always, which is the one behavior it does not share with the
+`derives` it is sugar for. A derivation defaults to yielding because it is a standalone fallback; a pin
+exists precisely to fix a value an ancestor also supplies, so a yielding pin could not do its only job.
+The registration also carries `pinned: true`, read by exactly one caller: `declaring_door`, which
+diagnostics use to name a remedy at the door that declared the key, since the two verbs otherwise share
+one table and are indistinguishable in it.
+
 ### The transmitted slots, and why a bag holds them
 
 A bag is `(data, overlay, handoff, defaults, owner)`. The overlay is the accumulated verb-block delta

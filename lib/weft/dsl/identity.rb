@@ -327,9 +327,27 @@ module Weft
             Weft.logger.warn(
               "#{name} identifies by #{key.inspect}, which rendered blank, so every instance with a " \
               "blank #{key.inspect} resolves to DOM id #{dom_id.inspect}. An out-of-band swap is " \
-              "addressed by DOM id, so only one such fragment can land — declare " \
-              "`param #{key.inspect}, digest: true` to give blank values slots of their own."
+              "addressed by DOM id, so only one such fragment can land — #{blank_slot_remedy(key)}"
             )
+          end
+        end
+
+        # `digest:` is spelled at the door that declared the key, so naming one
+        # door for all of them sends half the readers to a kwarg that isn't
+        # there. A pin gets a different sentence rather than a different
+        # spelling: it has no `digest:`, and would not be helped by one, since
+        # a value identical on every instance digests to one identical token.
+        def blank_slot_remedy(key)
+          case declaring_door(key)
+          when :defines
+            "and #{key.inspect} is pinned by `defines`, so it is the same on every instance and " \
+            "cannot distinguish them. Identify by a value that varies, and drop this slot."
+          when :derives
+            "declare `derives(#{key.inspect}, digest: true)` to give blank values slots of their own."
+          when :receives
+            "declare `receives #{key.inspect}, digest: true` to give blank values slots of their own."
+          else
+            "declare `param #{key.inspect}, digest: true` to give blank values slots of their own."
           end
         end
 

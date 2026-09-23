@@ -458,7 +458,10 @@ RSpec.describe Weft::DSL::Params do
         not_to eq(second.derived_params[:label][:source_location])
     end
 
-    it "is just derives: a child redeclaration through either verb replaces the other's" do
+    # The class axis, which the two verbs do share: both write the same table,
+    # so a subclass redeclaring through either replaces what it inherited.
+    # (What they no longer share is `override` — see the assembly specs.)
+    it "shares one declaration table with derives, so either verb overrides the other" do
       parent = Class.new(base_class) do
         def self.name = "DefinedParent"
         defines label: "static"
@@ -470,6 +473,145 @@ RSpec.describe Weft::DSL::Params do
 
       expect(child.derived_params[:label][:block].call(nil)).to eq("computed")
       expect(parent.derived_params[:label][:block].call(nil)).to eq("static")
+    end
+
+    it "registers as overriding, where a plain derives does not" do
+      klass = Class.new(base_class) do
+        def self.name = "PinningClass"
+        defines label: "Drivers"
+        derives(:other) { |_p| "computed" }
+      end
+
+      expect(klass.derived_params[:label][:override]).to be(true)
+      expect(klass.derived_params[:other]).not_to have_key(:override)
+    end
+
+    describe "a pinned value is weft's own frozen copy" do
+      it "hands out a frozen value, so one render cannot leak into the next" do
+        klass = Class.new(base_class) do
+          def self.name = "PinnedNav"
+          defines nav: ["home"]
+        end
+
+        pinned = klass.derived_params[:nav][:block].call(nil)
+
+        expect(pinned).to be_frozen
+        expect { pinned << "leaked" }.to raise_error(FrozenError)
+      end
+
+      it "never freezes the object it was handed, which the app may also hold" do
+        shared = ["home"]
+        Class.new(base_class) do
+          def self.name = "PinnedFromConstant"
+          defines nav: shared
+        end
+
+        expect(shared).not_to be_frozen
+        expect { shared << "the app's own push" }.not_to raise_error
+      end
+
+      it "copies rather than aliases, so the app mutating its own object does not move the pin" do
+        shared = ["home"]
+        klass = Class.new(base_class) do
+          def self.name = "PinnedIndependently"
+          defines nav: shared
+        end
+        shared << "added later"
+
+        expect(klass.derived_params[:nav][:block].call(nil)).to eq(["home"])
+      end
+
+      # A Class is the one value kind dup gets wrong: the copy answers its
+      # methods but is not the original — `==` is false, `name` is nil, and
+      # instances of it are not `is_a?` the real class. Since a Class is
+      # already a process-wide shared object, there is nothing for the copy
+      # to protect, so it is handed through as itself.
+      it "passes a Class through untouched, identity intact" do
+        row = Class.new(Weft::Component) { def self.name = "PinnedRowClass" }
+        klass = Class.new(base_class) do
+          def self.name = "TableWithRowClass"
+          defines row_class: row
+        end
+
+        expect(klass.derived_params[:row_class][:block].call(nil)).to equal(row)
+      end
+
+      it "passes a Module through untouched" do
+        flags = Module.new
+        klass = Class.new(base_class) do
+          def self.name = "PinnedModule"
+          defines flags: flags
+        end
+
+        expect(klass.derived_params[:flags][:block].call(nil)).to equal(flags)
+      end
+
+      it "leaves values that cannot be mutated anyway alone" do
+        klass = Class.new(base_class) do
+          def self.name = "PinnedScalars"
+          defines count: 3, name: :drivers, missing: nil
+        end
+        blocks = klass.derived_params
+
+        expect(blocks[:count][:block].call(nil)).to eq(3)
+        expect(blocks[:name][:block].call(nil)).to eq(:drivers)
+        expect(blocks[:missing][:block].call(nil)).to be_nil
+      end
+    end
+
+    # `defines` takes one bare hash, so a facet keyword written beside a pair
+    # becomes a key rather than being refused the way `param` and `derives`
+    # refuse it. Both readings are legitimate — someone may genuinely want a
+    # key named `type` — so the name alone cannot decide, and the value is
+    # what tips it.
+    describe "a key that looks like a facet someone meant to declare" do
+      it "warns, naming the facet" do
+        allow(Weft.logger).to receive(:warn)
+
+        Class.new(base_class) do
+          def self.name = "MeantToType"
+          defines something: :else, type: :uuid
+        end
+
+        expect(Weft.logger).to have_received(:warn).with(/MeantToType.*no keyword options.*:type/m)
+      end
+
+      it "stays quiet when the value is plainly a value and not a facet" do
+        allow(Weft.logger).to receive(:warn)
+
+        Class.new(base_class) do
+          def self.name = "GenuineTypeKey"
+          defines type: "mutilator-3000", digest: "sha256", label: "Drivers"
+        end
+
+        expect(Weft.logger).not_to have_received(:warn)
+      end
+
+      it "warns on a facet-shaped digest or override too" do
+        allow(Weft.logger).to receive(:warn)
+
+        Class.new(base_class) do
+          def self.name = "MeantToDigest"
+          defines label: "x", digest: true, override: true
+        end
+
+        expect(Weft.logger).to have_received(:warn).with(/:digest/).once
+        expect(Weft.logger).to have_received(:warn).with(/:override/).once
+      end
+
+      # `default:` is deliberately not checked: every value is a plausible
+      # default, so there is no shape to discriminate on and the check would
+      # fire on every key that happened to be named `default`.
+      it "does not guess at a key named default, which no value could distinguish" do
+        allow(Weft.logger).to receive(:warn)
+
+        Class.new(base_class) do
+          def self.name = "DefaultKey"
+          defines default: "open"
+        end
+
+        expect(Weft.logger).not_to have_received(:warn)
+      end
     end
   end
 

@@ -107,6 +107,8 @@ param :page, type: :integer, strict: false   # coerce leniently instead
 
 With strictness off, coercion is exactly [`ActiveModel::Type`](https://api.rubyonrails.org/classes/ActiveModel/Type.html)'s — the behavior a Rails application already has, warts and all. Note one consequence worth knowing before you reach for it: ActiveModel's boolean has a closed *false* list and treats everything else as true, so `?flag=wombat` is `true` there where strict mode refuses it, and `?flag=no` is `true` there where strict mode reads `false`.
 
+**Coercion and strictness belong to `param` alone, and that is deliberate.** Both are facets of *wire safety*. A value arriving from a query string was written by a stranger; a value arriving through `receives`, `derives` or `defines` was written by your own code, which is answerable for the types it passes. So on those three doors `type:` describes rather than converts, and `strict:` and `required:` aren't accepted there at all. The footgun to know about is a key with two doors. Give a `Pager` that declares `builder_method :pager` both `param :page, type: :integer` and `receives :page`, and it reads `3` from `?page=3` but `"3"` from `pager(page: "3")`, because the second value never went near the wire. Pass `3`.
+
 #### `required:` — refusing absence
 
 `strict:` refuses a malformed value; `required:` refuses a missing one. They are separate questions and compose:
@@ -186,7 +188,7 @@ And as everywhere else, a declaration wins: declare `param :keys` and `params.ke
 defines label: "Drivers", accent: "available"
 ```
 
-`defines` is sugar for statically-known derivations: each pair is exactly `derives(key) { value }`, with identical priority, overridability, and laziness. It shines in a subclass that pins constant faces of an inherited component while deriving the dynamic ones:
+`defines` is sugar for statically-known derivations: each pair registers `derives(key) { value }`, with the value fixed at declaration. It shines in a subclass that pins constant faces of an inherited component while deriving the dynamic ones:
 
 ```ruby
 class StatCard < Weft::Component
@@ -200,7 +202,13 @@ class AvailableDriversCard < StatCard
 end
 ```
 
-The catch is in the name: the values are fixed **when the class body runs**, not per render. Anything computed — a query, a count, a clock — must stay in `derives`, because an interpolated value here would freeze at load time. If it isn't a literal constant, it's a `derives`.
+The catch is in the name: the values are fixed **when the class body runs**, not per render. Anything computed (a query, a count, a clock) must stay in `derives`, because an interpolated value here would freeze at load time. If it isn't a literal constant, it's a `derives`.
+
+**A pin claims its key.** This is the one place `defines` and `derives` part company. A derivation *yields*: it is a fallback for standing alone, so a value supplied from above wins when you're nested. A pin is the opposite claim, and it has to be, because what makes `defines` worth writing instead of a plain Ruby constant is fixing a value that something above you also supplies. So it beats an inherited value, for this class and everything it contains. It still loses to the component's own wire param, exactly as a derivation does.
+
+**What you read back is Weft's own frozen copy.** One pin is one object, shared by every instance of that class for the life of the process, so a mutable value would carry one render's changes into every later request. Weft copies what you hand it and freezes the copy: your object is never touched, and `params.nav << "late"` raises `FrozenError` on the line that tried it instead of quietly poisoning the next request. Two edges worth knowing. The freeze is shallow, so `defines nav: [{ n: 1 }]` still shares that inner hash. And a `Class` or `Module` is passed through as itself, because copying one yields something that is no longer the class you named.
+
+**`defines` takes no keyword options**, and that is a statement rather than an omission. `type:` and `digest:` describe what a value is and how it should render into an id; a pin has answered both already, since you handed over the final value, in the class you wanted, identical on every instance. Because the pairs are a bare hash, a keyword written beside them becomes an ordinary key rather than being refused the way `param` and `derives` refuse one, so `defines label: "x", digest: true` declares a key called `digest`. Weft warns when a key both carries a facet's name and holds a value that facet would have accepted, and stays quiet otherwise: `defines type: "premium"` is a perfectly good key named `type`.
 
 ### `receives` — caller hand-offs
 
@@ -229,6 +237,8 @@ A key can have more than one door, and Weft resolves the value from a fixed orde
 4. an **inherited** value — from an ancestor in the render tree, or from whatever the request had already composed by the time this component rendered
 5. the component's **own derivation** (`derives` / `defines`)
 6. the component's **own declared default**
+
+One declaration moves within that order: a `defines`, and a `derives` written `override: true`, sit *above* the inherited value rather than below it. That is what lets a subclass pin a value the page around it also supplies.
 
 The first five are values the bag *holds*. The sixth is a fallback the bag *asks for* when a read finds nothing, and that difference shows at every boundary: a default belongs to the class that declared it and never travels, so a nested child — or the target of a `transfers` — falls back to its own, not to the one above it.
 
@@ -294,9 +304,9 @@ class DriverRow < Weft::Component
 end
 ```
 
-`type:` and `digest:` are declarable on `derives` and `receives` as well as on `param`, and mean the same thing at each door — so the UUID above keeps its dashes exactly as `param :driver_id, type: :uuid` would, rather than an app carrying two id styles for one kind of value. Weft can do less about them on the server-side doors, since a hand-off or a derivation is already a Ruby object with nothing to coerce: there they say what the value *is*, for the places Weft consults a type. A key declared through two doors may not be given two different types — one key holds one value, so that's refused rather than resolved by precedence.
+`type:` and `digest:` are declarable on `derives` and `receives` as well as on `param`, and say the same thing at each door, so the UUID above keeps its dashes exactly as `param :driver_id, type: :uuid` would rather than an app carrying two id styles for one kind of value. What differs is what Weft *does* about it: off the wire there is nothing to coerce and nobody to distrust, so the declaration describes the value for the places Weft consults a type. A key declared through two doors may not be given two different types: one key holds one value, so that's refused rather than resolved by precedence.
 
-`defines` takes neither, on purpose: its value is fixed at class-load time, so it is already whatever you wrote. (And a `defines` value can't distinguish instances — every one of them shares it — so identifying by one is a sign the component wants a different identifier.)
+`defines` takes neither, on purpose, and identifying by one is a sign the component wants a different identifier. Every instance of the class shares a pinned value, so the slot it contributes is *already* carried by the id's stem, which is invariant in the same way. A pin adds no way to tell two instances apart, whether it stands alone or sits beside slots that do.
 
 An identifying value must be a **scalar** — a String, Symbol, number, boolean, or `nil`. Anything else raises `Weft::InvalidIdentifierValue` naming the component and the param, because an Array or a Hash would otherwise stringify into a selector two instances could share, and a record's default `to_s` carries its memory address, which changes on every request.
 
