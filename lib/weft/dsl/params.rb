@@ -233,17 +233,24 @@ module Weft
         end
 
         # Sugar for statically-known derivations: each pair registers
-        # `derives(key) { value }`. This is just `derives` — identical
-        # priority, overridability, and laziness; only the value is fixed at
-        # declaration. For anything computed per render (queries, clocks),
-        # use `derives` — an interpolated value here would freeze at
-        # class-load time.
+        # `derives(key) { value }`, with the value fixed at declaration. For
+        # anything computed per render (queries, clocks), use `derives` — an
+        # interpolated value here would freeze at class-load time.
         #   defines label: "Drivers", accent: "available"
+        #
+        # It is not quite `derives`, and the difference is `override`. A
+        # derivation defaults to yielding: it is a fallback for standing alone,
+        # and a richer ancestor's value wins when you are nested. A pin is the
+        # opposite claim — what earns `defines` its keep over a plain constant
+        # is fixing a value some ancestor also supplies, so a pin that yielded
+        # could not do the one job it exists for. It claims the key for this
+        # class and its subtree, and still loses to this component's own wire.
         def defines(pairs)
           site = caller_locations(1, 1).first
           pairs.each do |name, value|
             own_derived_params[name] = { block: proc { |_p| value },
-                                         source_location: [site.path, site.lineno] }
+                                         source_location: [site.path, site.lineno],
+                                         override: true }
           end
         end
 

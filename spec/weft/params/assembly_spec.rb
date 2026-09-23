@@ -339,10 +339,12 @@ RSpec.describe Weft::Params::Assembly do
       expect(Weft::Context.new { insert_tag(child) }.to_s).to include("Drivers")
     end
 
-    # `defines` stamps the call site as its source, so two classes each
-    # defining the same key always look divergent. They resolve like any
-    # other derivation, and just as quietly.
-    it "two divergent defines of one key resolve to the ancestor's, silently" do
+    # A pin claims its key. `defines` earns its keep over a plain constant
+    # precisely when it fixes a value an ancestor also supplies, so a
+    # declaration that yielded to the ancestor would defeat the door's whole
+    # purpose — which is why it registers as overriding where `derives`, whose
+    # fallback idiom is the point, does not.
+    it "a child's own defines claims the key against an ancestor's, silently" do
       allow(Weft.logger).to receive(:warn)
       parent_class = Class.new(Weft::Component) { def self.name = "DefiningParent" }
       parent_class.defines(label: "upstream")
@@ -356,8 +358,64 @@ RSpec.describe Weft::Params::Assembly do
       parent = Weft::Context.new { insert_tag(parent_class) }.children.first
       child = parent.children.find { |el| el.is_a?(child_class) }
 
-      expect(child.params.label).to eq("upstream")
+      expect(child.params.label).to eq("local")
       expect(Weft.logger).not_to have_received(:warn)
+    end
+
+    # The tree axis, which is the one that was broken: a subclass's pin
+    # survived its own class hierarchy and then lost to whatever ancestor
+    # happened to supply the key — here a page's query string.
+    describe "a pin against the render tree" do
+      let(:pinned_card) do
+        Class.new(Weft::Component) do
+          def self.name = "PinnedCard"
+          defines label: "Drivers"
+
+          def build(attributes = {})
+            super
+            span(params.label.to_s)
+          end
+        end
+      end
+      let(:filtering_page) do
+        card = pinned_card
+        page = Class.new(Weft::Component) do
+          def self.name = "FilteredDashboard"
+          param :label
+        end
+        page.define_method(:build) do |attributes = {}|
+          super(attributes)
+          insert_tag(card)
+        end
+        page
+      end
+
+      it "outranks an inherited value it never declared" do
+        page = filtering_page
+
+        rendered = Weft::Context.new(nil, nil, wire_params: { "label" => "Foo" }) { insert_tag(page) }.to_s
+
+        expect(rendered).to include("<span>Drivers</span>")
+      end
+
+      # Overriding lifts the pin above the inherited value only. The
+      # component's own wire still speaks for itself, as it does for `derives`.
+      it "still yields to the component's own wire param" do
+        card = Class.new(Weft::Component) do
+          def self.name = "PinnedButRoutable"
+          param :label
+          defines label: "Drivers"
+
+          def build(attributes = {})
+            super
+            span(params.label.to_s)
+          end
+        end
+
+        rendered = Weft::Context.new(nil, nil, wire_params: { "label" => "Mine" }) { insert_tag(card) }.to_s
+
+        expect(rendered).to include("<span>Mine</span>")
+      end
     end
   end
 

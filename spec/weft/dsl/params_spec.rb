@@ -458,7 +458,10 @@ RSpec.describe Weft::DSL::Params do
         not_to eq(second.derived_params[:label][:source_location])
     end
 
-    it "is just derives: a child redeclaration through either verb replaces the other's" do
+    # The class axis, which the two verbs do share: both write the same table,
+    # so a subclass redeclaring through either replaces what it inherited.
+    # (What they no longer share is `override` — see the assembly specs.)
+    it "shares one declaration table with derives, so either verb overrides the other" do
       parent = Class.new(base_class) do
         def self.name = "DefinedParent"
         defines label: "static"
@@ -470,6 +473,17 @@ RSpec.describe Weft::DSL::Params do
 
       expect(child.derived_params[:label][:block].call(nil)).to eq("computed")
       expect(parent.derived_params[:label][:block].call(nil)).to eq("static")
+    end
+
+    it "registers as overriding, where a plain derives does not" do
+      klass = Class.new(base_class) do
+        def self.name = "PinningClass"
+        defines label: "Drivers"
+        derives(:other) { |_p| "computed" }
+      end
+
+      expect(klass.derived_params[:label][:override]).to be(true)
+      expect(klass.derived_params[:other]).not_to have_key(:override)
     end
   end
 

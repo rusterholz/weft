@@ -109,6 +109,11 @@ Weft learns to say what a thing *is*: components name their own identity instead
 
 ### Breaking Changes:
 
+- **A Pinned Value Wins Against The Page Around It** (`defines`) – `defines label: "Drivers"` used to lose to any ancestor that happened to supply `label`, so a card pinning its own label rendered the page's `?label=` instead. A pin now claims its key for the component and everything it contains, which is the whole reason to reach for `defines` over a plain Ruby constant.
+  - It still yields to the component's *own* wire param, so a routable component keeps answering for itself
+  - This is the one behavior `defines` no longer shares with the `derives` it is sugar for. A derivation yields on purpose, because it is the fallback for standing alone; a pin is the opposite claim
+  - Nothing changes for a subclass pinning over its parent's `derives`, which already worked
+
 - **A Declared Type Is Now A Promise** – `type:` used to be a parsing hint that quietly did its best: `?page=wombat` on `param :page, type: :integer` rendered **page 0**, and `:float`, `:decimal` and `:boolean` invented `0.0`, `0.0` and `false` the same way. A value the type can't represent is now refused with a `Weft::BadRequest`, so a bad request fails at the request instead of surfacing three screens later as "this page is showing the wrong records."
   - `?page=` — an empty value — now falls to the param's declared default. It's a cleared field, and treating it as a value is how `default: 1` used to render page 0
   - `strict: false` on a param, or `Weft.configuration.strict_params = false` across the app, restores lenient conversion — and lenient means **exactly** [`ActiveModel::Type`](https://api.rubyonrails.org/classes/ActiveModel/Type.html), the behavior a Rails app already has, verified against every ActiveModel from 6.1 to 8.0

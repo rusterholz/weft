@@ -186,7 +186,7 @@ And as everywhere else, a declaration wins: declare `param :keys` and `params.ke
 defines label: "Drivers", accent: "available"
 ```
 
-`defines` is sugar for statically-known derivations: each pair is exactly `derives(key) { value }`, with identical priority, overridability, and laziness. It shines in a subclass that pins constant faces of an inherited component while deriving the dynamic ones:
+`defines` is sugar for statically-known derivations: each pair registers `derives(key) { value }`, with the value fixed at declaration. It shines in a subclass that pins constant faces of an inherited component while deriving the dynamic ones:
 
 ```ruby
 class StatCard < Weft::Component
@@ -200,7 +200,9 @@ class AvailableDriversCard < StatCard
 end
 ```
 
-The catch is in the name: the values are fixed **when the class body runs**, not per render. Anything computed — a query, a count, a clock — must stay in `derives`, because an interpolated value here would freeze at load time. If it isn't a literal constant, it's a `derives`.
+The catch is in the name: the values are fixed **when the class body runs**, not per render. Anything computed (a query, a count, a clock) must stay in `derives`, because an interpolated value here would freeze at load time. If it isn't a literal constant, it's a `derives`.
+
+**A pin claims its key.** This is the one place `defines` and `derives` part company. A derivation *yields*: it is a fallback for standing alone, so a value supplied from above wins when you're nested. A pin is the opposite claim, and it has to be, because what makes `defines` worth writing instead of a plain Ruby constant is fixing a value that something above you also supplies. So it beats an inherited value, for this class and everything it contains. It still loses to the component's own wire param, exactly as a derivation does.
 
 ### `receives` — caller hand-offs
 
@@ -229,6 +231,8 @@ A key can have more than one door, and Weft resolves the value from a fixed orde
 4. an **inherited** value — from an ancestor in the render tree, or from whatever the request had already composed by the time this component rendered
 5. the component's **own derivation** (`derives` / `defines`)
 6. the component's **own declared default**
+
+One declaration moves within that order: a `defines`, and a `derives` written `override: true`, sit *above* the inherited value rather than below it. That is what lets a subclass pin a value the page around it also supplies.
 
 The first five are values the bag *holds*. The sixth is a fallback the bag *asks for* when a read finds nothing, and that difference shows at every boundary: a default belongs to the class that declared it and never travels, so a nested child — or the target of a `transfers` — falls back to its own, not to the one above it.
 
