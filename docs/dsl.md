@@ -206,6 +206,8 @@ The catch is in the name: the values are fixed **when the class body runs**, not
 
 **What you read back is Weft's own frozen copy.** One pin is one object, shared by every instance of that class for the life of the process, so a mutable value would carry one render's changes into every later request. Weft copies what you hand it and freezes the copy: your object is never touched, and `params.nav << "late"` raises `FrozenError` on the line that tried it instead of quietly poisoning the next request. Two edges worth knowing. The freeze is shallow, so `defines nav: [{ n: 1 }]` still shares that inner hash. And a `Class` or `Module` is passed through as itself, because copying one yields something that is no longer the class you named.
 
+**`defines` takes no keyword options**, and that is a statement rather than an omission. `type:` and `digest:` describe what a value is and how it should render into an id; a pin has answered both already, since you handed over the final value, in the class you wanted, identical on every instance. Because the pairs are a bare hash, a keyword written beside them becomes an ordinary key rather than being refused the way `param` and `derives` refuse one, so `defines label: "x", digest: true` declares a key called `digest`. Weft warns when a key both carries a facet's name and holds a value that facet would have accepted, and stays quiet otherwise: `defines type: "premium"` is a perfectly good key named `type`.
+
 ### `receives` — caller hand-offs
 
 ```ruby

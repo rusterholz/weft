@@ -248,6 +248,7 @@ module Weft
         def defines(pairs)
           site = caller_locations(1, 1).first
           pairs.each do |name, value|
+            warn_facet_shaped_key(name, value)
             pinned = pin_value(value)
             own_derived_params[name] = { block: proc { |_p| pinned },
                                          source_location: [site.path, site.lineno],
@@ -298,6 +299,41 @@ module Weft
             return meta[facet] if meta&.key?(facet)
           end
           nil
+        end
+
+        # What a facet keyword's value would have to look like for the reader
+        # to have plausibly meant it. `default:` is absent on purpose: every
+        # value is a plausible default, so there is nothing to discriminate on
+        # and the check would fire on every key honestly named `default`.
+        BOOLEAN_FACET = ->(v) { [true, false].include?(v) }
+        FACET_SHAPES = {
+          type: ->(v) { !Weft::Types.lookup(v).nil? },
+          digest: ->(v) { v == true || (v.is_a?(Integer) && v.between?(1, Weft::Addressing::MAX_DIGEST_LENGTH)) },
+          override: BOOLEAN_FACET,
+          contextual: BOOLEAN_FACET,
+          strict: BOOLEAN_FACET,
+          required: BOOLEAN_FACET
+        }.freeze
+        private_constant :BOOLEAN_FACET, :FACET_SHAPES
+
+        # `defines` takes one bare hash, so a facet keyword written beside a
+        # pair lands as a key instead of being refused the way `param` and
+        # `derives` refuse an unknown keyword. Both readings are legitimate —
+        # `defines type: "premium"` is an ordinary key — so the name alone
+        # cannot decide and the value is what tips it: only a value that would
+        # have been *valid* for that keyword is worth saying anything about.
+        #
+        # Said at declaration, which is once per class body by construction,
+        # so no dedup register is needed.
+        def warn_facet_shaped_key(name, value)
+          return unless FACET_SHAPES[name]&.call(value)
+
+          Weft.logger.warn(
+            "#{self.name}: `defines` takes no keyword options — the value you hand it is already " \
+            "final — so #{name.inspect} is declared as an ordinary key holding #{value.inspect}. " \
+            "If you meant the #{name} option, declare that key through `param`, `derives` or " \
+            "`receives`, which take it. If you meant a key named #{name.inspect}, nothing is wrong."
+          )
         end
 
         # A `defines` value is one object, shared by every instance of the class

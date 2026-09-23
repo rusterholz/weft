@@ -558,6 +558,61 @@ RSpec.describe Weft::DSL::Params do
         expect(blocks[:missing][:block].call(nil)).to be_nil
       end
     end
+
+    # `defines` takes one bare hash, so a facet keyword written beside a pair
+    # becomes a key rather than being refused the way `param` and `derives`
+    # refuse it. Both readings are legitimate — someone may genuinely want a
+    # key named `type` — so the name alone cannot decide, and the value is
+    # what tips it.
+    describe "a key that looks like a facet someone meant to declare" do
+      it "warns, naming the facet" do
+        allow(Weft.logger).to receive(:warn)
+
+        Class.new(base_class) do
+          def self.name = "MeantToType"
+          defines something: :else, type: :uuid
+        end
+
+        expect(Weft.logger).to have_received(:warn).with(/MeantToType.*no keyword options.*:type/m)
+      end
+
+      it "stays quiet when the value is plainly a value and not a facet" do
+        allow(Weft.logger).to receive(:warn)
+
+        Class.new(base_class) do
+          def self.name = "GenuineTypeKey"
+          defines type: "mutilator-3000", digest: "sha256", label: "Drivers"
+        end
+
+        expect(Weft.logger).not_to have_received(:warn)
+      end
+
+      it "warns on a facet-shaped digest or override too" do
+        allow(Weft.logger).to receive(:warn)
+
+        Class.new(base_class) do
+          def self.name = "MeantToDigest"
+          defines label: "x", digest: true, override: true
+        end
+
+        expect(Weft.logger).to have_received(:warn).with(/:digest/).once
+        expect(Weft.logger).to have_received(:warn).with(/:override/).once
+      end
+
+      # `default:` is deliberately not checked: every value is a plausible
+      # default, so there is no shape to discriminate on and the check would
+      # fire on every key that happened to be named `default`.
+      it "does not guess at a key named default, which no value could distinguish" do
+        allow(Weft.logger).to receive(:warn)
+
+        Class.new(base_class) do
+          def self.name = "DefaultKey"
+          defines default: "open"
+        end
+
+        expect(Weft.logger).not_to have_received(:warn)
+      end
+    end
   end
 
   describe "param DSL" do
