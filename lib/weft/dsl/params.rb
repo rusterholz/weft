@@ -248,7 +248,8 @@ module Weft
         def defines(pairs)
           site = caller_locations(1, 1).first
           pairs.each do |name, value|
-            own_derived_params[name] = { block: proc { |_p| value },
+            pinned = pin_value(value)
+            own_derived_params[name] = { block: proc { |_p| pinned },
                                          source_location: [site.path, site.lineno],
                                          override: true }
           end
@@ -298,6 +299,23 @@ module Weft
           end
           nil
         end
+
+        # A `defines` value is one object, shared by every instance of the class
+        # for the life of the process, so weft keeps its own frozen copy rather
+        # than the object it was handed. Both halves are load-bearing: without
+        # the freeze, one render's `<<` is read by every later request; without
+        # the copy, freezing would reach into a constant the application also
+        # holds and break code that has nothing to do with weft.
+        #
+        # A Module — and so a Class — is the exemption, because `dup` is wrong
+        # for it rather than merely unnecessary: the copy answers its methods
+        # but is not the original, so `==`, `name` and `is_a?` all disagree with
+        # it, silently. Nothing to protect either way, since a class is already
+        # process-wide.
+        #
+        # Shallow, and named as such in the docs: freezing a container does not
+        # freeze what it holds.
+        def pin_value(value) = value.is_a?(Module) ? value : value.dup.freeze
 
         # Only what was actually said: an absent `strict:` has to stay absent
         # so it can defer to the gem-wide setting, which a stored `false` would

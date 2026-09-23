@@ -204,6 +204,8 @@ The catch is in the name: the values are fixed **when the class body runs**, not
 
 **A pin claims its key.** This is the one place `defines` and `derives` part company. A derivation *yields*: it is a fallback for standing alone, so a value supplied from above wins when you're nested. A pin is the opposite claim, and it has to be, because what makes `defines` worth writing instead of a plain Ruby constant is fixing a value that something above you also supplies. So it beats an inherited value, for this class and everything it contains. It still loses to the component's own wire param, exactly as a derivation does.
 
+**What you read back is Weft's own frozen copy.** One pin is one object, shared by every instance of that class for the life of the process, so a mutable value would carry one render's changes into every later request. Weft copies what you hand it and freezes the copy: your object is never touched, and `params.nav << "late"` raises `FrozenError` on the line that tried it instead of quietly poisoning the next request. Two edges worth knowing. The freeze is shallow, so `defines nav: [{ n: 1 }]` still shares that inner hash. And a `Class` or `Module` is passed through as itself, because copying one yields something that is no longer the class you named.
+
 ### `receives` — caller hand-offs
 
 ```ruby

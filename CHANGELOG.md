@@ -67,6 +67,11 @@ Weft learns to say what a thing *is*: components name their own identity instead
 
 ### Bug Fixes:
 
+- **A Pinned Value Can No Longer Leak Into The Next Request** – A `defines` value is one object shared by every instance of that class for the life of the process, so a `params.nav << "late"` in one render was still sitting there for every request afterwards. Weft now hands out its own frozen copy: the mutation raises `FrozenError` on the line that tried it, and the pin stays what you declared.
+  - Weft copies *before* freezing, so the object you handed it is never frozen. A constant your application also holds and mutates elsewhere keeps working
+  - Shallow, as freezing usually is: `defines nav: [{ n: 1 }]` still shares that inner hash
+  - A `Class` or `Module` passes through untouched, since a copy of one is no longer the class you named
+
 - **A Handed Value Reaches Everything The Component Renders** – `status_card(status: "shipped")` told that card its status, and anything the card built inside it went back to reading the page's own `?status=` instead. A component nested in a card you had expressly handed a value showed the page's filter, and the deeper it sat the less the call site meant. A handed value now keeps its place for the whole subtree below the component it was handed to, so what a call site says about a card wins over what the page happened to be filtered by.
 
   This mattered most for a collection, where it was the difference between a working row and an invalid document. Four cards built from four statuses, each rendering a badge that declares `param :status`, used to resolve one status between them the moment the page carried a filter of its own: four badges showing the same value, composing the same DOM id, and Weft's duplicate-id warning firing to say that ids must be unique. Since an out-of-band swap is addressed by id, only one of the four could ever have landed. They now read their own card's value, claim four ids, and are individually addressable.
