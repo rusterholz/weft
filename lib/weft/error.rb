@@ -114,8 +114,8 @@ module Weft
 
   # Raised at construction when a param declared `required: true` ends
   # resolution with no value from any source. The wire counterpart of
-  # {NotReceived}, which guards the hand-off door — note the two doors default
-  # opposite ways, since the wire is absent by nature and a hand-off is the
+  # {NotReceived}, which guards the handoff door — note the two doors default
+  # opposite ways, since the wire is absent by nature and a handoff is the
   # caller's contract.
   MissingParam = Class.new(BadRequest)
 

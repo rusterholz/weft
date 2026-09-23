@@ -215,7 +215,7 @@ RSpec.describe Weft::Component do
       expect(Weft.logger).to have_received(:warn).once.with(/tally/)
     end
 
-    it "names the way out — declaring the key as a hand-off" do
+    it "names the way out — declaring the key as a handoff" do
       allow(Weft.logger).to receive(:warn)
       component_class = Class.new(Weft::Component) do
         def self.name = "RemediableCard"

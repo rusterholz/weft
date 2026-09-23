@@ -206,14 +206,14 @@ c.digest_length = 12
 
 This is the gem-wide default for declarations that don't name their own; `param :label, digest: 12` overrides it for one param.
 
-### `mint_key`
+### `ticket_key`
 
-Default: `:_mint`.
+Default: `:_ticket`.
 
-The name a [`unique!`](dsl.md#unique--a-slot-for-a-component-with-nothing-to-name-it) component's token travels under. Set a bare name — letters, digits and underscores only — because Weft namespaces it on the wire itself: the token actually rides as `._mint`, inside a prefix no user param can occupy. That's what keeps your params and Weft's token from colliding however either is named, and it's why you'd only change this to avoid a clash with a *reserved* name in something downstream, not to avoid one of your own.
+The name a [`unique!`](dsl.md#unique--a-slot-for-a-component-with-nothing-to-name-it) component's token travels under. Set a bare name — letters, digits and underscores only — because Weft namespaces it on the wire itself: the token actually rides as `._ticket`, inside a prefix no user param can occupy. That's what keeps your params and Weft's token from colliding however either is named, and it's why you'd only change this to avoid a clash with a *reserved* name in something downstream, not to avoid one of your own.
 
 ```ruby
-c.mint_key = :_slot
+c.ticket_key = :_slot
 ```
 
 ## Error handling

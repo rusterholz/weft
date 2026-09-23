@@ -593,7 +593,7 @@ RSpec.describe Weft::Context do
       expect(html).to include('hx-get="/_components/shipment_summary?order_id=77"')
     end
 
-    it "keeps hand-offs out of the defaulted with: params" do
+    it "keeps handoffs out of the defaulted with: params" do
       target = target_class
       klass = Class.new(Weft::Component) do
         def self.name = "HandedHost"

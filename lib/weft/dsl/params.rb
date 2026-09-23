@@ -7,7 +7,7 @@ require "weft/params/assembly"
 module Weft
   module DSL
     # Mixin for classes that declare consumed inputs — the doors into `params`.
-    # Provides the `param` (wire), `receives` (caller hand-off), and `derives`
+    # Provides the `param` (wire), `receives` (caller handoff), and `derives`
     # (lazy server-side derivation) class DSL and the `params` instance reader.
     # Used by Component (for partial route params) and Page (for page route params).
     module Params
@@ -150,15 +150,15 @@ module Weft
         # Returns all declared params (own + inherited), preserving declaration order.
         def params = with_inherited(:params, own_params)
 
-        # Declare a hand-off param: the caller provides the value as a builder
+        # Declare a handoff param: the caller provides the value as a builder
         # kwarg at the call site; it lands in `params`, never in HTML chrome.
         #   receives :order                  # required — absence raises
         #   receives :page_num, default: 1   # optional — any declared default
         #                                    # (even nil) softens absence
-        # Hand-offs are server-side values: they never serialize into URLs and
+        # Handoffs are server-side values: they never serialize into URLs and
         # don't make a component routable.
         # `type:` and `digest:` say the same thing here as on `param`, but weft
-        # can do less about them: a hand-off is already a Ruby object, so there
+        # can do less about them: a handoff is already a Ruby object, so there
         # is nothing to coerce. They are declarations weft consults where it
         # consults them — composing a DOM id — not assertions checked on read.
         #
@@ -175,8 +175,8 @@ module Weft
           own_received_params[name] = meta
         end
 
-        # All declared hand-offs (own + inherited), preserving declaration
-        # order. Kept separate from `params` — the wire door and the hand-off
+        # All declared handoffs (own + inherited), preserving declaration
+        # order. Kept separate from `params` — the wire door and the handoff
         # door differ in serialization and routability, even for dual keys.
         def received_params = with_inherited(:received_params, own_received_params)
 
@@ -401,7 +401,7 @@ module Weft
       # @api private
       # The bag projected onto this class's own declared wire schema — the
       # only slice that serializes (refresh/stream URLs, DOM ids, hx-vals).
-      # Hand-offs and inherited values are server-side and never ride the
+      # Handoffs and inherited values are server-side and never ride the
       # wire. Per-key reads, NOT to_h: serialization must never materialize
       # non-wire derivations (a thunk on a wire-schema key — the rare
       # param+derives dual — does force here; the refresh contract wins).
@@ -413,10 +413,10 @@ module Weft
 
       private
 
-      # Assemble the bag per the source stack: staged hand-off > own wire
+      # Assemble the bag per the source stack: staged handoff > own wire
       # value > inherited bag value > declared default. Staging happens at
       # interception, which only a Weft::Context performs — so a component
-      # built anywhere else has no hand-off door at all, and a declared
+      # built anywhere else has no handoff door at all, and a declared
       # `receives` reports as unsatisfied rather than going unchecked.
       def assembled_params
         resolve_bag(received: arbre_context.take_received!(self.class) || {})
@@ -427,12 +427,12 @@ module Weft
       # no declared type could accept.
       def resolve_bag(received:)
         assembly = Weft::Params::Assembly.new(self.class, wire_source,
-                                              hand_offs: received,
+                                              handoffs: received,
                                               branched_from: inherited_bag)
         bag = assembly.bag
         refuse_violations!(assembly.violations)
         validate_required!(bag)
-        validate_hand_offs!(bag)
+        validate_handoffs!(bag)
         bag
       end
 
@@ -465,12 +465,12 @@ module Weft
         end
       end
 
-      # Checks required_hand_off? before reading the key: a required hand-off
+      # Checks required_handoff? before reading the key: a required handoff
       # is receives-only (never thunked), so the read can't force anything —
       # and dual keys short-circuit without touching their lazy derivation.
-      def validate_hand_offs!(bag)
+      def validate_handoffs!(bag)
         self.class.received_params.each_key do |key|
-          raise_not_received!(key) if required_hand_off?(key) && bag[key].nil?
+          raise_not_received!(key) if required_handoff?(key) && bag[key].nil?
         end
       end
 
@@ -497,9 +497,9 @@ module Weft
         arbre_context.branch_bag
       end
 
-      # A hand-off is required when `receives` is its only door and no
+      # A handoff is required when `receives` is its only door and no
       # default was declared — nothing else can satisfy the presumption.
-      def required_hand_off?(key)
+      def required_handoff?(key)
         meta = self.class.received_params[key]
         meta && !meta.key?(:default) && !self.class.params.key?(key)
       end

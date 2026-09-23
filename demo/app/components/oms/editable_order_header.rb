@@ -15,7 +15,7 @@ module Oms
 
     # No return value: the order this reads is the same object the header
     # renders a moment later, because the state composed here is what the
-    # hand-off carries forward. Handing it back explicitly would be handing
+    # handoff carries forward. Handing it back explicitly would be handing
     # it what it already has.
     transfers :save, to: Oms::OrderHeader do |params|
       params.order.update!(customer_name: params.customer_name.to_s.strip)

@@ -113,7 +113,7 @@ module Weft
       end
 
       # The declaring component's companions on a transfer. This branch
-      # forks before the hand-off, so the block reads the declarer's own
+      # forks before the handoff, so the block reads the declarer's own
       # params plus the callable's overlay — never the target's picture —
       # and each companion branches that same bag. Nothing rendered the
       # declarer, but the request composed its state all the same, and a

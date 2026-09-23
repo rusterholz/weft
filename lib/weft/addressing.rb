@@ -33,33 +33,33 @@ module Weft
     # Marks a slot weft issued from nothing, as DIGEST_MARKER marks one it
     # derived from a value. Disjoint from that marker and from the sanitizer's
     # output alike, so the three kinds of slot can never be read for each other.
-    MINT_MARKER = "M"
+    TICKET_MARKER = "T"
 
     # What a DOM id has to look like for weft to target it with `#id`. Weft's
     # own composition can only produce this shape; an `identifies_by` block can
     # return anything, so its return is checked against it.
     DOM_ID_FORMAT = /\A[A-Za-z_][\w-]*\z/
 
-    # What separates mint space from param space on the wire. A param may be
-    # named `_mint`; no param can be named `.anything`, because a leading dot
-    # is not a name. Weft supplies this itself and the operator cannot omit it
-    # — that is the whole isolation, so it is not a knob.
-    MINT_WIRE_PREFIX = "."
+    # Weft's own namespace on the wire, whatever it needs to carry there. A
+    # param may be named `_ticket`; none can be named `.anything`, because a
+    # leading dot is not a name, so everything behind this prefix stays weft's
+    # however an adopter names their params. Weft supplies it; nothing sets it.
+    RESERVED_WIRE_PREFIX = "."
 
-    MINT_ENTROPY_BYTES = 4
-    MINT_FORMAT = /\A#{MINT_MARKER}\h{#{MINT_ENTROPY_BYTES * 2}}\z/
+    TICKET_ENTROPY_BYTES = 4
+    TICKET_FORMAT = /\A#{TICKET_MARKER}\h{#{TICKET_ENTROPY_BYTES * 2}}\z/
 
     class << self
       # A token standing in for a component that has no identifying value at
       # all. Issued once, at first render, and carried back over the wire from
       # then on — unlike a digest, there is nothing to recompute it from, so
       # losing it means losing the identity.
-      def mint = "#{MINT_MARKER}#{SecureRandom.hex(MINT_ENTROPY_BYTES)}"
+      def issue_ticket = "#{TICKET_MARKER}#{SecureRandom.hex(TICKET_ENTROPY_BYTES)}"
 
-      # Whether +value+ is a token this module issued. A mint arrives from the
+      # Whether +value+ is a token this module issued. A ticket arrives from the
       # wire, where anything can be typed, so it is checked rather than trusted
       # before it reaches an id attribute.
-      def mint?(value) = value.to_s.match?(MINT_FORMAT)
+      def ticket?(value) = value.to_s.match?(TICKET_FORMAT)
 
       # An opaque, stable token standing in for +value+ in a DOM address.
       #

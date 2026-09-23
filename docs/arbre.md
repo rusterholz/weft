@@ -155,7 +155,7 @@ end
 
 **`super` applies the hash and wires the wrapper.** Your params are already resolved before `build` runs — Weft resolves them when the component is constructed, so you can read `params` even above the `super` call (deriving a heading from a record looked up by param, say). What `super` does is apply the trailing hash as HTML attributes on the wrapper element (that's where `class: "compact"` went), set the wrapper's DOM id ([derived from your first param](dsl.md#params)), and attach any refresh or push wiring. Skip `super` and none of that happens — the classic symptom is a component that ignores the `class:` you pass it.
 
-**Rich objects come through `receives`.** Wire params (declared with `param`) are for values small enough to travel in a URL. When a call site hands the component a rich object it already holds — a record, a computed value, anything that can't ride a query string — declare it with [`receives`](dsl.md#receives--caller-hand-offs) and read it from `params` like any other input. The value is handed straight across: it never serializes into a URL, and it never lands on the wrapper as an HTML attribute.
+**Rich objects come through `receives`.** Wire params (declared with `param`) are for values small enough to travel in a URL. When a call site hands the component a rich object it already holds — a record, a computed value, anything that can't ride a query string — declare it with [`receives`](dsl.md#receives--caller-handoffs) and read it from `params` like any other input. The value is handed straight across: it never serializes into a URL, and it never lands on the wrapper as an HTML attribute.
 
 ```ruby
 class AttendeeRow < Weft::Component

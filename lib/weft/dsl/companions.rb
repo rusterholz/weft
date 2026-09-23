@@ -56,7 +56,7 @@ module Weft
 
         # A companion is addressed by DOM id, and a `unique!` component's id
         # comes from a token only that component's own requests carry. Resolved
-        # from this host's params, it would mint a fresh one and target an
+        # from this host's params, it would issue a fresh one and target an
         # element that isn't on the page — and htmx discards an unmatched
         # out-of-band swap silently, client-side, where nothing can report it.
         #

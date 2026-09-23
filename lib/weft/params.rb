@@ -126,7 +126,7 @@ module Weft
     # +defaults+ are the declaring class's own fallbacks, consulted when a
     # read finds nothing. They are never stored as values, so they never ride
     # a branch: a default belongs to whoever declared it, and a component
-    # deeper in the tree — or downstream of a hand-off — falls back to its
+    # deeper in the tree — or downstream of a handoff — falls back to its
     # own, not to the one above it.
     # +owner+ is the class the bag was assembled for, carried so that a read
     # finding nothing can say why instead of naming this class at the adopter.
@@ -137,7 +137,7 @@ module Weft
     # rung all the way down. A bag that held only the merged result could not
     # express the difference, and every operation on it would silently lose one.
     # +handoff+ is the accumulated `receives` values in force for this subtree,
-    # held apart from +data+ for the same reason the overlay is: a hand-off
+    # held apart from +data+ for the same reason the overlay is: a handoff
     # keeps speaking at its own rung below the component it was staged for,
     # while data demotes to "inherited" on the way down. A nearer call site's
     # values merge over an ancestor's, per key.
@@ -180,7 +180,7 @@ module Weft
     # resolved, and the answer already accounts for the delta: assembly ranked it
     # at level 2 while composing the data, and `%` wrote its values straight in.
     # Consulting it again would re-apply level 2 on top of the finished result —
-    # which a component's own hand-off, at level 1, is entitled to outrank.
+    # which a component's own handoff, at level 1, is entitled to outrank.
     def [](key)
       value = @data[key]
       value = force!(key, value) if value.is_a?(Thunk)
@@ -315,7 +315,7 @@ module Weft
     def overlay_slot = @overlay
 
     # @api private
-    # The hand-off values a crossing branch re-applies at level 1. Private for
+    # The handoff values a crossing branch re-applies at level 1. Private for
     # the same namespace reason as the two above.
     def handoff_slot = @handoff
 

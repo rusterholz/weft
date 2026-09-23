@@ -27,7 +27,7 @@ end
   - [`param`](#param--wire-state) - path component params, query string params, form data, and POST content; all of which together is called "wire state"
   - [`derives`](#derives--lazy-server-side-derivations) - enriched values that can be determined from the wire state, such as a database model loaded by an ID in the query string
   - [`defines`](#defines--static-values) - a variant of `derives` for when a value is known at load time
-  - [`receives`](#receives--caller-hand-offs) - rich values handed straight over by whoever renders the component, such as a database model the caller already has in hand
+  - [`receives`](#receives--caller-handoffs) - rich values handed straight over by whoever renders the component, such as a database model the caller already has in hand
   - [How These Ways Combine](#how-the-doors-combine) - when and why to use them in combination
   - [Inheritance](#inheritance-and-the-render-tree) - how wire state is made available at each layer when components are composed together
 - [Behavioral Verbs](#verbs): the user-facing behaviors that your component exposes or provides.
@@ -61,7 +61,7 @@ A component's inputs all reach it through `params`, and there are four ways to d
 - **[`param`](#param--wire-state)** — wire state: values small enough to travel in a URL (an id, a page number, a filter).
 - **[`derives`](#derives--lazy-server-side-derivations)** — lazy server-side derivations: values the component works out for itself, on demand.
 - **[`defines`](#defines--static-values)** — static values a subclass pins; sugar over `derives`.
-- **[`receives`](#receives--caller-hand-offs)** — caller hand-offs: rich objects a call site already holds and passes straight in (a record, a computed collection).
+- **[`receives`](#receives--caller-handoffs)** — caller handoffs: rich objects a call site already holds and passes straight in (a record, a computed collection).
 
 Whichever door a value comes through, you read it the same way — `params.name`, or `params[:name]`. Every verb block sees the same doors `build` does, with one structural exception: `receives` values come from a *call site*, and an action arriving over the wire has no caller, so a callable can't see them. (Need one in an action? Give the key a second door — a `param` or a `defines` — and it stands on its own.) For the bigger picture — how params travel in from a request, down the render tree, and back out into the next refresh or action — see [How params flow](params.md).
 
@@ -119,7 +119,7 @@ param :order_id, type: :uuid, required: true
 
 If no source supplies `order_id`, Weft raises `Weft::MissingParam` — also a `Weft::BadRequest`, also 400. A required param may not declare a `default:`, since a default *is* the answer to absence; declaring both raises `Weft::InvalidDefinition` at class-load time.
 
-Note the two doors default opposite ways, and deliberately: a `param` is optional until you say `required: true`, because the wire is absent by nature, while a [`receives`](#receives--caller-hand-offs) is required until you give it a `default:`, because a hand-off is the call site's contract.
+Note the two doors default opposite ways, and deliberately: a `param` is optional until you say `required: true`, because the wire is absent by nature, while a [`receives`](#receives--caller-handoffs) is required until you give it a `default:`, because a handoff is the call site's contract.
 
 Inside the component, `params` returns the resolved values with method-style access:
 
@@ -210,28 +210,28 @@ The catch is in the name: the values are fixed **when the class body runs**, not
 
 **`defines` takes no keyword options**, and that is a statement rather than an omission. `type:` and `digest:` describe what a value is and how it should render into an id; a pin has answered both already, since you handed over the final value, in the class you wanted, identical on every instance. Because the pairs are a bare hash, a keyword written beside them becomes an ordinary key rather than being refused the way `param` and `derives` refuse one, so `defines label: "x", digest: true` declares a key called `digest`. Weft warns when a key both carries a facet's name and holds a value that facet would have accepted, and stays quiet otherwise: `defines type: "premium"` is a perfectly good key named `type`.
 
-### `receives` — caller hand-offs
+### `receives` — caller handoffs
 
 ```ruby
 receives :order
 receives :page_num, default: 1
 ```
 
-Some values can't ride a URL — an `ActiveRecord` object, a pre-built collection, anything rich. `receives` declares that a call site hands the value over directly: given an `OrderRow` that declares `builder_method :order_row`, a parent building `order_row(order: order)` fills `params.order` for the code inside `OrderRow`. The kwarg is consumed as the hand-off, so it never becomes an HTML attribute on the wrapper, and the value never serializes into a URL.
+Some values can't ride a URL — an `ActiveRecord` object, a pre-built collection, anything rich. `receives` declares that a call site hands the value over directly: given an `OrderRow` that declares `builder_method :order_row`, a parent building `order_row(order: order)` fills `params.order` for the code inside `OrderRow`. The kwarg is consumed as the handoff, so it never becomes an HTML attribute on the wrapper, and the value never serializes into a URL.
 
-A hand-off is **required by default**: a call site that omits it raises `Weft::NotReceived`, with the backtrace pointing at the call site rather than deep inside the framework. Declaring a default makes it optional — `receives :page_num, default: 1`, and an explicit `default: nil` counts too (the presence of the keyword is what makes it optional, not the value).
+A handoff is **required by default**: a call site that omits it raises `Weft::NotReceived`, with the backtrace pointing at the call site rather than deep inside the framework. Declaring a default makes it optional — `receives :page_num, default: 1`, and an explicit `default: nil` counts too (the presence of the keyword is what makes it optional, not the value).
 
-That default reaches further than the call site. Weft composes a params bag in places where nothing has been built yet — the top of a request, an action callable, a stream frame — and there the hand-off door doesn't exist at all, because no caller ran. A declared default answers anyway: a fallback belongs to the class that declared it, not to the door it sits beside, so `receives :page_num, default: 1` reads as `1` in a `performs` block without the `1` being written a second time as a `defines`. A hand-off with **no** default has nowhere to come from in those places, and reading it raises **`Weft::UnreachableHandoff`** — which names the key and says both ways out, rather than the bare `NoMethodError` an unnamed absence would give you. `Weft::NotReceived` is the neighboring failure and a different one: there a call site *did* run and left the value out, so the fix is to pass it.
+That default reaches further than the call site. Weft composes a params bag in places where nothing has been built yet — the top of a request, an action callable, a stream frame — and there the handoff door doesn't exist at all, because no caller ran. A declared default answers anyway: a fallback belongs to the class that declared it, not to the door it sits beside, so `receives :page_num, default: 1` reads as `1` in a `performs` block without the `1` being written a second time as a `defines`. A handoff with **no** default has nowhere to come from in those places, and reading it raises **`Weft::UnreachableHandoff`** — which names the key and says both ways out, rather than the bare `NoMethodError` an unnamed absence would give you. `Weft::NotReceived` is the neighboring failure and a different one: there a call site *did* run and left the value out, so the fix is to pass it.
 
-Hand-offs are server-side: declaring one doesn't make a component routable, since there's no way to reconstruct an `Order` from a URL. A component that lives only inside a parent — always handed its data, never served standalone — can say so with **`dependent!`** (an alias of [`abstract!`](routing.md)): "my parent passes this in every time; serving me on my own makes no sense."
+Handoffs are server-side: declaring one doesn't make a component routable, since there's no way to reconstruct an `Order` from a URL. A component that lives only inside a parent — always handed its data, never served standalone — can say so with **`dependent!`** (an alias of [`abstract!`](routing.md)): "my parent passes this in every time; serving me on my own makes no sense."
 
-If a component *is* routable and declares a required hand-off with no wire counterpart, Weft warns at route validation — such a component renders fine embedded but would raise `Weft::NotReceived` on every standalone refresh. Give it a wire dual (below) or mark it `dependent!`.
+If a component *is* routable and declares a required handoff with no wire counterpart, Weft warns at route validation — such a component renders fine embedded but would raise `Weft::NotReceived` on every standalone refresh. Give it a wire dual (below) or mark it `dependent!`.
 
 ### How the doors combine
 
 A key can have more than one door, and Weft resolves the value from a fixed order of sources. Highest wins; `nil` at any level falls through to the next:
 
-1. a **received** hand-off (`receives`)
+1. a **received** handoff (`receives`)
 2. a **request overlay** — a hash returned from a verb block earlier in this request (an action callable, a `transfers` or `brings` block, a `recovers` adjustment). An overlay entry speaks *as* the wire for its key: its value replaces the wire's — including rich objects, which pre-empt a matching `derives` so nothing refetches what the request already loaded — and an explicit `nil` *clears*, masking the wire so resolution falls below it
 3. the component's **own wire** value (`param`)
 4. an **inherited** value — from an ancestor in the render tree, or from whatever the request had already composed by the time this component rendered
@@ -258,11 +258,11 @@ Within one render, each component starts from a copy of its nearest ancestor com
 
 One thing does *not* travel down: declared **defaults** stay with the class that declared them, so a child with `param :view, default: "open"` inside a parent with `param :view, default: "all"` shows `open`. A fallback is a private answer to "nobody told me," not an opinion to broadcast. Everything else rides, including values an ancestor's derivation already computed: a derivation forced above you is a value by the time you inherit it, so nothing refetches.
 
-**A hand-off rides too, and it keeps its place at the top of the order.** Take a `StatusCard` that declares `builder_method :status_card` and `receives :status`, rendering inside itself a `StatusBadge` that declares `builder_method :status_badge` and a `param :status` of its own. Build the card with `status_card(status: "shipped")` and everything it renders inside sees that status: the badge reads `shipped` even when the page's URL carries `?status=archived`. What the call site said expressly about this card wins over what the page happened to be filtered by.
+**A handoff rides too, and it keeps its place at the top of the order.** Take a `StatusCard` that declares `builder_method :status_card` and `receives :status`, rendering inside itself a `StatusBadge` that declares `builder_method :status_badge` and a `param :status` of its own. Build the card with `status_card(status: "shipped")` and everything it renders inside sees that status: the badge reads `shipped` even when the page's URL carries `?status=archived`. What the call site said expressly about this card wins over what the page happened to be filtered by.
 
 That is what makes a collection work. A row rendering four of those cards from four statuses gives each card's badge its own value, so four badges show four statuses and claim four DOM ids, rather than all four reading the page's filter and colliding on one id that only one of them could be swapped into.
 
-The nearest call site wins, per key. If the card itself builds `status_badge(status: "archived")`, the badge reads `archived`, and keys nobody nearer mentioned keep the card's value. For that the badge needs `receives :status` alongside its `param`: a kwarg naming a key the component declares any other way renders as an HTML attribute instead, and says so in the log. Passing `nil` steps aside instead of overriding, clearing the inherited hand-off so the badge resolves its own wire value.
+The nearest call site wins, per key. If the card itself builds `status_badge(status: "archived")`, the badge reads `archived`, and keys nobody nearer mentioned keep the card's value. For that the badge needs `receives :status` alongside its `param`: a kwarg naming a key the component declares any other way renders as an HTML attribute instead, and says so in the log. Passing `nil` steps aside instead of overriding, clearing the inherited handoff so the badge resolves its own wire value.
 
 Two shapes of consumption both work, and both are idiomatic:
 
@@ -326,7 +326,7 @@ Some components have nothing to identify by and still need their own slot: a bad
 
 ```ruby
 class StatusBadge < Weft::Component
-  unique!                        # id="status-badge-M3f9c1a20"
+  unique!                        # id="status-badge-T3f9c1a20"
 end
 ```
 

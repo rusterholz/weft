@@ -23,7 +23,7 @@ RSpec.describe Delivery::DriverTable, type: :component do
     end
   end
 
-  # The driver rides in as a hand-off, which cannot compose a DOM id, so the
+  # The driver rides in as a handoff, which cannot compose a DOM id, so the
   # row derives the scalar that names it. Without that, every row on the page
   # wears the same id and only the first is addressable.
   it "gives each row its own element id, drawn from the driver it was handed" do

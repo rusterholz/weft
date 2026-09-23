@@ -388,41 +388,41 @@ RSpec.describe Weft::Configuration do
     end
   end
 
-  describe "#mint_key" do
-    it "defaults to :_mint" do
-      expect(config.mint_key).to eq(:_mint)
+  describe "#ticket_key" do
+    it "defaults to :_ticket" do
+      expect(config.ticket_key).to eq(:_ticket)
     end
 
     it "accepts a custom key so a user who genuinely collides can move weft's" do
-      config.mint_key = :_weft_id
-      expect(config.mint_key).to eq(:_weft_id)
+      config.ticket_key = :_weft_id
+      expect(config.ticket_key).to eq(:_weft_id)
     end
 
     it "coerces a string to a symbol, since params are symbol-keyed" do
-      config.mint_key = "_tag"
-      expect(config.mint_key).to eq(:_tag)
+      config.ticket_key = "_tag"
+      expect(config.ticket_key).to eq(:_tag)
     end
 
     it "rejects a key that is not name-like" do
-      expect { config.mint_key = "not a name" }.to raise_error(ArgumentError, /mint_key/)
+      expect { config.ticket_key = "not a name" }.to raise_error(ArgumentError, /ticket_key/)
     end
 
     it "namespaces the wire key with a dot the operator cannot supply or remove" do
-      # The dot is what keeps mint space and param space from ever meeting:
-      # a param can be named _mint, but never .anything.
-      expect(config.mint_wire_key).to eq("._mint")
+      # The dot is what keeps ticket space and param space from ever meeting:
+      # a param can be named _ticket, but never .anything.
+      expect(config.ticket_wire_key).to eq("._ticket")
 
-      config.mint_key = :token
-      expect(config.mint_wire_key).to eq(".token")
+      config.ticket_key = :token
+      expect(config.ticket_wire_key).to eq(".token")
     end
 
     it "refuses a key that tries to bring its own dot" do
-      expect { config.mint_key = ".mint" }.to raise_error(ArgumentError, /mint_key/)
-      expect { config.mint_key = :"a.b" }.to raise_error(ArgumentError, /mint_key/)
+      expect { config.ticket_key = ".issue_ticket" }.to raise_error(ArgumentError, /ticket_key/)
+      expect { config.ticket_key = :"a.b" }.to raise_error(ArgumentError, /ticket_key/)
     end
 
     it "rejects a non-string, non-symbol key" do
-      expect { config.mint_key = 42 }.to raise_error(ArgumentError, /mint_key/)
+      expect { config.ticket_key = 42 }.to raise_error(ArgumentError, /ticket_key/)
     end
   end
 

@@ -36,7 +36,7 @@ module Weft
     # The DOM ids this BATCH of fragments has already spoken for — a Set
     # shared across every context built for one delivery, because the primary
     # and each of its companions get their own. One delivery is an action
-    # response, or a single SSE frame: a stream mints a fresh Set per frame,
+    # response, or a single SSE frame: a stream opens a fresh Set per frame,
     # so this is narrower than "the response". An out-of-band swap is addressed by DOM
     # id, so only one fragment per id can land; a root component claims its
     # id as it builds (Component#claim_dom_slot!) and a second claimant
@@ -74,7 +74,7 @@ module Weft
     end
 
     # @api private
-    # One-shot register for `receives` hand-offs. Interception stages the
+    # One-shot register for `receives` handoffs. Interception stages the
     # extracted kwargs here immediately before Arbre constructs the target
     # (insert_tag → build_tag → new); the new instance consumes them during
     # params assembly. Class-checked so a stale staging can never leak into
