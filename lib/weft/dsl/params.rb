@@ -252,7 +252,7 @@ module Weft
             pinned = pin_value(value)
             own_derived_params[name] = { block: proc { |_p| pinned },
                                          source_location: [site.path, site.lineno],
-                                         override: true }
+                                         override: true, pinned: true }
           end
         end
 
@@ -291,6 +291,23 @@ module Weft
         # render a uuid the same way whether it arrived over the wire, from a
         # caller, or from a derivation.
         #
+        # Which door declared a key. Diagnostics need it because the remedy
+        # they name has to be one the reader can type: `digest:` is spelled
+        # differently at each door, and a pin has no spelling for it at all.
+        # Same wire-first precedence as declared_facet — for a dual key the
+        # wire door is the one a URL round-trips through.
+        #
+        # `defines` and `derives` share one table, so the pin marker is what
+        # separates them; nothing else reads it.
+        def declaring_door(key)
+          return :param if params.key?(key)
+          return :receives if received_params.key?(key)
+
+          meta = derived_params[key] or return nil
+
+          meta[:pinned] ? :defines : :derives
+        end
+
         # Wire first, mirroring Assembly#default_for: its meta is the one a URL
         # round-trips through, so for a dual key it is the one that has to hold.
         def declared_facet(key, facet)

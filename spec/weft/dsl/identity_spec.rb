@@ -206,6 +206,70 @@ RSpec.describe Weft::DSL::Identity do
   # chrome declare identically and want opposite answers — but it can *observe*
   # the collision, which is the half inference could never reach. So it says so,
   # once, naming the class and the three verbs that answer it.
+  # The remedy a warning names has to be one the reader can actually type, and
+  # `digest:` is spelled at the door that declared the key. Naming `param` for
+  # every door sent a `derives` author to the wrong kwarg, and a `defines`
+  # author to a dual that silently makes their component routable.
+  describe "the blank-identifier warning's remedy" do
+    def render_blank(klass)
+      allow(Weft.logger).to receive(:warn)
+      Weft::Context.new { insert_tag(klass) }.to_s
+    end
+
+    it "names the wire door for a param" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "BlankParam"
+        param :label, default: ""
+        identifies_by :label
+      end
+
+      render_blank(klass)
+
+      expect(Weft.logger).to have_received(:warn).with(/`param :label, digest: true`/)
+    end
+
+    it "names the derivation door for a derives" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "BlankDerives"
+        derives(:label) { |_p| "" }
+        identifies_by :label
+      end
+
+      render_blank(klass)
+
+      expect(Weft.logger).to have_received(:warn).with(/`derives\(:label, digest: true\)`/)
+    end
+
+    it "names the hand-off door for a receives" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "BlankReceives"
+        receives :label, default: ""
+        identifies_by :label
+      end
+
+      render_blank(klass)
+
+      expect(Weft.logger).to have_received(:warn).with(/`receives :label, digest: true`/)
+    end
+
+    # A pin has no `digest:` to reach for, and wouldn't be helped by one: the
+    # value is identical on every instance, so digesting it yields the same
+    # token every time. The honest advice is that the key does not belong in
+    # the identity at all.
+    it "tells a defines author the key does not belong in the identity" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "BlankDefines"
+        defines label: ""
+        identifies_by :label
+      end
+
+      render_blank(klass)
+
+      expect(Weft.logger).to have_received(:warn).with(/same on every instance.*cannot distinguish/m)
+      expect(Weft.logger).not_to have_received(:warn).with(/digest: true/)
+    end
+  end
+
   describe "the duplicate-id warning" do
     let(:repeated) do
       Class.new(Weft::Component) do
