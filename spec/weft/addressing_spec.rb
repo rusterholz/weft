@@ -218,13 +218,13 @@ RSpec.describe Weft::Addressing do
           to eq("oms-order-header-f7c599ce-3945-4340-b4cc-5754a682ae43")
       end
 
-      # The shape a record-shaped hand-off forces: the caller holds the whole
+      # The shape a record-shaped handoff forces: the caller holds the whole
       # driver, which cannot compose a DOM id, so the row derives the scalar it
       # is really identified by. Identity has to read that key's declarations
       # through whichever door declared it, or the same UUID renders one way
       # from a `param` and another from a `derives`.
       # Rendered rather than asked of the class, because that is the only place
-      # a hand-off exists: `Assembly.for_request` stages none, so a derivation
+      # a handoff exists: `Assembly.for_request` stages none, so a derivation
       # reading one has nothing to read. Which is also why these assert on a
       # built instance — the shape the demo's rows actually take.
       def id_of(klass, **handed)

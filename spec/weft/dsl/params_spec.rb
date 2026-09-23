@@ -250,7 +250,7 @@ RSpec.describe Weft::DSL::Params do
   end
 
   describe ".receives" do
-    it "declares a required hand-off (no default key in the meta)" do
+    it "declares a required handoff (no default key in the meta)" do
       klass = Class.new(base_class) do
         def self.name = "ReceivesTest"
         receives :order
@@ -324,7 +324,7 @@ RSpec.describe Weft::DSL::Params do
       expect(parent.params[:per_page]).to eq(default: 25)
     end
 
-    it "softens a required hand-off with a default" do
+    it "softens a required handoff with a default" do
       strict_parent = Class.new(base_class) do
         def self.name = "StrictParent"
         receives :order
@@ -337,7 +337,7 @@ RSpec.describe Weft::DSL::Params do
       expect(softened.received_params[:order]).to eq(default: nil)
     end
 
-    it "hardens a defaulted hand-off back to required" do
+    it "hardens a defaulted handoff back to required" do
       soft_parent = Class.new(base_class) do
         def self.name = "SoftParent"
         receives :label, default: nil
@@ -705,7 +705,7 @@ RSpec.describe Weft::DSL::Params do
   describe "receives DSL" do
     it "does not make a component routable" do
       component_class = Class.new(Weft::Component) do
-        def self.name = "HandOffOnly"
+        def self.name = "HandoffOnly"
         receives :order
       end
 
@@ -724,11 +724,11 @@ RSpec.describe Weft::DSL::Params do
     end
   end
 
-  # A hand-off's rank travels. The value a call site staged for a component
+  # A handoff's rank travels. The value a call site staged for a component
   # keeps speaking at level 1 through every branch below that component, so a
   # descendant declaring the same key reads what its ancestor was handed
   # rather than whatever the page happened to be filtered by.
-  describe "a hand-off's rank below the component it was staged for" do
+  describe "a handoff's rank below the component it was staged for" do
     # `param :status` on the descendant is the whole point: an undeclared
     # reader would inherit the value anyway, so only a declaring one can
     # demonstrate the rank.
@@ -778,7 +778,7 @@ RSpec.describe Weft::DSL::Params do
       expect(nested.params.status).to eq("shipped")
     end
 
-    it "still loses to the descendant's own hand-off — the nearer call site wins" do
+    it "still loses to the descendant's own handoff — the nearer call site wins" do
       badge = dual_badge
       nested = nested_in(card_handing(badge, { status: "archived" }), badge, status: "shipped")
 
@@ -788,7 +788,7 @@ RSpec.describe Weft::DSL::Params do
     # A nil means "step aside", on both slots, but they step aside from
     # different things and the difference is easy to slur together. A nil
     # overlay suppresses the wire and resolution continues at inherited; a nil
-    # hand-off suppresses the hand-off and resolution continues at the
+    # handoff suppresses the handoff and resolution continues at the
     # descendant's own wire. Pinned because two parallel slots invite the
     # assumption that they behave alike.
     it "lets a nil at a nearer call site step aside for the descendant's own wire" do
@@ -869,7 +869,7 @@ RSpec.describe Weft::DSL::Params do
   describe "serialization projection" do
     let(:order) { Struct.new(:id, :name).new(9, "Crate") }
 
-    it "serializes own wire params only into weft_component_url — hand-offs stay server-side" do
+    it "serializes own wire params only into weft_component_url — handoffs stay server-side" do
       klass = Class.new(Weft::Component) do
         def self.name = "ManifestCard"
         param :status
@@ -915,7 +915,7 @@ RSpec.describe Weft::DSL::Params do
       expect(component.weft_component_url).to eq("/_components/dual_card?status=fresh")
     end
 
-    it "derives weft_dom_id from own wire params only, never a hand-off" do
+    it "derives weft_dom_id from own wire params only, never a handoff" do
       klass = Class.new(Weft::Component) do
         def self.name = "SlipCard"
         receives :order
@@ -926,7 +926,7 @@ RSpec.describe Weft::DSL::Params do
       expect(component.weft_dom_id).to eq("slip-card")
     end
 
-    it "keeps hand-offs out of the SSE stream URL" do
+    it "keeps handoffs out of the SSE stream URL" do
       klass = Class.new(Weft::Component) do
         def self.name = "TickerCard"
         param :symbol

@@ -24,7 +24,7 @@ module Weft
 
       private
 
-      # Kwargs naming a target's declared `receives` keys are hand-offs, not
+      # Kwargs naming a target's declared `receives` keys are handoffs, not
       # chrome: pull them out before Arbre sees them and stage them on the
       # context register for the instance about to be constructed.
       def stage_received_kwargs(klass, attrs)

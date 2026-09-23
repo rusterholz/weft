@@ -74,7 +74,7 @@ module Weft
     end
 
     # @api private
-    # One-shot register for `receives` hand-offs. Interception stages the
+    # One-shot register for `receives` handoffs. Interception stages the
     # extracted kwargs here immediately before Arbre constructs the target
     # (insert_tag → build_tag → new); the new instance consumes them during
     # params assembly. Class-checked so a stale staging can never leak into

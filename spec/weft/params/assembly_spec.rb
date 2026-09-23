@@ -2,7 +2,7 @@
 
 require "arbre"
 
-# The source stack a component's params resolve through: staged hand-off >
+# The source stack a component's params resolve through: staged handoff >
 # own wire value > inherited bag value > declared default, with overlays
 # speaking as the wire. Exercised through Weft::Component, which is what
 # assembles a bag in practice.
@@ -55,7 +55,7 @@ RSpec.describe Weft::Params::Assembly do
       expect(ctx.children.first.class_list).to include("for-totals")
     end
 
-    it "does not leak one sibling's hand-off to the next" do
+    it "does not leak one sibling's handoff to the next" do
       first = receiver_class
       second = Class.new(Weft::Component) do
         def self.name = "BareSlip"
@@ -71,7 +71,7 @@ RSpec.describe Weft::Params::Assembly do
       expect(ctx.children[1].params.order).to be_nil
     end
 
-    it "raises NotReceived at the call site when a required hand-off is missing" do
+    it "raises NotReceived at the call site when a required handoff is missing" do
       klass = receiver_class
 
       expect { Weft::Context.new { insert_tag(klass) } }.
@@ -126,7 +126,7 @@ RSpec.describe Weft::Params::Assembly do
     end
 
     it "cannot be satisfied through render's pseudo-wire kwargs" do
-      # render kwargs are a query string in disguise; a hand-off is a
+      # render kwargs are a query string in disguise; a handoff is a
       # server-side value that can't ride the wire. Build under Weft::Context
       # with call-site kwargs to test receiving components.
       expect { receiver_class.render(order: order) }.
@@ -135,7 +135,7 @@ RSpec.describe Weft::Params::Assembly do
   end
 
   # The router's class paths: the state a request composes before any component
-  # of its own exists. No call site has run, so the hand-off door is not there.
+  # of its own exists. No call site has run, so the handoff door is not there.
   describe "a bag assembled where no call site exists" do
     def for_request(klass, wire = {}) = Weft::Params::Assembly.for_request(klass, wire)
 
@@ -146,7 +146,7 @@ RSpec.describe Weft::Params::Assembly do
       end
     end
 
-    it "answers a hand-off's declared default, exactly as a render would" do
+    it "answers a handoff's declared default, exactly as a render would" do
       klass = Class.new(Weft::Component) do
         def self.name = "SoftSlip"
         receives :page_num, default: 7
@@ -867,11 +867,11 @@ RSpec.describe Weft::Params::Assembly do
     end
 
     # The exception to the spec above, and the reason it must source the
-    # ancestor's value from a derivation rather than a hand-off: a `receives`
+    # ancestor's value from a derivation rather than a handoff: a `receives`
     # value keeps speaking at level 1 for the whole subtree, so it is the one
     # inherited thing a descendant's own wire does NOT outrank. What the call
     # site staged expressly beats what the page happened to be filtered by.
-    it "lets a hand-off keep level 1 below the component it was staged for" do
+    it "lets a handoff keep level 1 below the component it was staged for" do
       parent_class = Class.new(Weft::Component) do
         def self.name = "HandedParent"
         receives :status
@@ -902,7 +902,7 @@ RSpec.describe Weft::Params::Assembly do
       expect(child.params.label).to eq("fallback")
     end
 
-    it "satisfies a required hand-off from the ancestor bag — bare embeds stay bare" do
+    it "satisfies a required handoff from the ancestor bag — bare embeds stay bare" do
       parent_class = Class.new(Weft::Component) do
         def self.name = "ProvidingParent"
         receives :order
@@ -981,7 +981,7 @@ RSpec.describe Weft::Params::Assembly do
       expect(component.params.page).to eq(5)
     end
 
-    it "loses to an explicit hand-off" do
+    it "loses to an explicit handoff" do
       klass = Class.new(Weft::Component) do
         def self.name = "LabeledCard"
         receives :label
@@ -1042,12 +1042,12 @@ RSpec.describe Weft::Params::Assembly do
     end
 
     # Layering a delta must not disturb the bag's other members, and the
-    # hand-off slot is the one most easily lost here: no router call site
-    # applies a delta to a bag inside a hand-off subtree today, so this spec is
+    # handoff slot is the one most easily lost here: no router call site
+    # applies a delta to a bag inside a handoff subtree today, so this spec is
     # the only thing that observes the carry. An operation on a bag that
     # silently drops one of that bag's members is the exact defect the overlay
     # slot was introduced to fix — the invariant has to live in the value.
-    it "preserves the hand-off slot when a delta is layered on" do
+    it "preserves the handoff slot when a delta is layered on" do
       card = Class.new(Weft::Component) do
         def self.name = "HandedAncestor"
         receives :status
@@ -1056,7 +1056,7 @@ RSpec.describe Weft::Params::Assembly do
         def self.name = "DeclaringDescendant"
         param :status, type: :string
       end
-      handed = described_class.call(card, {}, hand_offs: { status: "handed" })
+      handed = described_class.call(card, {}, handoffs: { status: "handed" })
 
       bag = described_class.call(badge, { "status" => "from-wire" },
                                  branched_from: handed % { unrelated: "delta" })

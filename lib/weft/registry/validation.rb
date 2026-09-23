@@ -91,9 +91,9 @@ module Weft
         end
       end
 
-      # A routable component with a required hand-off it cannot reconstruct
+      # A routable component with a required handoff it cannot reconstruct
       # standalone will raise on every refresh (nothing hands the value over).
-      # Defaulted hand-offs are exempt (declaring a default explicitly opts
+      # Defaulted handoffs are exempt (declaring a default explicitly opts
       # into standalone renders falling back to it), as are dual keys — a wire
       # param or a derives supplies the standalone value. Runs once per
       # registry generation, alongside route validation.
@@ -103,7 +103,7 @@ module Weft
         return if undualed.empty?
 
         Weft.logger.warn(
-          "#{klass.name} is routable but depends on hand-offs it cannot reconstruct standalone " \
+          "#{klass.name} is routable but depends on handoffs it cannot reconstruct standalone " \
           "(#{undualed.map(&:inspect).join(', ')}) — a refresh will raise without them. " \
           "Mark the class dependent!, or declare a derives or wire param dual for the key."
         )

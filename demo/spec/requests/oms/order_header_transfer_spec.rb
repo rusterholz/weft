@@ -36,7 +36,7 @@ RSpec.describe "Order header edit round trip", type: :request do
       expect(selects).to eq(1)
     end
 
-    it "announces the hand-off, and only the hand-off" do
+    it "announces the handoff, and only the handoff" do
       expect(response.headers["HX-Trigger"]).to eq("order-editing")
     end
   end

@@ -298,7 +298,7 @@ RSpec.describe Weft::Registry do
   describe "dependent-receives lint" do
     before { allow(Weft.logger).to receive(:warn) }
 
-    it "warns for a routable component whose hand-off has no wire dual" do
+    it "warns for a routable component whose handoff has no wire dual" do
       klass = Class.new(Weft::Component) do
         def self.name = "LintedPanel"
         param :status
@@ -311,7 +311,7 @@ RSpec.describe Weft::Registry do
       expect(Weft.logger).to have_received(:warn).with(/LintedPanel.*:order.*dependent!/m)
     end
 
-    it "stays quiet for a defaulted hand-off — declaring a default opts into standalone degradation" do
+    it "stays quiet for a defaulted handoff — declaring a default opts into standalone degradation" do
       klass = Class.new(Weft::Component) do
         def self.name = "SoftLintPanel"
         param :status
@@ -324,7 +324,7 @@ RSpec.describe Weft::Registry do
       expect(Weft.logger).not_to have_received(:warn)
     end
 
-    it "stays quiet when the hand-off has a derives dual" do
+    it "stays quiet when the handoff has a derives dual" do
       klass = Class.new(Weft::Component) do
         def self.name = "DerivesDualedPanel"
         param :status
@@ -338,7 +338,7 @@ RSpec.describe Weft::Registry do
       expect(Weft.logger).not_to have_received(:warn)
     end
 
-    it "stays quiet when the hand-off has a wire dual" do
+    it "stays quiet when the handoff has a wire dual" do
       klass = Class.new(Weft::Component) do
         def self.name = "DualedPanel"
         param :status

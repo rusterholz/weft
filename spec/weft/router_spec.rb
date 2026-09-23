@@ -309,7 +309,7 @@ RSpec.describe Weft::Router do
 
     # A default is the fallback of whoever declared it, consulted when a read
     # finds nothing — never a value the declarer hands downstream. So it
-    # survives the hand-off even though the target inherits everything else
+    # survives the handoff even though the target inherits everything else
     # the request composed.
     it "keeps a transfer target's own defaults sovereign over the declarer's" do
       target = Class.new(Weft::Component) do
@@ -359,7 +359,7 @@ RSpec.describe Weft::Router do
       expect(last_response.body).to include("child-open")
     end
 
-    it "still lets a declarer's derived value cross the hand-off" do
+    it "still lets a declarer's derived value cross the handoff" do
       target = Class.new(Weft::Component) do
         def self.name = "InheritedOrderCard"
 
@@ -369,13 +369,13 @@ RSpec.describe Weft::Router do
         end
       end
       Class.new(Weft::Component) do
-        def self.name = "OrderHandOffPanel"
+        def self.name = "OrderHandoffPanel"
         param :order_id, type: :string
         derives(:order) { |p| "ORDER(#{p.order_id})" }
         transfers(:show, to: target) { |params| params.order and nil }
       end
 
-      post "/_components/order_hand_off_panel/show", order_id: "o-5"
+      post "/_components/order_handoff_panel/show", order_id: "o-5"
 
       expect(last_response.body).to include("card-ORDER(o-5)")
     end
@@ -496,24 +496,24 @@ RSpec.describe Weft::Router do
       expect(seen).to eq(["from-derive"])
     end
 
-    it "answers a hand-off's declared fallback, and will not take one from the wire" do
+    it "answers a handoff's declared fallback, and will not take one from the wire" do
       seen = []
       Class.new(Weft::Component) do
-        def self.name = "HandOffTouchPanel"
+        def self.name = "HandoffTouchPanel"
         param :order_id, type: :string
         receives :handed, default: "given"
         performs(:touch) { |params| seen << params.handed and nil }
       end
 
-      post "/_components/hand_off_touch_panel/touch", order_id: "o-3", handed: "from-the-wire"
+      post "/_components/handoff_touch_panel/touch", order_id: "o-3", handed: "from-the-wire"
 
       expect(seen).to eq(["given"])
     end
 
-    it "names the failure when a callable reads a hand-off with no fallback to fall to" do
+    it "names the failure when a callable reads a handoff with no fallback to fall to" do
       seen = []
       Class.new(Weft::Component) do
-        def self.name = "BareHandOffPanel"
+        def self.name = "BareHandoffPanel"
         param :order_id, type: :string
         receives :handed
         performs(:touch) { |params| params.handed and nil }
@@ -523,9 +523,9 @@ RSpec.describe Weft::Router do
         end
       end
 
-      post "/_components/bare_hand_off_panel/touch", order_id: "o-3"
+      post "/_components/bare_handoff_panel/touch", order_id: "o-3"
 
-      expect(seen.first).to match(/BareHandOffPanel.*:handed/)
+      expect(seen.first).to match(/BareHandoffPanel.*:handed/)
     end
 
     it "walks the recovery chain when a derivation raises inside a callable" do
@@ -911,11 +911,11 @@ RSpec.describe Weft::Router do
         declarer = Class.new(Weft::Component) do
           def self.name = "TriggerDeparture"
           param :id
-          announces "handed-over", on: :hand_off
+          announces "handed-over", on: :handoff
         end
-        declarer.transfers(:hand_off, to: target)
+        declarer.transfers(:handoff, to: target)
 
-        post "/_components/trigger_departure/hand_off", id: "1"
+        post "/_components/trigger_departure/handoff", id: "1"
 
         expect(last_response.headers["HX-Trigger"]).to eq("handed-over")
       end
@@ -1868,10 +1868,10 @@ RSpec.describe Weft::Router do
         def self.name = "HandoffDeparture"
         param :order_id
       end
-      declarer.brings(mine, on: :hand_off)
-      declarer.transfers(:hand_off, to: target)
+      declarer.brings(mine, on: :handoff)
+      declarer.transfers(:handoff, to: target)
 
-      post "/_components/handoff_departure/hand_off", order_id: "7"
+      post "/_components/handoff_departure/handoff", order_id: "7"
 
       expect(last_response.body).to include("side-7")
     end
@@ -1887,10 +1887,10 @@ RSpec.describe Weft::Router do
         def self.name = "LabelledDeparture"
         param :order_id
       end
-      declarer.brings(mine, on: :hand_off) { |params| { order_id: params[:label] || "declarer-side" } }
-      declarer.transfers(:hand_off, to: target)
+      declarer.brings(mine, on: :handoff) { |params| { order_id: params[:label] || "declarer-side" } }
+      declarer.transfers(:handoff, to: target)
 
-      post "/_components/labelled_departure/hand_off", order_id: "7"
+      post "/_components/labelled_departure/handoff", order_id: "7"
 
       expect(last_response.body).to include("side-declarer-side")
     end
@@ -1919,10 +1919,10 @@ RSpec.describe Weft::Router do
         param :order_id
       end
       target.brings(noted, when: :transferred) { { note: "from-target" } }
-      declarer.brings(noted, on: :hand_off) { { note: "from-declarer" } }
-      declarer.transfers(:hand_off, to: target)
+      declarer.brings(noted, on: :handoff) { { note: "from-declarer" } }
+      declarer.transfers(:handoff, to: target)
 
-      post "/_components/slot_departure/hand_off", order_id: "7"
+      post "/_components/slot_departure/handoff", order_id: "7"
 
       expect(last_response.body).to include("noted-from-target")
       expect(last_response.body).not_to include("noted-from-declarer")
@@ -2146,11 +2146,11 @@ RSpec.describe Weft::Router do
         def self.name = "CargoOrigin"
         param :order_id
         derives(:cargo) { |_p| "declarer-side" }
-        transfers(:hand_off, to: landing) { |params| params.cargo and nil }
+        transfers(:handoff, to: landing) { |params| params.cargo and nil }
       end
-      origin.brings(fragile, on: :hand_off)
+      origin.brings(fragile, on: :handoff)
 
-      post "/_components/cargo_origin/hand_off", order_id: "o-3"
+      post "/_components/cargo_origin/handoff", order_id: "o-3"
 
       expect(last_response.body).to include("reported-declarer-side")
     end
@@ -2174,11 +2174,11 @@ RSpec.describe Weft::Router do
         def self.name = "AddressedOrigin"
         param :order_id
         derives(:cargo) { |_p| "declarer" }
-        transfers(:hand_off, to: landing) { |params| params.cargo and nil }
+        transfers(:handoff, to: landing) { |params| params.cargo and nil }
       end
-      origin.brings(fragile, on: :hand_off)
+      origin.brings(fragile, on: :handoff)
 
-      post "/_components/addressed_origin/hand_off", order_id: "o-4"
+      post "/_components/addressed_origin/handoff", order_id: "o-4"
 
       expect(last_response.body).to include('id="addressed-echo-declarer"')
     end
@@ -2373,11 +2373,11 @@ RSpec.describe Weft::Router do
           runs[:declarer] += 1
           "declarer-side"
         end
-        transfers(:hand_off, to: target) { |params| params.cargo and nil }
+        transfers(:handoff, to: target) { |params| params.cargo and nil }
       end
-      declarer.brings(companion, on: :hand_off)
+      declarer.brings(companion, on: :handoff)
 
-      post "/_components/departure_dock/hand_off", order_id: "o-2"
+      post "/_components/departure_dock/handoff", order_id: "o-2"
 
       expect(last_response.body).to include("echo-declarer-side")
       expect(runs).to eq({ declarer: 1 })

@@ -13,7 +13,7 @@ module Weft
     # The stack, top wins. `nil` never wins a level: it means that source
     # didn't have the key.
     #
-    #   1. hand-off   a caller staged a value for this component (`receives`)
+    #   1. handoff   a caller staged a value for this component (`receives`)
     #   2. overlay    a verb block earlier in this request returned the key
     #   3. own wire   the request supplied it and this class declares it
     #   4. inherited  the bag this one branched from had it
@@ -23,13 +23,13 @@ module Weft
     # The overlay speaks *as* the wire: its value replaces the wire's for that
     # key, and an explicit nil clears — masking the wire so resolution falls
     # below it. A derivation always "produces" (a thunk is never nil), so a
-    # same-key default sits unreachable behind one. A nil hand-off clears in the
+    # same-key default sits unreachable behind one. A nil handoff clears in the
     # same spirit but from the other end: it steps aside, and resolution
     # continues at this class's own wire.
     #
     # Levels 1, 2 and 4 all arrive on the bag being branched from, and the split
     # is the point: its data demotes to inherited, while its overlay and its
-    # hand-offs keep their own rungs the whole way down. A hand-off accumulates
+    # handoffs keep their own rungs the whole way down. A handoff accumulates
     # as it descends — a nearer call site's values merge over an ancestor's, per
     # key — which is what lets four cards from one collection each hand their own
     # value to the badge inside them. Nothing passes an overlay in from outside:
@@ -41,13 +41,13 @@ module Weft
 
         # The state a request composes before any component of its own exists —
         # what the first verb block sees. No caller and no enclosing build have
-        # run, so the hand-off door isn't merely unsatisfied, it isn't there.
+        # run, so the handoff door isn't merely unsatisfied, it isn't there.
         # A declared default still answers — a fallback belongs to the class,
         # not to the door, and writing it a second time as a `defines` would
         # only invite the two copies to drift. A key that declared none has
         # nowhere to come from: reading it raises {Weft::UnreachableHandoff}.
         def for_request(component_class, wire_source)
-          call(component_class, wire_source, hand_offs: nil)
+          call(component_class, wire_source, handoffs: nil)
         end
 
         # One-time shadowing warnings, keyed [kind, class, key]. Set#add? races
@@ -57,7 +57,7 @@ module Weft
 
       # +branched_from+ is the bag this one inherits: a tree ancestor's during
       # a render, the state already composed at the top of a request. Passing
-      # +hand_offs: nil+ says the door does not exist (see .for_request);
+      # +handoffs: nil+ says the door does not exist (see .for_request);
       # an empty hash says it exists and nobody staged anything.
       # +violations+ is reported, never raised on: assembling is reading, and
       # the error path assembles too. Construction is where a component commits
@@ -65,10 +65,10 @@ module Weft
       # also what leaves a *populated* bag for recovery to redraw from.
       attr_reader :violations
 
-      def initialize(component_class, wire_source, hand_offs: {}, branched_from: nil)
+      def initialize(component_class, wire_source, handoffs: {}, branched_from: nil)
         @component_class = component_class
-        @hand_offs = !hand_offs.nil?
-        @received = inherited_handoffs(branched_from).merge(hand_offs || {})
+        @handoffs = !handoffs.nil?
+        @received = inherited_handoffs(branched_from).merge(handoffs || {})
         @overlays = branched_from ? branched_from.send(:overlay_slot) : {}
         resolution = Weft::Resolver.resolution(component_class, wire_source)
         @wire = resolution.coerced
@@ -92,7 +92,7 @@ module Weft
 
       private
 
-      # The hand-offs already in force for the subtree this branch lands in.
+      # The handoffs already in force for the subtree this branch lands in.
       # A nearer call site's staging merges over these, so the innermost
       # `insert_tag` wins per key while keys nobody nearer mentioned keep the
       # ancestor's value.
@@ -127,14 +127,14 @@ module Weft
       end
 
       def keys
-        return @component_class.declared_keys if @hand_offs
+        return @component_class.declared_keys if @handoffs
 
-        @component_class.declared_keys - hand_off_only_keys
+        @component_class.declared_keys - handoff_only_keys
       end
 
       # Keys whose only door is `receives`. A dual key is declared on another
       # door too, so it stands on its own without a caller.
-      def hand_off_only_keys
+      def handoff_only_keys
         @component_class.received_params.keys - @component_class.params.keys -
           @component_class.derived_params.keys
       end
@@ -157,7 +157,7 @@ module Weft
       # key nobody supplied reads as this class's default without becoming
       # something this class hands to anyone downstream. Spans every declared
       # key rather than only the ones this bag holds an entry for — which is
-      # what carries a hand-off's fallback onto the paths where the door
+      # what carries a handoff's fallback onto the paths where the door
       # itself is absent.
       def declared_defaults
         @component_class.declared_keys.filter_map { |key| declared_default(key) }.to_h
@@ -169,19 +169,19 @@ module Weft
       end
 
       # The wire door's default wins for dual keys — its meta always carries
-      # one, and the wire door sits above the hand-off's fallback in the stack.
+      # one, and the wire door sits above the handoff's fallback in the stack.
       # Which is also why only `receives` can declare a *nil* fallback: a
       # param's meta cannot tell a written nil from an unwritten one, and a
-      # hand-off's can, so the two doors answer separately.
+      # handoff's can, so the two doors answer separately.
       def declared_default(key)
         if (wire_meta = @component_class.params[key])
           [key, wire_meta[:default]] unless wire_meta[:default].nil?
         else
-          hand_off_default(key)
+          handoff_default(key)
         end
       end
 
-      def hand_off_default(key)
+      def handoff_default(key)
         meta = @component_class.received_params[key]
         [key, meta[:default]] if meta&.key?(:default)
       end

@@ -130,7 +130,7 @@ module Weft
     recovers from: StandardError, with: :error_component
 
     # Params resolve at construction, not build: the context (which carries
-    # the wire source and any staged hand-off) is the constructor's one
+    # the wire source and any staged handoff) is the constructor's one
     # argument, and resolving here makes `params` available even before
     # `super` in user build bodies — the "compute chrome from params, then
     # super" pattern needs that.
@@ -237,7 +237,7 @@ module Weft
     private
 
     # The wire is the only source: a ticket is never inherited from a parent, and
-    # no hand-off door was opened for it. Checked rather than trusted — it
+    # no handoff door was opened for it. Checked rather than trusted — it
     # arrives from outside and is bound for an id attribute — and reissued when
     # it is missing, stale, or malformed.
     def resolve_weft_ticket

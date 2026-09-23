@@ -36,7 +36,7 @@ ranked sources. The first one that answers for a key wins.
 
 | # | level | supplied by |
 |---|-------|-------------|
-| 1 | **hand-off** | a `receives` value staged by the call site that built this component, or one an ancestor was handed |
+| 1 | **handoff** | a `receives` value staged by the call site that built this component, or one an ancestor was handed |
 | 2 | **overlay** | a delta returned by a verb block, applied to this render's root |
 | 3 | **own wire** | this class's declared params, resolved and coerced from the request |
 | 4 | **inherited** | the branch copy of the nearest tree-ancestor's bag |
@@ -98,7 +98,7 @@ does not lose its type by crossing a branch.
 
 ### `override:`
 
-A derivation declared `override:` lifts above **inherited only** — it does not outrank a hand-off, an
+A derivation declared `override:` lifts above **inherited only** — it does not outrank a handoff, an
 overlay, or the component's own wire. The intent is "I always compute this myself rather than accepting
 my parent's copy," not "I win."
 
@@ -127,8 +127,8 @@ deliberate statement about anything below it, and demotes.
 `bag % delta` applies a delta. It writes the delta's **values** to the data, which is what the bag
 answers with, and the **whole delta** to the overlay, which is what the next crossing branch re-applies
 at level 2. Those are two jobs rather than one: what a bag *answers* and what it *passes down* are
-different questions, and the hand-off case is where the difference shows. A component with a `receives`
-value and a delta on the same key answers with the hand-off, because level 1 outranks level 2, while
+different questions, and the handoff case is where the difference shows. A component with a `receives`
+value and a delta on the same key answers with the handoff, because level 1 outranks level 2, while
 still transmitting the delta to everything below it.
 
 So a read consults the data alone. The delta is already accounted for there — the crossing branch
@@ -136,7 +136,7 @@ ranked it at level 2, and `%` wrote its values straight in. Consulting the overl
 would re-apply level 2 on top of a finished result and quietly beat level 1.
 
 `%` carries the handoff slot across untouched, which nothing in the Router exercises today: every call
-site applies a delta to a root's bag, and a root has no hand-offs staged for it. It is there because an
+site applies a delta to a root's bag, and a root has no handoffs staged for it. It is there because an
 operation on a bag that dropped one of the bag's own members is precisely the defect the slots exist to
 prevent, and one spec holds it in place.
 
@@ -177,7 +177,7 @@ component below it; what varies is the level it speaks at when it gets there.
 |------|----------------------|
 | a declared `default:` | **does not cross at all** — which is why a child's own default is sovereign |
 | own wire values, resolved values, thunks | **arrive, demoted** to level 4, "inherited" |
-| a hand-off (`receives`) | **arrives at its own rank**, level 1, accumulating per key as it descends |
+| a handoff (`receives`) | **arrives at its own rank**, level 1, accumulating per key as it descends |
 | an applied delta (the overlay) | **arrives at its own rank**, level 2, at every depth below |
 
 An overlay's authority is **subtree-scoped**: it reaches the bag it was applied to and everything below
@@ -188,7 +188,7 @@ its siblings, which is what keeps universes consistent.
 The one genuinely request-scoped params concept is the **wire universe** (below), and it never occupies
 a rung at all.
 
-### Hand-offs keep their rank
+### Handoffs keep their rank
 
 A `receives` value is the second thing a bag transmits at its own rung, alongside the overlay. Both
 reach the whole subtree, and both keep the level they speak at the whole way down.
@@ -196,30 +196,30 @@ reach the whole subtree, and both keep the level they speak at the whole way dow
 Reach and rank are still worth holding apart, because the words for them slur together and because a
 declared default is the case where they come apart:
 
-- **Reach** is which components can see the value at all. A hand-off's reach is the subtree, exactly
+- **Reach** is which components can see the value at all. A handoff's reach is the subtree, exactly
   like any other resolved value: a `StatusCard` handed `status:` passes it to the badge it builds
   inside, and two cards on one page each supply their own. Nothing would work otherwise, since the wire
-  is usually empty for a key that arrives by hand-off.
-- **Rank** is which level the value speaks at once it gets there. A hand-off speaks at level 1 at every
+  is usually empty for a key that arrives by handoff.
+- **Rank** is which level the value speaks at once it gets there. A handoff speaks at level 1 at every
   depth, as an overlay speaks at level 2 at every depth. A declared default, by contrast, has no reach
   past its own class at all.
 
-So a nested component that declares `param :status` reads its ancestor's hand-off rather than the
+So a nested component that declares `param :status` reads its ancestor's handoff rather than the
 request's own value for that key. What a call site said expressly about that card outranks what the
 page happened to be filtered by. Anything else breaks a collection: four cards built from four statuses,
 each rendering a badge that declares the key, would all read the page's filter, resolve one identity
 between them, and collide on a single DOM id.
 
 The slot **accumulates on the way down**. Each crossing branch merges whatever its call site staged over
-the hand-offs already in force, per key, so the nearest call site wins while keys nobody nearer
+the handoffs already in force, per key, so the nearest call site wins while keys nobody nearer
 mentioned keep the ancestor's value. That is how a card overrides one child without disturbing the rest
-of its subtree. A staged `nil` steps aside: it clears the inherited hand-off, and resolution continues
+of its subtree. A staged `nil` steps aside: it clears the inherited handoff, and resolution continues
 at the component's own wire. Note that this is the mirror image of a nil overlay, which suppresses the
 wire and continues at inherited. Both mean "step aside," they step aside from different things, and the
 two are easy to unify wrongly.
 
 **Independent addressability survives, which is the objection this design has to answer.** A component
-addressed on its own is a root: there is no ancestor, hence no hand-off, and its own wire wins exactly
+addressed on its own is a root: there is no ancestor, hence no handoff, and its own wire wins exactly
 as it always did. The cost is narrower than it first appears, and it is a real cost: while nested under
 an ancestor holding the same key, a component cannot read the request's value for that key. Keys are a
 flat namespace, so a component that wants the page's filter regardless of where it sits wants a key of
@@ -227,7 +227,7 @@ its own name rather than the one its ancestors pass around.
 
 What is one-shot is the **staging register**, not the value. `Context#stage_received` holds one entry,
 class-checked, and `take_received!` clears it, which is what stops the *next sibling* from picking up a
-hand-off meant for its neighbor. The register's only job is getting the value into the right bag; the
+handoff meant for its neighbor. The register's only job is getting the value into the right bag; the
 slot is what carries it onward from there.
 
 ## Render-time scopes

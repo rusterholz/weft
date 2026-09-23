@@ -240,7 +240,7 @@ RSpec.describe Weft::DSL::Identity do
       expect(Weft.logger).to have_received(:warn).with(/`derives\(:label, digest: true\)`/)
     end
 
-    it "names the hand-off door for a receives" do
+    it "names the handoff door for a receives" do
       klass = Class.new(Weft::Component) do
         def self.name = "BlankReceives"
         receives :label, default: ""

@@ -6,7 +6,7 @@ module Logistics
 
     receives :shipment
 
-    # Same shape as Delivery::DriverRow: the hand-off is a record, so the row
+    # Same shape as Delivery::DriverRow: the handoff is a record, so the row
     # derives the scalar that actually names it.
     derives(:shipment_id, type: :uuid) { |p| p.shipment.id }
     identifies_by :shipment_id
