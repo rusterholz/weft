@@ -326,7 +326,7 @@ Some components have nothing to identify by and still need their own slot: a bad
 
 ```ruby
 class StatusBadge < Weft::Component
-  unique!                        # id="status-badge-M3f9c1a20"
+  unique!                        # id="status-badge-T3f9c1a20"
 end
 ```
 

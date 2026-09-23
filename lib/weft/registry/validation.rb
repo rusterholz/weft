@@ -75,8 +75,8 @@ module Weft
       #
       # Two exemptions, both provably safe rather than merely conventional. A
       # component identifying by a block does not derive its id from the base at
-      # all. A `unique!` component carries a mint per instance, so a shared base
-      # yields `foo-Maaaa` beside `foo-Mbbbb` — distinct however many render.
+      # all. A `unique!` component carries a ticket per instance, so a shared base
+      # yields `foo-Taaaa` beside `foo-Tbbbb` — distinct however many render.
       def validate_id_bases!
         seen = {}
         @components.each do |klass|

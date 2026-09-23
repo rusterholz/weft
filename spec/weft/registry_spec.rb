@@ -264,8 +264,8 @@ RSpec.describe Weft::Registry do
     end
 
     it "exempts unique! components, whose ids provably cannot collide" do
-      # Each instance carries its own mint, so a shared base yields
-      # foo-Maaaa and foo-Mbbbb — never the same id.
+      # Each instance carries its own ticket, so a shared base yields
+      # foo-Taaaa and foo-Tbbbb — never the same id.
       a = Class.new(Weft::Component) do
         def self.name = "Foo"
         unique!

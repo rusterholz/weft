@@ -45,26 +45,26 @@ RSpec.describe Weft::Addressing do
     end
   end
 
-  describe ".mint" do
+  describe ".issue_ticket" do
     it "issues a marked token" do
-      expect(described_class.mint).to match(/\AM\h{8}\z/)
+      expect(described_class.issue_ticket).to match(/\AT\h{8}\z/)
     end
 
     it "issues a different token every time — entropy, not a function of anything" do
-      expect(Array.new(50) { described_class.mint }.uniq.size).to eq(50)
+      expect(Array.new(50) { described_class.issue_ticket }.uniq.size).to eq(50)
     end
 
     it "recognizes its own tokens and rejects everything else" do
-      expect(described_class.mint?(described_class.mint)).to be(true)
-      expect(described_class.mint?("M1a2b3c4d")).to be(true)
-      expect(described_class.mint?("m1a2b3c4d")).to be(false)
-      expect(described_class.mint?("M1a2b")).to be(false)
-      expect(described_class.mint?("<script>")).to be(false)
-      expect(described_class.mint?(nil)).to be(false)
+      expect(described_class.ticket?(described_class.issue_ticket)).to be(true)
+      expect(described_class.ticket?("T1a2b3c4d")).to be(true)
+      expect(described_class.ticket?("t1a2b3c4d")).to be(false)
+      expect(described_class.ticket?("T1a2b")).to be(false)
+      expect(described_class.ticket?("<script>")).to be(false)
+      expect(described_class.ticket?(nil)).to be(false)
     end
 
     it "cannot be confused with a digested token" do
-      expect(described_class.mint?("D1a2b3c4d")).to be(false)
+      expect(described_class.ticket?("D1a2b3c4d")).to be(false)
     end
   end
 

@@ -98,13 +98,14 @@ module Weft
         #
         #   unique!
         #
-        # Sugar for "declare a mint param and identify by it", and like
-        # `identifies_by` it replaces any identity inherited from above.
+        # The token is not a param: it claims no key in the bag and rides in
+        # weft's own wire namespace, so nothing you declare can collide with it.
+        # Like `identifies_by`, this replaces any identity inherited from above.
         #
-        # Uniqueness says nothing about routing: this declaration deliberately
-        # does not publish an endpoint, since weft adding a param behind your
-        # back is no reason for a public GET to appear. A component that wants
-        # one declares something that earns it, or says `routable!`.
+        # Uniqueness says nothing about routing: this declaration does not
+        # publish an endpoint, since weft issuing a token behind your back is no
+        # reason for a public GET to appear. A component that wants one declares
+        # something that earns it, or says `routable!`.
         def unique!
           declare_identity!(:unique)
         end
@@ -132,7 +133,7 @@ module Weft
         # Whether this component declines a DOM id (own declaration, else inherited).
         def anonymous? = own_identity == :anonymous
 
-        # Whether this component carries a mint (own declaration, else inherited).
+        # Whether this component carries a ticket (own declaration, else inherited).
         def unique? = own_identity == :unique
 
         # The block composing this component's id, if it declared one (own,
@@ -141,7 +142,7 @@ module Weft
         def identity_block = own_identity.is_a?(Proc) ? own_identity : nil
 
         # The params composing this component's identity (own, else inherited).
-        # A `unique!` component has none: its identity is a mint, which is a
+        # A `unique!` component has none: its identity is a ticket, which is a
         # property of the instance and never a param. See {#unique?}.
         def identifiers
           own_identity.is_a?(Array) ? own_identity : []
@@ -165,7 +166,7 @@ module Weft
         # One of three answers, by what the class declared:
         #
         # * an `identifies_by` block composes the whole id itself;
-        # * `unique!` wears the stem plus the mint it is holding (+mint+ — the
+        # * `unique!` wears the stem plus the ticket it is holding (+ticket+ — the
         #   instance passes its own; the class path has none and issues one);
         # * otherwise the stem, then one slot per declared identifier in
         #   declaration order, or the stem alone if nothing identifies it.
@@ -174,10 +175,10 @@ module Weft
         # already composed, never a rebuilt one. A plain hash is accepted
         # because this is public and a hash is the obvious thing to hand it,
         # and it is assembled into a real bag before any block sees it.
-        def weft_dom_id_for(params = {}, mint = nil)
+        def weft_dom_id_for(params = {}, ticket = nil)
           return nil if anonymous?
           return block_dom_id(params) if identity_block
-          return "#{weft_dom_id_base}-#{mint_segment(mint)}" if unique?
+          return "#{weft_dom_id_base}-#{ticket_segment(ticket)}" if unique?
           return weft_dom_id_base if identifiers.empty?
 
           segments = identifiers.map { |key| identity_segment(params, key) }
@@ -269,7 +270,7 @@ module Weft
           Weft::Params::Assembly.for_request(self, bag.to_h)
         end
 
-        # A mint is checked, never trusted: it reaches this method from the
+        # A ticket is checked, never trusted: it reaches this method from the
         # wire in the ordinary case, and from whatever the caller had in hand
         # on the class path, where there is no instance to ask.
         #
@@ -277,8 +278,8 @@ module Weft
         # component with no token would otherwise render blank and collide with
         # every other such instance — landing somewhere wrong, where a fresh
         # token lands nowhere.
-        def mint_segment(value)
-          Weft::Addressing.mint?(value) ? value.to_s : Weft::Addressing.mint
+        def ticket_segment(value)
+          Weft::Addressing.ticket?(value) ? value.to_s : Weft::Addressing.issue_ticket
         end
 
         # Values render into an alphabet holding no dash, so the separator marks a

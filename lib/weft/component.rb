@@ -137,19 +137,19 @@ module Weft
     def initialize(*)
       super
       @params = assembled_params
-      @weft_mint = resolve_weft_mint if self.class.unique?
+      @weft_ticket = resolve_weft_ticket if self.class.unique?
     end
 
-    # This instance's mint, or nil unless the class is `unique!`.
+    # This instance's ticket, or nil unless the class is `unique!`.
     #
-    # A mint is what makes two renderings of a component *the same object* to
-    # weft: an instance that comes back carrying the mint another instance was
+    # A ticket is what makes two renderings of a component *the same object* to
+    # weft: an instance that comes back carrying the ticket another instance was
     # issued is not a lookalike, it is that component again, later. That is why
     # it belongs to the instance and never to `params` — it identifies the
     # object, rather than being data the object was given.
     #
     # @api private
-    attr_reader :weft_mint
+    attr_reader :weft_ticket
 
     def build(attributes = {})
       warn_declared_chrome_collisions(attributes)
@@ -212,14 +212,14 @@ module Weft
       query.empty? ? path : "#{path}?#{URI.encode_www_form(query)}"
     end
 
-    # This element's DOM id. A `unique!` component hands over the mint it is
+    # This element's DOM id. A `unique!` component hands over the ticket it is
     # holding; every other kind composes its id from params alone.
     def weft_dom_id
-      self.class.weft_dom_id_for(params, weft_mint)
+      self.class.weft_dom_id_for(params, weft_ticket)
     end
 
     # What has to ride a request for that request to come back to *this*
-    # element: its wire params, plus its mint when it has one.
+    # element: its wire params, plus its ticket when it has one.
     #
     # Deliberately not `serializable_params`, and the distinction is
     # load-bearing. This is for a component's own request lineage — its refresh
@@ -227,23 +227,23 @@ module Weft
     # else's request would assert that a different element is this same object,
     # which is the same reason `brings` refuses a `unique!` companion.
     #
-    # @api private — name to be settled with the rest of this family
+    # @api private
     def weft_addressing_params
-      return serializable_params unless weft_mint
+      return serializable_params unless weft_ticket
 
-      serializable_params.merge(Weft.configuration.mint_wire_key => weft_mint)
+      serializable_params.merge(Weft.configuration.ticket_wire_key => weft_ticket)
     end
 
     private
 
-    # The wire is the only source: a mint is never inherited from a parent, and
+    # The wire is the only source: a ticket is never inherited from a parent, and
     # no hand-off door was opened for it. Checked rather than trusted — it
     # arrives from outside and is bound for an id attribute — and reissued when
     # it is missing, stale, or malformed.
-    def resolve_weft_mint
-      key = Weft.configuration.mint_wire_key
+    def resolve_weft_ticket
+      key = Weft.configuration.ticket_wire_key
       carried = wire_source[key] || wire_source[key.to_sym]
-      Weft::Addressing.mint?(carried) ? carried.to_s : Weft::Addressing.mint
+      Weft::Addressing.ticket?(carried) ? carried.to_s : Weft::Addressing.issue_ticket
     end
 
     # Speak for this fragment's DOM slot, or abandon the render.

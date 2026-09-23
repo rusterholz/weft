@@ -8,9 +8,9 @@ RSpec.describe Weft::DSL::Companions do
       # unique! buys in-page uniqueness and self-refresh stability. It cannot
       # make a component addressable from someone ELSE's request: the companion
       # resolves from the host's params, which have never heard of the token,
-      # so it mints a fresh one and the swap targets an id not on the page.
+      # so it issues a fresh one and the swap targets an id not on the page.
       badge = Class.new(Weft::Component) do
-        def self.name = "MintedBadge"
+        def self.name = "TicketedBadge"
         unique!
       end
 

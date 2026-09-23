@@ -105,7 +105,7 @@ RSpec.describe Weft::DSL::Identity do
   end
 
   # The third answer to "what names this component", beside identifying by
-  # params and being issued a mint: nothing does, because nothing addresses it.
+  # params and being issued a ticket: nothing does, because nothing addresses it.
   # A card repeated down a page is chrome — no route, no refresh, no companion —
   # and an id it shares with nine siblings is not merely useless, it is invalid
   # HTML that breaks getElementById and every `#id` selector pointed at it.
@@ -365,17 +365,17 @@ RSpec.describe Weft::DSL::Identity do
       end
     end
 
-    it "marks the class as carrying a mint" do
+    it "marks the class as carrying a ticket" do
       expect(badge).to be_unique
     end
 
-    it "identifies by no param at all — a mint is not one" do
-      # Two instances carrying the same mint are the same object to weft. That
+    it "identifies by no param at all — a ticket is not one" do
+      # Two instances carrying the same ticket are the same object to weft. That
       # is a property of the instance, not data the instance was handed.
       expect(badge.identifiers).to eq([])
     end
 
-    it "keeps the mint out of the params surface entirely" do
+    it "keeps the ticket out of the params surface entirely" do
       expect(badge.params).to be_empty
       expect(badge.declared_keys).to be_empty
     end
@@ -384,19 +384,19 @@ RSpec.describe Weft::DSL::Identity do
       instance = render_in_context(badge)
 
       expect(instance.params.to_h).to be_empty
-      expect(instance.weft_mint).to match(/\AM\h{8}\z/)
+      expect(instance.weft_ticket).to match(/\AT\h{8}\z/)
     end
 
     it "reads the wire key when it is used, not when it was declared" do
       # Recording the name at declaration would strand already-loaded classes
       # on the old one the moment the knob moved.
-      original = Weft.configuration.mint_key
-      Weft.configuration.mint_key = :_weft_id
+      original = Weft.configuration.ticket_key
+      Weft.configuration.ticket_key = :_weft_id
 
-      expect(render_in_context(badge, wire_params: { "._weft_id" => "M1a2b3c4d" }).weft_dom_id).
-        to eq("status-badge-M1a2b3c4d")
+      expect(render_in_context(badge, wire_params: { "._weft_id" => "T1a2b3c4d" }).weft_dom_id).
+        to eq("status-badge-T1a2b3c4d")
     ensure
-      Weft.configuration.mint_key = original
+      Weft.configuration.ticket_key = original
     end
 
     it "replaces an inherited identity wholesale, as identifies_by does" do
@@ -406,7 +406,7 @@ RSpec.describe Weft::DSL::Identity do
         identifies_by :order_id
       end
       child = Class.new(parent) do
-        def self.name = "MintedChild"
+        def self.name = "TicketedChild"
         unique!
       end
 
@@ -419,7 +419,7 @@ RSpec.describe Weft::DSL::Identity do
       child = Class.new(badge) { def self.name = "SpecialBadge" }
 
       expect(child).to be_unique
-      expect(render_in_context(child).weft_dom_id).to match(/\Aspecial-badge-M\h{8}\z/)
+      expect(render_in_context(child).weft_dom_id).to match(/\Aspecial-badge-T\h{8}\z/)
     end
 
     it "is overridden by a subclass declaring identifies_by" do
@@ -431,8 +431,8 @@ RSpec.describe Weft::DSL::Identity do
 
       expect(child).not_to be_unique
       expect(child.identifiers).to eq(%i[order_id])
-      expect(child.params).not_to have_key(:_mint)
-      expect(render_in_context(child, wire_params: { "order_id" => "7" }).weft_mint).to be_nil
+      expect(child.params).not_to have_key(:_ticket)
+      expect(render_in_context(child, wire_params: { "order_id" => "7" }).weft_ticket).to be_nil
     end
 
     it "raises when a class body also declares identifies_by" do
@@ -609,7 +609,7 @@ RSpec.describe Weft::DSL::Identity do
     end
   end
 
-  describe "minting" do
+  describe "issuing tickets" do
     let(:badge) do
       Class.new(Weft::Component) do
         def self.name = "StatusBadge"
@@ -622,7 +622,7 @@ RSpec.describe Weft::DSL::Identity do
     end
 
     it "issues a token at first render, when the wire carries none" do
-      expect(render_in_context(badge).weft_dom_id).to match(/\Astatus-badge-M\h{8}\z/)
+      expect(render_in_context(badge).weft_dom_id).to match(/\Astatus-badge-T\h{8}\z/)
     end
 
     it "issues a different token to each instance on the page" do
@@ -632,17 +632,17 @@ RSpec.describe Weft::DSL::Identity do
     end
 
     it "carries the token it was given, rather than issuing a new one" do
-      instance = render_in_context(badge, wire_params: { "._mint" => "M1a2b3c4d" })
+      instance = render_in_context(badge, wire_params: { "._ticket" => "T1a2b3c4d" })
 
-      expect(instance.weft_dom_id).to eq("status-badge-M1a2b3c4d")
+      expect(instance.weft_dom_id).to eq("status-badge-T1a2b3c4d")
     end
 
     it "serializes the token, so a refresh comes back to the same element" do
-      # The whole point of a mint: issued once at first render, then carried
+      # The whole point of a ticket: issued once at first render, then carried
       # back and forth until something forces a new first render.
-      instance = render_in_context(badge, wire_params: { "._mint" => "M1a2b3c4d" })
+      instance = render_in_context(badge, wire_params: { "._ticket" => "T1a2b3c4d" })
 
-      expect(instance.weft_component_url).to include("._mint=M1a2b3c4d")
+      expect(instance.weft_component_url).to include("._ticket=T1a2b3c4d")
     end
 
     it "round-trips: the id a refresh resolves to is the id it was serving" do
@@ -653,27 +653,27 @@ RSpec.describe Weft::DSL::Identity do
     end
 
     it "reissues rather than trusting a token that is not weft's" do
-      # A mint arrives from the wire, where anything can be typed. An id
+      # A ticket arrives from the wire, where anything can be typed. An id
       # attribute is no place to put an unchecked string.
-      instance = render_in_context(badge, wire_params: { "._mint" => '"><script>' })
+      instance = render_in_context(badge, wire_params: { "._ticket" => '"><script>' })
 
-      expect(instance.weft_dom_id).to match(/\Astatus-badge-M\h{8}\z/)
+      expect(instance.weft_dom_id).to match(/\Astatus-badge-T\h{8}\z/)
     end
 
     it "reissues a token of the wrong shape" do
-      instance = render_in_context(badge, wire_params: { "._mint" => "M1a2b" })
+      instance = render_in_context(badge, wire_params: { "._ticket" => "T1a2b" })
 
-      expect(instance.weft_dom_id).to match(/\Astatus-badge-M\h{8}\z/)
+      expect(instance.weft_dom_id).to match(/\Astatus-badge-T\h{8}\z/)
     end
 
     it "follows the configured key name" do
-      original = Weft.configuration.mint_key
-      Weft.configuration.mint_key = :_weft_id
-      instance = render_in_context(badge, wire_params: { "._weft_id" => "M1a2b3c4d" })
+      original = Weft.configuration.ticket_key
+      Weft.configuration.ticket_key = :_weft_id
+      instance = render_in_context(badge, wire_params: { "._weft_id" => "T1a2b3c4d" })
 
-      expect(instance.weft_dom_id).to eq("status-badge-M1a2b3c4d")
+      expect(instance.weft_dom_id).to eq("status-badge-T1a2b3c4d")
     ensure
-      Weft.configuration.mint_key = original
+      Weft.configuration.ticket_key = original
     end
 
     it "gives a nested unique component its own token, never its parent's" do
@@ -689,10 +689,10 @@ RSpec.describe Weft::DSL::Identity do
       end
 
       host = render_in_context(outer)
-      minted = host.children.map { |c| c.get_attribute("id") }.compact
+      issued = host.children.map { |c| c.get_attribute("id") }.compact
 
-      expect(minted.uniq.size).to eq(2)
-      expect(minted).not_to include(host.weft_dom_id)
+      expect(issued.uniq.size).to eq(2)
+      expect(issued).not_to include(host.weft_dom_id)
     end
 
     it "rides the component's own request lineage: refresh URL, stream, its actions" do
@@ -701,44 +701,44 @@ RSpec.describe Weft::DSL::Identity do
         unique!
         performs(:advance) { nil }
       end
-      instance = render_in_context(acting, wire_params: { "._mint" => "M1a2b3c4d" })
+      instance = render_in_context(acting, wire_params: { "._ticket" => "T1a2b3c4d" })
       action = Weft::Action.new(name: :advance, method: :post, renders: acting)
 
-      expect(instance.weft_component_url).to include("._mint=M1a2b3c4d")
-      expect(instance.send(:stream_url)).to include("._mint=M1a2b3c4d")
-      expect(action.to_htmx_attrs(instance)["hx-vals"]).to include('"._mint":"M1a2b3c4d"')
-      expect(action.to_htmx_attrs(instance)["hx-target"]).to eq("#acting-badge-M1a2b3c4d")
+      expect(instance.weft_component_url).to include("._ticket=T1a2b3c4d")
+      expect(instance.send(:stream_url)).to include("._ticket=T1a2b3c4d")
+      expect(action.to_htmx_attrs(instance)["hx-vals"]).to include('"._ticket":"T1a2b3c4d"')
+      expect(action.to_htmx_attrs(instance)["hx-target"]).to eq("#acting-badge-T1a2b3c4d")
     end
 
     it "leaves a user's own param of the same name completely alone" do
       # The load-bearing isolation: weft's wire namespace is a leading dot the
-      # operator can neither supply nor omit, so `param :_mint` is genuinely
+      # operator can neither supply nor omit, so `param :_ticket` is genuinely
       # the user's — it is not clobbered outbound nor read back inbound.
       clash = Class.new(Weft::Component) do
         def self.name = "Clash"
         unique!
-        param :_mint
+        param :_ticket
       end
-      instance = render_in_context(clash, wire_params: { "._mint" => "M1a2b3c4d", "_mint" => "theirs" })
+      instance = render_in_context(clash, wire_params: { "._ticket" => "T1a2b3c4d", "_ticket" => "theirs" })
 
-      expect(instance.params[:_mint]).to eq("theirs")
-      expect(instance.weft_mint).to eq("M1a2b3c4d")
-      expect(instance.weft_dom_id).to eq("clash-M1a2b3c4d")
-      expect(instance.weft_component_url).to include("_mint=theirs").and include("._mint=M1a2b3c4d")
+      expect(instance.params[:_ticket]).to eq("theirs")
+      expect(instance.weft_ticket).to eq("T1a2b3c4d")
+      expect(instance.weft_dom_id).to eq("clash-T1a2b3c4d")
+      expect(instance.weft_component_url).to include("_ticket=theirs").and include("._ticket=T1a2b3c4d")
     end
 
     it "never rides someone else's request" do
       # `with:` defaults to the nearest component's params, which travel on an
-      # element the user is wiring up — a different object's request. A mint
+      # element the user is wiring up — a different object's request. A ticket
       # going along would assert that element IS this component, which is the
       # same falsehood `brings` refuses for a unique! companion.
-      instance = render_in_context(badge, wire_params: { "._mint" => "M1a2b3c4d" })
+      instance = render_in_context(badge, wire_params: { "._ticket" => "T1a2b3c4d" })
 
       expect(instance.send(:serializable_params)).to be_empty
-      expect(instance.weft_addressing_params).to eq("._mint" => "M1a2b3c4d")
+      expect(instance.weft_addressing_params).to eq("._ticket" => "T1a2b3c4d")
     end
 
-    it "does not mint for a component that never asked" do
+    it "does not issue a ticket for a component that never asked" do
       plain = Class.new(Weft::Component) do
         def self.name = "PlainCard"
         param :status

@@ -40,7 +40,7 @@ Weft learns to say what a thing *is*: components name their own identity instead
   - `identifies_by { |params| "cart-#{params.user_id}" }` composes the whole id yourself, for the cases a list of slots can't express
   - An identifying value that isn't a scalar raises `Weft::InvalidIdentifierValue` naming the component and the param, rather than composing a selector two instances could share
 
-- **A Slot For Components With Nothing To Name Them** (`unique!`) – A badge repeated down a table or a card the page renders many of asks for its own slot, and Weft issues it a token at first render and carries it from then on. Uniqueness doesn't publish a route: a component that wants one still declares something that earns it.
+- **A Slot For Components With Nothing To Name Them** (`unique!`) – A badge repeated down a table or a card the page renders many of asks for its own slot, and Weft issues it a ticket at first render and carries it from then on. The ticket rides in Weft's own wire namespace, so no param of yours can collide with it however either is named; `Weft.configuration.ticket_key` renames it if you prefer something else on your URLs. Uniqueness doesn't publish a route: a component that wants one still declares something that earns it.
 
 - **Digested Identity Slots** (`digest:`) – `param :label, digest: true` renders an identifying value as a short deterministic hash, so values that are blank, long, or not URL-shaped still give each instance a stable target. The same value always yields the same id, across processes and across workers. `digest: 12` widens one param; `Weft.configuration.digest_length` moves the default.
 
