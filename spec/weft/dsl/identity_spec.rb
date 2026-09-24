@@ -256,15 +256,19 @@ RSpec.describe Weft::DSL::Identity do
     # value is identical on every instance, so digesting it yields the same
     # token every time. The honest advice is that the key does not belong in
     # the identity at all.
+    # An identity built only from pins is refused outright at the registry's
+    # validation pass, so the reachable case for this remedy is a pin sitting
+    # beside a key that varies — where the id still distinguishes instances and
+    # the pin is redundant tail rather than a broken identity.
     it "tells a defines author the key does not belong in the identity" do
       klass = Class.new(Weft::Component) do
         def self.name = "BlankDefines"
+        param :order_id, default: "7"
         defines label: ""
-        identifies_by :label
+        identifies_by :order_id, :label
       end
 
-      render_blank(klass)
-
+      expect(render_blank(klass)).to include('id="blank-defines-7-"')
       expect(Weft.logger).to have_received(:warn).with(/same on every instance.*cannot distinguish/m)
       expect(Weft.logger).not_to have_received(:warn).with(/digest: true/)
     end

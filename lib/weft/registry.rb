@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "weft/registry/identity_validation"
 require "weft/registry/validation"
 
 module Weft
@@ -35,6 +36,7 @@ module Weft
   # params into the linear walk OR invent two parallel code paths; keeping
   # them separate is the simplest honest answer.
   class Registry
+    include IdentityValidation
     include Validation
 
     def initialize
@@ -57,6 +59,21 @@ module Weft
     def register_page(page_class)
       @pages.add(page_class)
       @registrations_validated = false
+    end
+
+    # Force the whole-set validation pass, raising Weft::InvalidDefinition on the
+    # first problem found. Weft runs this itself at the first request; calling it
+    # at boot turns a defect that would otherwise surface on the first response
+    # into one that surfaces on startup, and calling it from a health endpoint
+    # answers whether this process can serve at all.
+    #
+    # Cheap to call repeatedly: the pass memoizes once it passes, and re-runs
+    # only when a class registers. A pass that *found* a problem does not
+    # memoize, so a readiness probe keeps reporting an unhealthy process rather
+    # than going quiet after the first scrape.
+    def validate! # rubocop:disable Naming/PredicateMethod -- a bang command, true on success as `save!` is
+      validate_registrations!
+      true
     end
 
     # Empty the registry. The evict-everything reset for hand-rolled reload

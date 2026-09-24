@@ -74,7 +74,7 @@ end
 
 **The included component needs no route.** In this variant `ContactsTable` declares no params and no verbs, so it isn't independently addressable — `GET /_components/contacts_table` answers 404 — and that's fine: it renders inside the page and travels inside the form's responses. Companions only need to *render* (see [routing](../routing.md#routable-vs-render-target)).
 
-**The callable resets the form.** An action callable's return value directs the re-render ([the callable contract](../dsl.md#the-callable-contract)): returning a hash merges it into the params. Returning `{ name: nil, email: nil }` clears the just-submitted values, so the form comes back empty after each add — htmx's reset-the-form problem solved server-side, with no `hx-on` handler. (It also keeps the component's derived DOM id, which is built from the first param's value, stable across renders.)
+**The callable resets the form.** An action callable's return value directs the re-render ([the callable contract](../dsl.md#the-callable-contract)): returning a hash merges it into the params. Returning `{ name: nil, email: nil }` clears the just-submitted values, so the form comes back empty after each add — htmx's reset-the-form problem solved server-side, with no `hx-on` handler.
 
 **Form fields pair with declared params.** The form declares `name` and `email` so the submitted fields reach the callable as `params.name` and `params.email` — the same pairing as every Weft form (covered in depth in [the tutorial](../tutorial.md#7-taking-rsvps)). And since `form(action: :add)` also emits plain `action`/`method` attributes, the add still works without JavaScript; only the tableside update needs htmx.
 

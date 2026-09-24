@@ -88,18 +88,18 @@ The initial render — the wired input, and the container holding the unfiltered
        hx-get="/_components/contact_results" hx-swap="innerHTML"
        hx-target="#search-results" hx-trigger="input changed delay:300ms"/>
 <div id="search-results">
-  <div id="contact-results-">
+  <div id="contact-results">
     <table>…all eight people…</table>
   </div>
 </div>
 ```
 
-(That `id="contact-results-"` is the component's DOM id — dasherized class name plus first param value, which here is the empty string.)
+(That `id="contact-results"` is the component's DOM id, which is just its dasherized class name: it declares no [`identifies_by`](../dsl.md#identity), so no param value enters it and the id holds still as the results change underneath.)
 
 Typing "grimes" settles into `GET /_components/contact_results?q=grimes`:
 
 ```html
-<div id="contact-results-grimes">
+<div id="contact-results">
   <table>
     <thead><tr><th>Name</th><th>Email</th></tr></thead>
     <tbody>
@@ -113,7 +113,7 @@ Typing "grimes" settles into `GET /_components/contact_results?q=grimes`:
 And a query with no matches (`GET /_components/contact_results?q=zz`) returns the friendly empty state:
 
 ```html
-<div id="contact-results-zz">
+<div id="contact-results">
   <p>No one matches “zz”.</p>
 </div>
 ```

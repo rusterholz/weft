@@ -248,10 +248,18 @@ Restart, and the Summer BBQ page shows Priya under "Who's coming".
 View the page source and look at the wrapper Weft rendered:
 
 ```html
-<div id="attendee-list-summer-bbq">
+<div id="attendee-list">
 ```
 
-That DOM id was derived, not written: the class name, plus the value of the component's **first declared param**. The convention matters — it's how updates land on the right element when several instances share a page — so declare the identifying param first. (A list of attendee *rows*, say, would want `param :name` first, or every row would collide on the same event-derived id.)
+That DOM id was derived, not written: it's the class name, dasherized. One `AttendeeList` renders per page, so the class name alone names it unambiguously, and that's the id every update targets.
+
+When several instances of one component share a page, the class name isn't enough: they'd all claim the same id, and only one fragment could ever land. Declare [`identifies_by`](dsl.md#identity) and each instance gets its own slot, built from the values you name:
+
+```ruby
+identifies_by :name      # => id="attendee-row-priya"
+```
+
+That's the declaration a list of attendee *rows* would want. Nothing infers it: whether two instances share a page is a fact about the render, not about the class.
 
 One more thing, and it's the heart of Weft. Your component isn't just markup inside the page — it's independently addressable:
 
@@ -323,7 +331,7 @@ That's a lot from one class. Unpacking it:
 **`form(action: :submit)` wires the form to the action.** Look at the rendered HTML:
 
 ```html
-<form hx-post="/_components/rsvp_form/submit" hx-target="#rsvp-form-trivia-night"
+<form hx-post="/_components/rsvp_form/submit" hx-target="#rsvp-form"
       hx-swap="outerHTML" action="/_components/rsvp_form/submit" method="post">
 ```
 
@@ -333,7 +341,7 @@ The `hx-*` attributes make the form submit in place. The plain `action` and `met
 
 **Validation is a raise plus a recovery.** The action raises `Weft::Unprocessable`; the `recovers` declaration catches it, and its block returns extra params to merge into the re-render — here, `error_message`, which `build` displays when present. Note that `error_message` is itself a declared param: recovery data flows through the same schema as everything else. The response even carries a semantically-correct 422 status. See [Error handling](error-handling.md) for how far this system goes.
 
-**`brings AttendeeList` updates the list in the same response.** Submitting the form changes data that *another* component displays. This declaration says: whenever RSVPForm responds to an action, render AttendeeList too, marked so it swaps into its own place in the page (by that derived DOM id — this is why the convention exists). One interaction, two regions updated, zero JavaScript.
+**`brings AttendeeList` updates the list in the same response.** Submitting the form changes data that *another* component displays. This declaration says: whenever RSVPForm responds to an action, render AttendeeList too, marked so it swaps into its own place in the page, addressed by the DOM id you just saw. One interaction, two regions updated, zero JavaScript.
 
 ## 8. Going live
 
@@ -346,7 +354,7 @@ The attendee list updates when *you* RSVP — but not when someone else does. On
 This edit hot-reloads — no restart. Open the same event in two browser windows, RSVP in one, and within ten seconds the other window's list catches up. The component now polls its own URL (the one you curled in step 6) and swaps itself:
 
 ```html
-<div id="attendee-list-summer-bbq"
+<div id="attendee-list"
      hx-get="/_components/attendee_list?event_id=summer-bbq"
      hx-trigger="every 10s" hx-swap="outerHTML">
 ```
@@ -357,7 +365,7 @@ Declared once on the class, the behavior is present in the initial page render *
 
 You've built pages that route themselves, components that compose and self-address, a validated user action with out-of-band updates, and a live-polling list — the core of how Weft apps are put together.
 
-**An exercise, if you're enjoying yourself:** add a "withdraw" button next to each attendee. You'll want a per-attendee component (careful which param you declare first — each row needs its own DOM id), and the `dismisses` verb, which removes a component from the page when its action succeeds. The [DSL reference](dsl.md#dismisses--remove-from-the-dom) has what you need.
+**An exercise, if you're enjoying yourself:** add a "withdraw" button next to each attendee. You'll want a per-attendee component declaring `identifies_by :name`, so each row gets its own DOM id, and the `dismisses` verb, which removes a component from the page when its action succeeds. The [DSL reference](dsl.md#dismisses--remove-from-the-dom) has what you need.
 
 **A finishing touch:** the events list living at `/events` leaves `/` as a 404. Give `EventsPage` an explicit home: `self.page_path = "/"`.
 

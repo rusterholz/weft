@@ -15,6 +15,7 @@ class RevenueTable < Weft::Component
   builder_method :revenue_table
 
   param :year, default: 2025, type: :integer
+  identifies_by :year
 
   def build(attributes = {})
     super
@@ -33,6 +34,7 @@ class AnnualReport < Weft::Component
   builder_method :annual_report
 
   param :year, default: 2025, type: :integer
+  identifies_by :year
 
   def build(attributes = {})
     super

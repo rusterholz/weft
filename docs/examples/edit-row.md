@@ -18,6 +18,7 @@ class PersonRow < Weft::Component
 
   param :person_id
   receives :person_id
+  identifies_by :person_id
 
   def tag_name
     "tr"
@@ -41,6 +42,7 @@ class PersonRowEditor < Weft::Component
   param :person_id
   param :name
   param :email
+  identifies_by :person_id
 
   transfers :save, to: PersonRow do |params|
     PEOPLE.fetch(params.person_id).merge!(name: params.name, email: params.email)
@@ -88,7 +90,7 @@ end
 
 ## How it works
 
-**It's click-to-edit, once per row.** Both components render as `<tr>` (the `tag_name` override), with the identifying param declared first so each carries a usable DOM id. Entering edit mode changes nothing on the server, so Edit is a [`loads:`](../dsl.md#loads) — a GET that fetches the editor row and replaces the display row (`swap: :replace, target: self`). Saving is a [`transfers`](../dsl.md#transfers--actions-that-render-something-else): the write runs, then the *display* row renders in the editor's place. Cancel is the Edit button's mirror image, pointed back at `PersonRow`. As in click-to-edit, defining the display component first lets `transfers :save, to: PersonRow` resolve in the editor's class body, while `loads: PersonRowEditor` waits until render.
+**It's click-to-edit, once per row.** Both components render as `<tr>` (the `tag_name` override), and both declare `identifies_by :person_id` so each row carries a DOM id of its own rather than sharing one with its siblings. Entering edit mode changes nothing on the server, so Edit is a [`loads:`](../dsl.md#loads) — a GET that fetches the editor row and replaces the display row (`swap: :replace, target: self`). Saving is a [`transfers`](../dsl.md#transfers--actions-that-render-something-else): the write runs, then the *display* row renders in the editor's place. Cancel is the Edit button's mirror image, pointed back at `PersonRow`. As in click-to-edit, defining the display component first lets `transfers :save, to: PersonRow` resolve in the editor's class body, while `loads: PersonRowEditor` waits until render.
 
 **Where `person_id` comes from differs by component.** The table hands each display row its `person_id` (`person_row(person_id: id)`) — a [`receives`](../dsl.md#receives--caller-handoffs) handoff, since per-row values can't inherit down the render tree — and `PersonRow` declares it as a `param` too, so the same id serializes into the row's own route and DOM id. The editor is different: it's always *fetched* by URL (Edit and Cancel both `loads:` it with `with: { person_id: … }`), so it reads `person_id` straight from the wire — `param` alone, no handoff.
 
