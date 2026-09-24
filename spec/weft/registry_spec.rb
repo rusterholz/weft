@@ -202,6 +202,319 @@ RSpec.describe Weft::Registry do
     end
   end
 
+  # An identity declaration names keys, and nothing checked that the class
+  # actually has them. Checked across the registered set rather than in the
+  # macro because `identifies_by` may legally precede the `param` lines it
+  # names, so at the macro there is nothing to validate against yet.
+  describe "identity declaration validation" do
+    it "raises when an identifier names a key no door declares" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "OrderRow"
+        param :order_id
+        identifies_by :ordre_id
+      end
+      registry.register(klass)
+
+      expect { registry.lookup("/_components/order_row") }.to raise_error(
+        Weft::InvalidDefinition, /OrderRow identifies by :ordre_id.*does not declare.*:order_id/m
+      )
+    end
+
+    # The ordering wrinkle is the whole reason this lives in the pass.
+    it "accepts an identifier declared after the identifies_by line" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "LateParam"
+        identifies_by :order_id
+        param :order_id
+      end
+      registry.register(klass)
+
+      expect { registry.lookup("/_components/late_param") }.not_to raise_error
+    end
+
+    it "raises whichever order the two lines appear in" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "LateTypo"
+        identifies_by :ordre_id
+        param :order_id
+      end
+      registry.register(klass)
+
+      expect { registry.lookup("/_components/late_typo") }.
+        to raise_error(Weft::InvalidDefinition, /LateTypo/)
+    end
+
+    it "names every missing key, not just the first" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "TwoTypos"
+        param :order_id
+        identifies_by :ordre_id, :statuss
+      end
+      registry.register(klass)
+
+      expect { registry.lookup("/x") }.
+        to raise_error(Weft::InvalidDefinition, /:ordre_id.*:statuss/m)
+    end
+
+    it "says so plainly when the class declares no keys at all" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "NothingDeclared"
+        identifies_by :order_id
+      end
+      registry.register(klass)
+
+      expect { registry.lookup("/x") }.
+        to raise_error(Weft::InvalidDefinition, /declares no params at all/)
+    end
+
+    it "accepts a key declared through receives" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "HandedOver"
+        receives :order
+        identifies_by :order
+      end
+      registry.register(klass)
+
+      expect { registry.lookup("/x") }.not_to raise_error
+    end
+
+    # A derived key reconstructs from the wire params it reads, so it composes
+    # an id perfectly well — measured at M5.12, against M2's original guess.
+    it "accepts a key declared through derives" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "Derived"
+        param :order_id
+        derives(:slug) { |p| "order-#{p.order_id}" }
+        identifies_by :slug
+      end
+      registry.register(klass)
+
+      expect { registry.lookup("/x") }.not_to raise_error
+    end
+
+    it "has nothing to check for a block identity, which names no keys" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "Blocked"
+        identifies_by { |_params| "somewhere-else" }
+      end
+      registry.register(klass)
+
+      expect { registry.lookup("/x") }.not_to raise_error
+    end
+
+    it "has nothing to check for unique! or anonymous!" do
+      a = Class.new(Weft::Component) do
+        def self.name = "Ticketed"
+        unique!
+      end
+      b = Class.new(Weft::Component) do
+        def self.name = "Unaddressed"
+        anonymous!
+      end
+      registry.register(a)
+      registry.register(b)
+
+      expect { registry.lookup("/x") }.not_to raise_error
+    end
+
+    it "validates an inherited identity against the subclass's own declarations" do
+      parent = Class.new(Weft::Component) do
+        def self.name = "ParentRow"
+        param :order_id
+        identifies_by :order_id
+      end
+      child = Class.new(parent) { def self.name = "ChildRow" }
+      registry.register(parent)
+      registry.register(child)
+
+      expect { registry.lookup("/x") }.not_to raise_error
+    end
+  end
+
+  # A pin is the same value on every instance, so it is always redundant with
+  # the stem — which makes an identity built only from pins an identity that
+  # cannot tell two instances apart. Until now that was diagnosed only when the
+  # pinned value happened to render blank; a non-blank pin, which is what
+  # `defines` is for, was silently accepted.
+  describe "a defines key in an identity" do
+    before { allow(Weft.logger).to receive(:warn) }
+
+    it "raises when every identifying key is pinned" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "PinnedRow"
+        defines label: "Drivers"
+        identifies_by :label
+      end
+      registry.register(klass)
+
+      expect { registry.lookup("/x") }.to raise_error(
+        Weft::InvalidDefinition, /PinnedRow identifies by :label.*pins.*same DOM id/m
+      )
+    end
+
+    # The blank case used to warn and nothing else; it is the same defect.
+    it "raises for a pin that renders blank, which only warned before" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "BlankPinnedRow"
+        defines label: ""
+        identifies_by :label
+      end
+      registry.register(klass)
+
+      expect { registry.lookup("/x") }.to raise_error(Weft::InvalidDefinition, /BlankPinnedRow/)
+    end
+
+    it "names every pinned key" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "TwicePinned"
+        defines label: "Drivers", accent: "available"
+        identifies_by :label, :accent
+      end
+      registry.register(klass)
+
+      expect { registry.lookup("/x") }.
+        to raise_error(Weft::InvalidDefinition, /:label, :accent/)
+    end
+
+    # Mixed with a varying key the id still distinguishes instances, so the pin
+    # is redundant tail rather than a broken identity. Refusing it would refuse
+    # a declaration that works.
+    it "warns rather than raises when a pin sits beside a varying key" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "MixedRow"
+        param :order_id
+        defines label: "Drivers"
+        identifies_by :order_id, :label
+      end
+      registry.register(klass)
+
+      expect { registry.lookup("/x") }.not_to raise_error
+      expect(Weft.logger).to have_received(:warn).
+        with(/MixedRow identifies by :label.*pins.*Drop it from the identity/m)
+    end
+
+    it "names every redundant pin in one warning" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "MixedTwicePinned"
+        param :order_id
+        defines label: "Drivers", accent: "available"
+        identifies_by :order_id, :label, :accent
+      end
+      registry.register(klass)
+      registry.lookup("/x")
+
+      expect(Weft.logger).to have_received(:warn).with(/:label, :accent/).once
+    end
+
+    # A pin that cannot compose an id at all outranks the redundancy warning:
+    # the identity is broken rather than merely wasteful.
+    it "raises for a non-scalar pin beside a varying key" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "ArrayPinned"
+        param :order_id
+        defines tags: []
+        identifies_by :order_id, :tags
+      end
+      registry.register(klass)
+
+      expect { registry.lookup("/x") }.to raise_error(
+        Weft::InvalidDefinition, /ArrayPinned identifies by :tags.*pins.*\[\].*Array/m
+      )
+    end
+
+    it "says nothing about a derives, whose value varies per render" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "DerivedRow"
+        param :order_id
+        derives(:slug) { |p| "order-#{p.order_id}" }
+        identifies_by :slug
+      end
+      registry.register(klass)
+
+      expect { registry.lookup("/x") }.not_to raise_error
+      expect(Weft.logger).not_to have_received(:warn).with(/pins/)
+    end
+  end
+
+  # A declared non-scalar default is the one piece of declare-time evidence an
+  # untyped param offers: proof the key can hold something no DOM id can be
+  # composed from. A typed param needs none of this — its coercion returns a
+  # scalar, and a default disagreeing with its type is already refused at the
+  # macro.
+  describe "non-scalar defaults on identifying params" do
+    it "raises for a non-scalar default on an identifying param" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "TaggedRow"
+        param :tags, default: []
+        identifies_by :tags
+      end
+      registry.register(klass)
+
+      expect { registry.lookup("/x") }.to raise_error(
+        Weft::InvalidDefinition, /TaggedRow identifies by :tags.*default \[\].*Array/m
+      )
+    end
+
+    it "raises for a non-scalar default on an identifying handoff" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "HandedRow"
+        receives :payload, default: {}
+        identifies_by :payload
+      end
+      registry.register(klass)
+
+      expect { registry.lookup("/x") }.
+        to raise_error(Weft::InvalidDefinition, /HandedRow identifies by :payload.*Hash/m)
+    end
+
+    it "leaves a non-scalar default alone on a param that does not identify" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "UnidentifiedTags"
+        param :order_id
+        param :tags, default: []
+        identifies_by :order_id
+      end
+      registry.register(klass)
+
+      expect { registry.lookup("/x") }.not_to raise_error
+    end
+
+    it "allows a scalar default" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "ScalarDefault"
+        param :status, default: "active"
+        identifies_by :status
+      end
+      registry.register(klass)
+
+      expect { registry.lookup("/x") }.not_to raise_error
+    end
+
+    # nil is a legitimate identifying value — a record not saved yet has a
+    # legitimately absent key — and is what the signature means by "none given".
+    it "allows a nil default" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "NilDefault"
+        param :order_id, default: nil
+        identifies_by :order_id
+      end
+      registry.register(klass)
+
+      expect { registry.lookup("/x") }.not_to raise_error
+    end
+
+    it "allows an identifying param with no default at all" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "NoDefault"
+        param :order_id
+        identifies_by :order_id
+      end
+      registry.register(klass)
+
+      expect { registry.lookup("/x") }.not_to raise_error
+    end
+  end
+
   describe "DOM id base collision detection" do
     it "raises when two components derive the same id base, routable or not" do
       # The route check is routability-gated, so a non-routable class beside a
@@ -375,6 +688,51 @@ RSpec.describe Weft::Registry do
       registry.lookup("/_components/quiet_slip")
 
       expect(Weft.logger).not_to have_received(:warn)
+    end
+  end
+
+  describe "#validate!" do
+    it "forces the pass, raising on the first problem it finds" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "TypoRow"
+        param :order_id
+        identifies_by :ordre_id
+      end
+      registry.register(klass)
+
+      expect { registry.validate! }.to raise_error(Weft::InvalidDefinition, /TypoRow/)
+    end
+
+    it "returns true for a sound set" do
+      registry.register(component_class)
+
+      expect(registry.validate!).to be true
+    end
+
+    # A readiness probe has to keep reporting an unhealthy process, so a pass
+    # that found a problem must not memoize itself as done.
+    it "keeps raising on every call while the set is broken" do
+      klass = Class.new(Weft::Component) do
+        def self.name = "StillBroken"
+        identifies_by :nope
+      end
+      registry.register(klass)
+
+      expect { registry.validate! }.to raise_error(Weft::InvalidDefinition)
+      expect { registry.validate! }.to raise_error(Weft::InvalidDefinition)
+    end
+
+    it "re-runs after a class registers later" do
+      registry.register(component_class)
+      expect(registry.validate!).to be true
+
+      late = Class.new(Weft::Component) do
+        def self.name = "LateTypoRow"
+        identifies_by :nope
+      end
+      registry.register(late)
+
+      expect { registry.validate! }.to raise_error(Weft::InvalidDefinition, /LateTypoRow/)
     end
   end
 

@@ -10,7 +10,8 @@ module Weft
     #
     # Together because they share a pass and a memo — the registry invalidates
     # once when a class registers, and both re-run at the next request rather
-    # than on every registration.
+    # than on every registration. {IdentityValidation} rides the same pass with
+    # the checks that need only one class's own declarations.
     #
     # Depends on Registry internals: `@components`, `routable_components`,
     # `routable_pages`, and `resolved_page_pattern`.
@@ -19,33 +20,18 @@ module Weft
 
       # Everything that has to hold across the registered set as a whole, in one
       # memoized pass (cleared when a class registers), so it runs at first
-      # request and is a no-op thereafter. Routes first: a pair colliding on both
-      # a route and an id base is more actionably reported as the route.
+      # request and is a no-op thereafter. Identity first: those report one
+      # class's own body with a one-line remedy, where a collision reports a pair
+      # and may need a rename or an explicit path. Then routes before id bases: a
+      # pair colliding on both is more actionably reported as the route.
       def validate_registrations!
         return if @registrations_validated
 
+        validate_identifiers!
         validate_routes!
         validate_id_bases!
         validate_addressability!
         @registrations_validated = true
-      end
-
-      # A stream addresses its component by DOM id — `sse-swap` carries it — so a
-      # component that declines an id has nowhere for its pushes to land. Checked
-      # here rather than in either macro because `anonymous!` and `pushes` can
-      # appear in a class body in either order.
-      #
-      # `refreshes` is deliberately absent: it renders `hx-swap="outerHTML"` with
-      # no `hx-target`, so it addresses itself positionally and an anonymous
-      # component refreshes perfectly well.
-      def validate_addressability!
-        @components.each do |klass|
-          next unless klass.anonymous? && klass.push_config&.key?(:every)
-
-          raise Weft::InvalidDefinition,
-                "#{klass.name} is anonymous! but declares pushes — a stream swaps by DOM id, " \
-                "so it has nowhere to land. Give the component an identity, or drop the pushes."
-        end
       end
 
       # Build the effective-route table across every routable component (its base
