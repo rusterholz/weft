@@ -15,6 +15,7 @@ class ContactRows < Weft::Component
   PER_PAGE = 10
 
   param :page, default: 1, type: :integer
+  identifies_by :page
 
   def tag_name
     "tbody"

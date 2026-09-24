@@ -17,6 +17,7 @@ class MemberPeek < Weft::Component
   builder_method :member_peek
 
   param :handle
+  identifies_by :handle
 
   def build(attributes = {})
     super

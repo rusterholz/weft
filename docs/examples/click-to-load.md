@@ -15,6 +15,7 @@ class AgentRows < Weft::Component
   PER_PAGE = 6
 
   param :page, default: 1, type: :integer
+  identifies_by :page
 
   def build(attributes = {})
     super

@@ -6,6 +6,8 @@ Weft learns to say what a thing *is*: components name their own identity instead
 
 ### New Features:
 
+- **Ask Weft Whether It Can Serve** (`Weft.registry.validate!`) – Runs every check Weft would otherwise run at the first request: route and DOM id collisions, identity declarations, and streams with nowhere to land. Call it at boot and a broken declaration fails on startup instead of on a visitor's first page; call it from a health endpoint and it answers whether this process can serve at all. Cheap to call repeatedly, and a process that is still broken keeps saying so rather than going quiet after the first check.
+
 - **Errors That Hand Back What You Typed** – When a wire value is refused, the error carries every violation from that request: the key, what the type wanted, and the raw value exactly as it arrived. So a `recovers` edge can redraw the form with `wombat` still sitting in the age field and a message beside it, instead of the zero a lenient conversion would have put there.
   - Every bad field in one pass, so a form with three of them reports three rather than making the visitor fix them one round trip at a time
   - The fields that *did* arrive cleanly are still in `params`, so a redraw keeps the rest of the form intact
@@ -75,6 +77,7 @@ Weft learns to say what a thing *is*: components name their own identity instead
 - **A Mistyped `defines` Option Says So** – `defines` takes one hash of pairs, so `defines label: "x", digest: true` quietly declared a key called `digest` instead of refusing an option the way `param` and `derives` do. Weft now warns when a key carries a facet's name *and* holds a value that facet would have accepted, and stays quiet otherwise, because `defines type: "premium"` is a perfectly good key named `type`.
 
 - **Weft's Advice Names The Door You Actually Used** – When an identifying value renders blank, the warning always said to declare `param :label, digest: true`, whichever door the key came through. For a `derives` that pointed at a keyword the wrong verb takes; for a `defines` it worked but quietly made the component routable. It now names the declaring door, and tells a `defines` author the thing actually worth hearing: a pinned value is identical on every instance, so it cannot distinguish them and does not belong in an identity.
+  - A pin sitting beside a key that *does* vary gets that advice whatever its value, not only when it renders blank. The id still tells instances apart, so the pin is redundant rather than broken, and Weft says so once per class instead of refusing it
 
 - **A Handed Value Reaches Everything The Component Renders** – `status_card(status: "shipped")` told that card its status, and anything the card built inside it went back to reading the page's own `?status=` instead. A component nested in a card you had expressly handed a value showed the page's filter, and the deeper it sat the less the call site meant. A handed value now keeps its place for the whole subtree below the component it was handed to, so what a call site says about a card wins over what the page happened to be filtered by.
 
@@ -117,6 +120,12 @@ Weft learns to say what a thing *is*: components name their own identity instead
 - **Fallback Derivations Stop Nagging** – A component that declares `derives(:order)` *and* gets embedded under something that already supplies the order is doing the right thing: fetch your own when you're rendered standalone, take the ancestor's when you're nested. Weft used to log a warning every time the second half happened — warning about correct code, and suggesting a fix (share one derivation) that's wrong whenever the two deliberately differ, as when a page eager-loads what a card doesn't. It's gone. The overlay warning stays, because a verb block returning a key really does stop your derivation running for that whole request.
 
 ### Breaking Changes:
+
+- **An Identity That Cannot Work Is Refused Before You Serve** – An `identifies_by` naming something that could never compose a usable DOM id used to be accepted in silence and discovered in the browser, if at all. Weft now checks every component's identity declaration before answering its first request, and refuses the ones that cannot work, naming the class and what it declared.
+  - A key no door declares is a typo. It used to render a blank slot and advise you to add `digest:` to a param that did not exist; the error now lists the keys the class really declares
+  - An identity built only from `defines` pins hands every instance of the class the same id, so only one of them could ever be swapped or removed. Identify by a value that varies, or declare `unique!` for a slot of its own
+  - A pinned value that is not a scalar, and a declared `default:` that is not, are both proof the key can hold something no DOM id can be composed from. Each is now refused where it is written rather than on the first render that falls back to it
+  - Reach for `Weft.registry.validate!` to run these at boot, or from a health check, rather than waiting for the first request
 
 - **A Pinned Value Wins Against The Page Around It** (`defines`) – `defines label: "Drivers"` used to lose to any ancestor that happened to supply `label`, so a card pinning its own label rendered the page's `?label=` instead. A pin now claims its key for the component and everything it contains, which is the whole reason to reach for `defines` over a plain Ruby constant.
   - It still yields to the component's *own* wire param, so a routable component keeps answering for itself

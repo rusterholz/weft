@@ -46,7 +46,7 @@ end
 
 **The file arrives through a declared param.** The `document` param receives whatever the server's multipart parsing produces — under Sinatra, a hash carrying `:filename`, `:type`, and a `:tempfile` ready to read. The callable checks for that shape before storing, which quietly covers the other case too: submitting with no file chosen sends `document=` (an empty string), the `is_a?(Hash)` guard skips it, and the re-render is a no-op.
 
-**Returning `{ document: nil }` is load-bearing.** A callable's returned hash merges into the params for the re-render ([the callable contract](../dsl.md#the-callable-contract)) — and this one uses that to *clear* the file param rather than add anything. Weft derives a component's DOM id from its first declared param, and a tempfile-toting multipart hash in that slot would smear itself across the wrapper's id and every piece of htmx wiring derived from it. Cleared, the component comes back as plain `#report-uploader`: same id, same wiring, fresh empty file input.
+**Returning `{ document: nil }` is load-bearing.** A callable's returned hash merges into the params for the re-render ([the callable contract](../dsl.md#the-callable-contract)) — and this one uses that to *clear* the file param rather than add anything. Left in place, the tempfile-toting multipart hash would still be in `params` for the re-render, so the fresh input would be built from a value the browser can't put back. Cleared, the component comes back as plain `#report-uploader` — its id is the dasherized class name, since it declares no `identifies_by` — with a fresh empty file input.
 
 ## On the wire
 

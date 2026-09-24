@@ -18,6 +18,7 @@ class ContactRow < Weft::Component
 
   param :contact_id
   receives :contact_id
+  identifies_by :contact_id
 
   dismisses :destroy do |params|
     CONTACT_BOOK.delete(params.contact_id)
@@ -59,7 +60,7 @@ end
 
 ## How it works
 
-**The row is the component.** Overriding `tag_name` makes the wrapper a `<tr>`, so each contact renders as a real table row with its own DOM id. The identifying param is declared first because that's where the id comes from — `contact_id` of `"1"` yields `id="contact-row-1"`, which is exactly what the delete needs to target.
+**The row is the component.** Overriding `tag_name` makes the wrapper a `<tr>`, so each contact renders as a real table row with its own DOM id. [`identifies_by :contact_id`](../dsl.md#identity) is what gives it one: sibling rows would otherwise all wear the bare class id, and only one of them could ever be swapped or removed. Declared, a `contact_id` of `"1"` yields `id="contact-row-1"`, which is exactly what the delete needs to target.
 
 **Each row is handed its id, and declares it as a param too.** The table gives every row a *different* `contact_id` (`contact_row(contact_id: id)`), which is a [`receives`](../dsl.md#receives--caller-handoffs) handoff — sibling rows each need a distinct value, and the shared params bag that flows down the render tree can't supply per-row differences. Declaring [`param :contact_id`](../dsl.md#how-the-doors-combine) alongside it means the same id also serializes into the row's own route and the Delete button's payload, so `GET /_components/contact_row?contact_id=1` reconstructs the row on its own and the delete targets the right record.
 

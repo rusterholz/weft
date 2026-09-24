@@ -34,7 +34,6 @@ class MemberRoster < Weft::Component
 
   def build(attributes = {})
     super
-    set_attribute :id, "member-roster"
     form(action: :update) do
       table do
         thead { tr { th "Name"; th "Email"; th "Active" } }
@@ -71,7 +70,7 @@ end
 
 **The callable diffs, then reports through its return value.** It compares each member's stored state against the submitted array, counts the flips, and writes the new state. Returning a hash merges it into the params for the re-render (see [the callable contract](../dsl.md#the-callable-contract)), so `{ status: "Activated 1 and deactivated 1 members." }` is how the count reaches the status line — `params.status` is `nil` on a fresh render and the paragraph only appears after an update.
 
-**An array can't anchor a DOM id.** Weft derives a component's DOM id from its first declared param — perfect when that's a record id, unusable when it's an array (`id="member-roster-[]"` is not a selector htmx can target). So this component pins its own identity: `set_attribute :id, "member-roster"` fixes the wrapper's id inside `build`, and `performs :update, target: "#member-roster"` points the action's swap at that same anchor. Both live server-side, so every re-rendered fragment carries the same stable wiring.
+**The roster needs no `identifies_by`, and that's what makes its slot stable.** One roster renders per page, so the dasherized class name names it unambiguously: the wrapper comes back as `#member-roster` on every render, which is exactly what `performs :update, target: "#member-roster"` points at. Nothing about the id depends on `active_ids`, so the submitted checkboxes can't smear themselves across it. An array could never have anchored an id anyway: Weft [refuses a non-scalar identifying value](../dsl.md#identity) rather than composing `id="member-roster-[]"`, which is not a selector htmx can target.
 
 **The checkboxes tell the truth after the write.** `build` renders each checkbox from the data store, not from the submitted params — the response reflects what was actually saved. And since `form(action: :update)` also emits plain `action`/`method` attributes, the whole thing degrades to a normal POST without JavaScript.
 

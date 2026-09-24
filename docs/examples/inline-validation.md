@@ -31,7 +31,6 @@ class SignupEmailField < Weft::Component
 
   def build(attributes = {})
     super
-    set_attribute :id, "signup-email-field"
     form(action: :validate, trigger: :change) do
       label "Email Address ", for: "email"
       input type: "email", name: "email", id: "email", value: params.email
@@ -55,7 +54,7 @@ end
 
 **Validation failures are still renders.** Bad input raises `Weft::Unprocessable`; the `recovers from:` block catches it and returns `{ error_message: error.message }`, which merges into the params for the re-render. The response goes out as a semantic `422 Unprocessable Content` whose body is this same component wearing its error paragraph. Valid input sails through to the `nil` return and renders the success line at a plain `200`. (The machinery is [the `recovers` chain](../error-handling.md#the-recovers-chain); the merge is [the callable contract](../dsl.md#the-callable-contract).)
 
-**A value that changes can't anchor the DOM id.** Weft derives a component's DOM id from its first declared param — here that's the email itself, which would give the wrapper a different id on every render. So the component pins its own slot: `set_attribute :id, "signup-email-field"` fixes the wrapper's id, and `performs :validate, target: "#signup-email-field"` points the swap at that same anchor. (The same stable-slot idiom as [Bulk Update](bulk-update.md), for the same reason.)
+**Declaring no `identifies_by` is what keeps the slot still.** The field renders once per page, so its id is the dasherized class name: `#signup-email-field`, the same before and after every swap, which is what `performs :validate, target: "#signup-email-field"` points at. Identifying by `email` would be the mistake here: the id would change on every keystroke the user corrected, and the swap would go looking for an element that no longer exists. Identity is for telling instances apart, not for carrying state ([`identifies_by`](../dsl.md#identity)).
 
 **The field echoes what the user typed.** The swap replaces the whole component, input included, so `value: params.email` writes the submitted text back into the fresh input — without it, every complaint would also blank the field.
 

@@ -15,6 +15,7 @@ class ContactCard < Weft::Component
   builder_method :contact_card
 
   param :contact_id
+  identifies_by :contact_id
 
   def build(attributes = {})
     super
@@ -35,6 +36,7 @@ class ContactEditor < Weft::Component
   param :first_name
   param :last_name
   param :email
+  identifies_by :contact_id
 
   transfers :save, to: ContactCard do |params|
     CONTACTS.fetch(params.contact_id).merge!(

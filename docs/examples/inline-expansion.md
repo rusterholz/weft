@@ -17,6 +17,7 @@ class OrderItemsRow < Weft::Component
   builder_method :order_items_row
 
   param :order_id
+  identifies_by :order_id
 
   def tag_name
     "tr"

@@ -124,6 +124,8 @@ explicit component_path/page_path, or mark one abstract! if it should not route.
 
 The same validation rejects malformed paths (anything that isn't a string beginning with `/`) from a misbehaving custom proc. Validation runs once and is memoized; registering a new class re-arms it. Non-routable classes occupy no route and can never collide.
 
+**You can ask for the pass rather than wait for it.** `Weft.registry.validate!` runs every check here plus the [identity declaration checks](dsl.md#identity), so a broken declaration can fail at boot instead of on a visitor's first page, and a health endpoint can answer whether the process is able to serve. It stays cheap to call repeatedly: a pass that succeeded is memoized, and one that found a problem is not, so a process that is still broken keeps reporting it.
+
 **DOM ids are checked on the same pass.** Two classes whose [identity](dsl.md#identity) resolves to the same base would render fragments that land on each other's elements, so that is refused here too — and unlike routes, it applies to *every* registered component, since a component that never routes still renders somewhere. Two are exempt by construction: a component whose id comes from an `identifies_by` block isn't derived from its class at all, and a `unique!` component holds a per-instance token, so a shared base still yields `badge-Ta1b2c3d4` beside `badge-Te5f6a7b8`.
 
 ## Code reloading
