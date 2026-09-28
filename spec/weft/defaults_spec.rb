@@ -63,7 +63,7 @@ RSpec.describe "Weft::Defaults" do
 
     it "keeps the visual box inside the frame content (the wrapper never ships in a push)" do
       klass = described_class
-      ctx = Weft::Context.new({}, nil, wire_params: { exception: nil, attempts_remaining: 1 }) do
+      ctx = weft_context({ exception: nil, attempts_remaining: 1 }) do
         insert_tag klass
       end
       content = ctx.children.first.content

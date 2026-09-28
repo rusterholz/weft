@@ -18,6 +18,7 @@ require "weft/dsl/announcements"
 require "weft/dsl/updates"
 require "weft/error"
 require "weft/registry"
+require "weft/request/event_frame"
 require "weft/addressing"
 require "weft/router/streaming"
 
@@ -80,15 +81,13 @@ module Weft
 
       # Render this component as an HTML string, outside any Arbre DSL context.
       # The kwargs are pseudo-wire: exactly what a request's query string
-      # would carry. Used by the Router for partial responses, and available
-      # to users for testing, REPL exploration, or any standalone rendering need.
+      # would carry. For testing, REPL exploration, or any standalone
+      # rendering need.
       #
       #   StatCard.render(status: "shipped")  # => "<div id=\"...\">...</div>"
       def render(**wire_params)
         klass = self
-        Weft::Context.new({}, nil, wire_params: wire_params) do
-          insert_tag(klass)
-        end.to_s
+        Weft::Context.new(frame: Weft::Request::EventFrame.new(wire_params)) { insert_tag(klass) }.to_s
       end
 
       # @api private
@@ -295,7 +294,7 @@ module Weft
     def claim_dom_slot!
       return if self.class.anonymous?
 
-      slots = arbre_context.slots
+      slots = arbre_context.frame.slots
       return unless slots && parent.equal?(arbre_context)
       return if slots.add?(id)
 

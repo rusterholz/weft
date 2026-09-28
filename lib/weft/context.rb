@@ -21,11 +21,12 @@ module Weft
     include Modifiers
     include Wiring
 
-    # The render's wire params (query/body/path values), carried on the
-    # context so every component in the tree resolves its own declared
-    # params at any depth. Assigned before super because Arbre's initialize
-    # instance_evals the construction block — the tree builds during super.
-    attr_reader :wire_params
+    # The delivery this tree renders for: its wire universe, which every
+    # component projects through its own declarations at any depth, and the
+    # slot register roots claim their DOM ids from. Assigned before super
+    # because Arbre's initialize instance_evals the construction block — the
+    # tree builds during super.
+    attr_reader :frame
 
     # A bag for ROOT components to branch from, standing in for the tree
     # ancestor a root doesn't have — how an OOB companion inherits its
@@ -33,22 +34,11 @@ module Weft
     # the primary's own build.
     attr_reader :branch_bag
 
-    # The DOM ids this BATCH of fragments has already spoken for — a Set
-    # shared across every context built for one delivery, because the primary
-    # and each of its companions get their own. One delivery is an action
-    # response, or a single SSE frame: a stream opens a fresh Set per frame,
-    # so this is narrower than "the response". An out-of-band swap is addressed by DOM
-    # id, so only one fragment per id can land; a root component claims its
-    # id as it builds (Component#claim_dom_slot!) and a second claimant
-    # abandons its render by throwing SLOT_TAKEN. Absent on renders with
-    # nothing to arbitrate, and nothing is claimed then.
-    attr_reader :slots
-
     # @api private
     # Every DOM id this render has emitted, at any depth, mapped to the class
     # that emitted it — the register behind the duplicate-id warning.
     #
-    # Deliberately separate from {#slots}, which spans a whole delivery and
+    # Deliberately separate from the frame's slots, which span a whole delivery and
     # tracks ROOT components only, because it exists to catch precisely what
     # slots cannot see: chrome nested inside a wrapper, colliding silently.
     def dom_ids_seen
@@ -60,17 +50,13 @@ module Weft
     # Arbre adds a tag to its parent only after the build returns.
     SLOT_TAKEN = :weft_slot_taken
 
-    # Two positional parameters are Arbre's own signature; the three keywords
-    # are Weft's render-scoped channels, each independently optional. Verb-block
-    # deltas used to ride a fourth: they now travel on the branch bag itself,
-    # which is where they have to be to outrank each component's own wire at any
-    # depth. The three that remain still want a render-environment object of
-    # their own, which belongs with the lifecycle work rather than here.
-    def initialize(assigns = {}, helpers = nil, wire_params: nil, branch_bag: nil, slots: nil, &)
-      @wire_params = wire_params || {}
+    # Two channels: the delivery-wide frame and this root's lineage. Arbre's
+    # own assigns and helpers are passed empty: a bare name resolving from
+    # assigns would be an undeclared, unranked params channel beside the bag.
+    def initialize(frame:, branch_bag: nil, &)
+      @frame = frame
       @branch_bag = branch_bag
-      @slots = slots
-      super(assigns, helpers, &)
+      super({}, nil, &)
     end
 
     # @api private

@@ -225,6 +225,71 @@ RSpec.describe Weft::Router do
     end
   end
 
+  describe "one frame per delivery" do
+    # Each probe records the frame its tree was built in.
+    def frame_probe(name, seen, &body)
+      Class.new(Weft::Component) do
+        define_singleton_method(:name) { name }
+        param :order_id
+        identifies_by :order_id
+
+        define_method(:build) do |attributes = {}|
+          super(attributes)
+          seen << [name, arbre_context.frame]
+          instance_exec(&body) if body
+        end
+      end
+    end
+
+    it "renders an action's primary and its companions in one arbitrated frame" do
+      seen = []
+      primary = frame_probe("FramedPrimary", seen)
+      primary.performs(:touch) { nil }
+      primary.brings(frame_probe("FramedCompanion", seen))
+
+      post "/_components/framed_primary/touch", order_id: "7"
+
+      frames = seen.map(&:last)
+      expect(seen.map(&:first)).to eq(%w[FramedPrimary FramedCompanion])
+      expect(frames.uniq.size).to eq(1)
+      expect(frames.first.slots).to eq(Set["framed-primary-7", "framed-companion-7"])
+    end
+
+    it "renders a recovery outside the slot register, over the same universe" do
+      seen = []
+      stand_in = frame_probe("FrameStandIn", seen)
+      failing = frame_probe("FrameFailing", seen) { raise "boom" }
+      failing.recovers(from: StandardError, with: stand_in)
+      primary = frame_probe("FrameHost", seen)
+      primary.performs(:touch) { nil }
+      primary.brings(failing)
+      allow(Weft.logger).to receive(:error)
+
+      post "/_components/frame_host/touch", order_id: "7"
+
+      host_frame = seen.assoc("FrameHost").last
+      recovery_frame = seen.assoc("FrameStandIn").last
+      expect(recovery_frame).not_to be(host_frame)
+      expect(recovery_frame.slots).to be_nil
+      expect(recovery_frame.universe).to be(host_frame.universe)
+    end
+
+    it "gives each push on a stream a frame of its own" do
+      seen = []
+      pushing = frame_probe("FramedPush", seen)
+      pushing.pushes(every: 5)
+      router = described_class.new!(downstream_app)
+      allow(router).to receive(:filtered_params).and_return({ "order_id" => "7" })
+
+      2.times { router.send(:push_component_event, frame_sink, pushing) }
+
+      first, second = seen.map(&:last)
+      expect(first).not_to be(second)
+      expect(first.universe).to be(second.universe)
+      expect([first.slots, second.slots]).to all(eq(Set["framed-push-7"]))
+    end
+  end
+
   describe "one universe per request" do
     let!(:badge_class) do
       Class.new(Weft::Component) do
@@ -1599,10 +1664,12 @@ RSpec.describe Weft::Router do
     end
   end
 
-  describe "build_component_with_wire" do
-    it "builds a component that resolves its params from the wire source" do
+  describe "build_root" do
+    let(:frame) { Weft::Request::EventFrame.new({ status: "shipped", value: 10 }) }
+
+    it "builds a component that resolves its params from the frame's universe" do
       router = described_class.new!(downstream_app)
-      component = router.send(:build_component_with_wire, stat_card_class, { status: "shipped", value: 10 })
+      component = router.send(:build_root, stat_card_class, frame)
 
       expect(component).to be_a(Weft::Component)
       expect(component.weft_dom_id).to eq("stat-card-shipped")
@@ -1612,7 +1679,7 @@ RSpec.describe Weft::Router do
 
     it "returns children-only HTML via content (for SSE innerHTML swap)" do
       router = described_class.new!(downstream_app)
-      component = router.send(:build_component_with_wire, stat_card_class, { status: "shipped", value: 10 })
+      component = router.send(:build_root, stat_card_class, frame)
 
       # content returns children only — no wrapper div
       expect(component.content).not_to include('id="stat-card-shipped"')

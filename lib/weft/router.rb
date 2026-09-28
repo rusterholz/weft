@@ -7,6 +7,7 @@ require "weft/context"
 require "weft/error"
 require "weft/params"
 require "weft/params/assembly"
+require "weft/request/event_frame"
 
 module Weft
   # Rack middleware that auto-generates routes for Weft::Components.
@@ -143,32 +144,36 @@ module Weft
       params.except("splat", "captures")
     end
 
+    # The frame every render outside slot arbitration shares: a plain GET, and
+    # every recovery, which stands in for a root rather than competing with it.
+    # Its universe is computed once and is the one every other frame in this
+    # request reads: an action response's, or each push on a stream.
+    def request_frame
+      @request_frame ||= Weft::Request::EventFrame.new(filtered_params)
+    end
+
+    # A delivery whose roots compete for DOM ids: an action response with its
+    # companions, or one push.
+    def arbitrated_frame = Weft::Request::EventFrame.new(request_frame.universe, arbitrated: true)
+
     # Render a component as HTML. inner: true returns children only
     # (for SSE innerHTML swap where the wrapper element must persist).
     def render_component(component_class, inner: false)
-      state = Weft::Params::Assembly.for_request(component_class, filtered_params)
-      component = build_component_with_wire(component_class, filtered_params, branch_bag: state)
+      state = Weft::Params::Assembly.for_request(component_class, request_frame.universe)
+      component = build_root(component_class, request_frame, branch_bag: state)
       inner ? component.content : component.to_s
     rescue StandardError => e
       render_error(component_class, state || Weft::Params.new({}), e)
     end
 
-    # Build a component instance from the current request params.
-    def build_component(component_class, slots: nil)
-      build_component_with_wire(component_class, filtered_params, slots: slots)
-    end
-
-    # Build a component in a fresh context carrying the wire source; the
-    # component resolves its own declared params from it at construction.
-    # Arbre's builder attributes stay pure chrome — params travel their own
-    # channel. `branch_bag` lets the root inherit a primary's bag (OOB
-    # companions), carrying any verb-block delta already applied to it, and
-    # `slots` arbitrates which root gets to claim a DOM id.
-    def build_component_with_wire(component_class, wire_params, branch_bag: nil, slots: nil)
+    # Build a component as the root of a fresh tree; it resolves its own
+    # declared params from the frame's universe at construction. Arbre's
+    # builder attributes stay pure chrome — params travel their own channel.
+    # `branch_bag` lets the root inherit a primary's bag (OOB companions),
+    # carrying any verb-block delta already applied to it.
+    def build_root(component_class, frame, branch_bag: nil)
       klass = component_class
-      context = Weft::Context.new({}, nil, wire_params: wire_params,
-                                           branch_bag: branch_bag, slots: slots) { insert_tag(klass) }
-      context.children.first
+      Weft::Context.new(frame: frame, branch_bag: branch_bag) { insert_tag(klass) }.children.first
     end
 
     # Render a Page as a full HTML document. Query/body params and
@@ -177,14 +182,14 @@ module Weft
     # Page render failures walk the failing Page's recovers chain
     # (B1 / C1 page-context); the gem-default catches StandardError.
     def render_page(page_class, route_params)
-      merged_params = filtered_params.merge(route_params)
+      frame = Weft::Request::EventFrame.new(request_frame.universe.merge(route_params))
       klass = page_class
-      Weft::Context.new({}, nil, wire_params: merged_params) { insert_tag(klass) }.to_s
+      Weft::Context.new(frame: frame) { insert_tag(klass) }.to_s
     rescue StandardError => e
       handle_page_chain_failure(e,
                                 originating_page_class: page_class,
-                                originating_params: Weft::Params::Assembly.for_request(page_class, merged_params),
-                                originating_wire: merged_params)
+                                originating_params: Weft::Params::Assembly.for_request(page_class, frame.universe),
+                                originating_frame: frame)
     end
 
     def htmx_request?

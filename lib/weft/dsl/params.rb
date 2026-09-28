@@ -475,7 +475,7 @@ module Weft
       end
 
       def wire_source
-        arbre_context.wire_params
+        arbre_context.frame.universe
       end
 
       # Branch a copy of the nearest tree-ancestor's bag — the in-page

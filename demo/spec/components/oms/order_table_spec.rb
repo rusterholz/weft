@@ -20,7 +20,8 @@ RSpec.describe Oms::OrderTable, type: :component do
   end
 
   it "renders an Oms::OrderRow for each order" do
-    html = render_weft_html({ orders: orders }) { order_table orders: orders }
+    records = orders
+    html = render_weft_html { order_table orders: records }
     orders.each do |order|
       expect(html).to include(order.id[..7])
     end

@@ -178,7 +178,7 @@ RSpec.describe Weft::Addressing do
         identifies_by :status
       end
 
-      ctx = Weft::Context.new({}, nil, wire_params: { "status" => "shipped" }) do
+      ctx = weft_context({ "status" => "shipped" }) do
         insert_tag(component_class)
       end
 
@@ -228,7 +228,7 @@ RSpec.describe Weft::Addressing do
       # reading one has nothing to read. Which is also why these assert on a
       # built instance — the shape the demo's rows actually take.
       def id_of(klass, **handed)
-        Weft::Context.new { insert_tag(klass, **handed) }.children.first.weft_dom_id
+        weft_context { insert_tag(klass, **handed) }.children.first.weft_dom_id
       end
 
       it "keeps the dashes of a uuid-typed value reached through derives" do
@@ -802,7 +802,7 @@ RSpec.describe Weft::Addressing do
         param :page, default: 1
       end
 
-      ctx = Weft::Context.new({}, nil, wire_params: { "status" => "shipped", "page" => 2 }) do
+      ctx = weft_context({ "status" => "shipped", "page" => 2 }) do
         insert_tag(component_class)
       end
       component = ctx.children.first
@@ -817,7 +817,7 @@ RSpec.describe Weft::Addressing do
         param :page, default: 1
       end
 
-      ctx = Weft::Context.new({}, nil, wire_params: { "status" => "shipped", "page" => 2 }) do
+      ctx = weft_context({ "status" => "shipped", "page" => 2 }) do
         insert_tag(component_class)
       end
       component = ctx.children.first
@@ -832,7 +832,7 @@ RSpec.describe Weft::Addressing do
         param :page, default: 1
       end
 
-      ctx = Weft::Context.new({}, nil, wire_params: { "page" => 1 }) do
+      ctx = weft_context({ "page" => 1 }) do
         insert_tag(component_class)
       end
       component = ctx.children.first

@@ -18,7 +18,7 @@ RSpec.describe Weft::DSL::Containers do
   describe ".adds_children_to" do
     it "redirects user-block children into the declared ivar after build" do
       klass = container_class
-      html = Weft::Context.new({}, nil) do
+      html = weft_context do
         insert_tag(klass) { span "block content" }
       end.to_s
 
@@ -28,7 +28,7 @@ RSpec.describe Weft::DSL::Containers do
 
     it "lets structural children added during build pass through to the wrapper" do
       klass = container_class
-      html = Weft::Context.new({}, nil) { insert_tag(klass) }.to_s
+      html = weft_context { insert_tag(klass) }.to_s
 
       # h2 is structural — added before @body is assigned, ends up outside body-region
       expect(html).to match(%r{<h2>Header</h2>\s*<div class="body-region">})
@@ -65,7 +65,7 @@ RSpec.describe Weft::DSL::Containers do
       end
 
       expect do
-        Weft::Context.new({}, nil) { insert_tag(bad) { span "x" } }.to_s
+        weft_context { insert_tag(bad) { span "x" } }.to_s
       end.to raise_error(Weft::MissingContainerIvar,
                          /declared `adds_children_to :@body` but never assigned @body in build/)
     end
@@ -81,7 +81,7 @@ RSpec.describe Weft::DSL::Containers do
         end
       end
 
-      html = Weft::Context.new({}, nil) do
+      html = weft_context do
         insert_tag(klass) { span "page-body" }
       end.to_s
 

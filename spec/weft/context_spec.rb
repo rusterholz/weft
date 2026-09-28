@@ -17,44 +17,57 @@ RSpec.describe Weft::Context do
     end
   end
 
-  describe "wire params" do
-    it "carries a wire params source provided at construction" do
-      ctx = described_class.new({}, nil, wire_params: { "status" => "x" })
+  describe "event frame" do
+    it "carries the frame it was built in" do
+      frame = Weft::Request::EventFrame.new({ "status" => "x" })
 
-      expect(ctx.wire_params).to eq({ "status" => "x" })
+      expect(described_class.new(frame: frame).frame).to be(frame)
     end
 
-    it "defaults to an empty hash" do
-      expect(described_class.new.wire_params).to eq({})
+    it "must be told its frame" do
+      expect { described_class.new }.to raise_error(ArgumentError, /frame/)
+    end
+
+    it "has no Arbre assigns for a bare name to fall back on" do
+      probe = Class.new(Weft::Component) do
+        def self.name = "ProbeCard"
+
+        def build(*)
+          super
+          text_node(order)
+        end
+      end
+
+      expect { described_class.new(frame: Weft::Request::EventFrame.new({})) { insert_tag(probe) } }.
+        to raise_error(NameError, /order/)
     end
   end
 
   describe "branch bag" do
     it "carries a bag for root components to branch from" do
       bag = Weft::Params.new({ order_id: 7 })
-      ctx = described_class.new({}, nil, branch_bag: bag)
+      ctx = weft_context(branch_bag: bag)
 
       expect(ctx.branch_bag).to be(bag)
     end
 
     it "defaults to nil" do
-      expect(described_class.new.branch_bag).to be_nil
+      expect(weft_context.branch_bag).to be_nil
     end
 
-    it "is readable inside the construction block" do
+    it "has its frame readable inside the construction block" do
+      frame = Weft::Request::EventFrame.new({ "status" => "x" })
       seen = nil
-      described_class.new({}, nil, wire_params: { "status" => "x" }) do
-        seen = arbre_context.wire_params
-      end
+      described_class.new(frame: frame) { seen = arbre_context.frame }
 
-      expect(seen).to eq({ "status" => "x" })
+      expect(seen).to be(frame)
     end
   end
 
   describe "action: kwarg expansion" do
     it "expands action: into htmx attributes on a button" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 42 }) do
+      html = weft_context({ "order_id" => 42 }) do
         insert_tag(klass) do
           button "Advance", action: :advance
         end
@@ -68,7 +81,7 @@ RSpec.describe Weft::Context do
 
     it "expands action: on any element, not just buttons" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           span "click me", action: :advance
         end
@@ -80,7 +93,7 @@ RSpec.describe Weft::Context do
 
     it "works inside nested element blocks" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 7 }) do
+      html = weft_context({ "order_id" => 7 }) do
         insert_tag(klass) do
           div class: "wrapper" do
             div class: "inner" do
@@ -96,7 +109,7 @@ RSpec.describe Weft::Context do
 
     it "preserves other attributes alongside htmx attrs" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           button "Go", action: :advance, class: "btn btn-primary", disabled: "disabled"
         end
@@ -109,7 +122,7 @@ RSpec.describe Weft::Context do
 
     it "does not interfere with elements that have no action:" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           span "plain"
           button "Advance", action: :advance
@@ -122,7 +135,7 @@ RSpec.describe Weft::Context do
 
     it "preserves HTML action attribute (string value) on forms" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           form(method: "post", action: "/orders") do
             input type: "submit", value: "Create"
@@ -137,7 +150,7 @@ RSpec.describe Weft::Context do
     describe "on form elements" do
       it "expands action: into both htmx attrs and the HTML action and method attributes" do
         klass = component_class
-        html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        html = weft_context({ "order_id" => 1 }) do
           insert_tag(klass) do
             form(action: :advance) do
               input type: "submit", value: "Submit"
@@ -152,7 +165,7 @@ RSpec.describe Weft::Context do
 
       it "omits hx-vals on forms so form fields are the sole payload" do
         klass = component_class
-        html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        html = weft_context({ "order_id" => 1 }) do
           insert_tag(klass) do
             form(action: :advance) do
               input type: "submit", value: "Submit"
@@ -165,7 +178,7 @@ RSpec.describe Weft::Context do
 
       it "still emits hx-vals on non-form elements" do
         klass = component_class
-        html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        html = weft_context({ "order_id" => 1 }) do
           insert_tag(klass) do
             button "Advance", action: :advance
           end
@@ -179,7 +192,7 @@ RSpec.describe Weft::Context do
   describe "trigger: kwarg" do
     it "sets hx-trigger alongside action: expansion" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           select action: :advance, trigger: "change"
         end
@@ -191,7 +204,7 @@ RSpec.describe Weft::Context do
 
     it "sets hx-trigger alone without action:" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           div trigger: "every 10s"
         end
@@ -205,7 +218,7 @@ RSpec.describe Weft::Context do
   describe "navigate: kwarg expansion" do
     it "expands navigate: into htmx GET attrs targeting the nearest component" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 42 }) do
+      html = weft_context({ "order_id" => 42 }) do
         insert_tag(klass) do
           button "Next", navigate: { order_id: 43 }
         end
@@ -218,7 +231,7 @@ RSpec.describe Weft::Context do
 
     it "preserves other attributes alongside navigate attrs" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           button "Go", navigate: { order_id: 2 }, class: "btn", "hx-push-url" => "/orders/2"
         end
@@ -231,7 +244,7 @@ RSpec.describe Weft::Context do
 
     it "works with trigger: alongside navigate:" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           div navigate: { order_id: 2 }, trigger: "revealed"
         end
@@ -243,7 +256,7 @@ RSpec.describe Weft::Context do
 
     it "does not interfere with action:" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           button "Advance", action: :advance
           button "Next", navigate: { order_id: 2 }
@@ -258,7 +271,7 @@ RSpec.describe Weft::Context do
   describe "target:/swap: call-site overrides on action:" do
     it "overrides the action's hx-target with a call-site target:" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 42 }) do
+      html = weft_context({ "order_id" => 42 }) do
         insert_tag(klass) do
           button "Advance", action: :advance, target: "#detail-pane"
         end
@@ -270,7 +283,7 @@ RSpec.describe Weft::Context do
 
     it "overrides the action's hx-swap with a call-site swap:" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           button "Advance", action: :advance, swap: :fill
         end
@@ -281,7 +294,7 @@ RSpec.describe Weft::Context do
 
     it "resolves a :self target override to this" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           button "Advance", action: :advance, target: :self
         end
@@ -292,7 +305,7 @@ RSpec.describe Weft::Context do
 
     it "does not leak target: or swap: as literal HTML attributes" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           button "Advance", action: :advance, target: "#pane", swap: :fill
         end
@@ -304,7 +317,7 @@ RSpec.describe Weft::Context do
 
     it "applies overrides on form elements after the form augmentation" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           form(action: :advance, target: "#result", swap: :fill) do
             input type: "submit", value: "Submit"
@@ -322,7 +335,7 @@ RSpec.describe Weft::Context do
   describe "target:/swap: call-site overrides on navigate:" do
     it "overrides the generated hx-target and hx-swap" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           button "Next", navigate: { order_id: 2 }, target: "#list", swap: :append
         end
@@ -338,7 +351,7 @@ RSpec.describe Weft::Context do
   describe "confirm: kwarg" do
     it "maps to hx-confirm alongside action: without leaking chrome" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           button "Delete", action: :advance, confirm: "Are you sure?"
         end
@@ -351,7 +364,7 @@ RSpec.describe Weft::Context do
 
     it "maps to hx-confirm standalone, for container-level inheritance" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           div confirm: "Really?" do
             button "Advance", action: :advance
@@ -368,7 +381,7 @@ RSpec.describe Weft::Context do
         param :id
       end
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           button "Open", modal: target, with: { id: "1" }, target: "#modal", confirm: "Open it?"
         end
@@ -382,7 +395,7 @@ RSpec.describe Weft::Context do
   describe "standalone swap:/target: without an interaction kwarg" do
     it "passes a standalone target: through as HTML chrome untouched" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           a "Docs", href: "/docs", target: "_blank"
         end
@@ -395,7 +408,7 @@ RSpec.describe Weft::Context do
     it "passes a standalone swap: through as chrome after warning" do
       allow(Weft.logger).to receive(:warn)
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           div swap: :fill
         end
@@ -409,7 +422,7 @@ RSpec.describe Weft::Context do
     it "warns only once per component class for standalone swap:" do
       allow(Weft.logger).to receive(:warn)
       klass = component_class
-      described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           div swap: :fill
           div swap: :append
@@ -436,7 +449,7 @@ RSpec.describe Weft::Context do
 
       outer = component_class
       inner = inner_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1, "item_id" => 5 }) do
+      html = weft_context({ "order_id" => 1, "item_id" => 5 }) do
         insert_tag(outer) do
           insert_tag(inner) do
             button "Wombat", action: :wombat
@@ -462,7 +475,7 @@ RSpec.describe Weft::Context do
 
       outer = component_class
       inner = inner_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 3, "item_id" => 9 }) do
+      html = weft_context({ "order_id" => 3, "item_id" => 9 }) do
         insert_tag(outer) do
           insert_tag(inner) do
             button "Advance", action: :advance
@@ -492,7 +505,7 @@ RSpec.describe Weft::Context do
     it "generates hx-get with component path and with: attrs" do
       target = target_class
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           button "Load", loads: target, with: { shipment_id: "42" },
                          swap: :fill, target: "#tip"
@@ -505,7 +518,7 @@ RSpec.describe Weft::Context do
     it "generates hx-swap from swap symbol" do
       target = target_class
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           button "Load", loads: target, with: { shipment_id: "1" },
                          swap: :fill, target: "#tip"
@@ -518,7 +531,7 @@ RSpec.describe Weft::Context do
     it "generates hx-target from CSS selector string" do
       target = target_class
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           button "Load", loads: target, with: { shipment_id: "1" },
                          swap: :fill, target: "#tooltip-zone"
@@ -531,7 +544,7 @@ RSpec.describe Weft::Context do
     it "generates hx-target from :self symbol" do
       target = target_class
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           div loads: target, with: { shipment_id: "1" },
               swap: :fill, target: :self
@@ -544,7 +557,7 @@ RSpec.describe Weft::Context do
     it "generates hx-target from Arbre element reference" do
       target = target_class
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           tip = div(id: "tip-99", class: "tooltip-zone")
           button "Hover", loads: target, with: { shipment_id: "99" },
@@ -558,7 +571,7 @@ RSpec.describe Weft::Context do
     it "generates hx-trigger when trigger: is provided" do
       target = target_class
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           div loads: target, with: { shipment_id: "1" },
               swap: :fill, target: :self, trigger: :hover
@@ -571,7 +584,7 @@ RSpec.describe Weft::Context do
     it "omits hx-trigger when trigger: is not provided" do
       target = target_class
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           button "Load", loads: target, with: { shipment_id: "1" },
                          swap: :fill, target: "#tip"
@@ -584,7 +597,7 @@ RSpec.describe Weft::Context do
     it "defaults with: to nearest component attrs when omitted" do
       target = target_class
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 77 }) do
+      html = weft_context({ "order_id" => 77 }) do
         insert_tag(klass) do
           div loads: target, swap: :fill, target: :self
         end
@@ -601,7 +614,7 @@ RSpec.describe Weft::Context do
         receives :order
       end
       handed = Struct.new(:id).new(3)
-      html = described_class.new({}, nil, wire_params: { "order_id" => 77 }) do
+      html = weft_context({ "order_id" => 77 }) do
         insert_tag(klass, order: handed) do
           div loads: target, swap: :fill, target: :self
         end
@@ -614,7 +627,7 @@ RSpec.describe Weft::Context do
     it "preserves other attributes alongside loads: attrs" do
       target = target_class
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           button "Load", loads: target, with: { shipment_id: "1" },
                          swap: :fill, target: "#tip", class: "btn"
@@ -629,7 +642,7 @@ RSpec.describe Weft::Context do
       target = target_class
       klass = component_class
       expect do
-        described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        weft_context({ "order_id" => 1 }) do
           insert_tag(klass) do
             button "Load", loads: target, target: "#tip"
           end
@@ -641,7 +654,7 @@ RSpec.describe Weft::Context do
       target = target_class
       klass = component_class
       expect do
-        described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        weft_context({ "order_id" => 1 }) do
           insert_tag(klass) do
             button "Load", loads: target, swap: :fill
           end
@@ -653,7 +666,7 @@ RSpec.describe Weft::Context do
   describe "push_url: kwarg" do
     it "generates hx-push-url with string value" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           button "Filter", action: :advance, push_url: "/orders?status=shipped"
         end
@@ -665,7 +678,7 @@ RSpec.describe Weft::Context do
 
     it "generates hx-push-url with true" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           button "Go", action: :advance, push_url: true
         end
@@ -680,7 +693,7 @@ RSpec.describe Weft::Context do
         param :id
       end
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           button "Load", loads: target, with: { id: "1" },
                          swap: :fill, target: "#panel",
@@ -710,7 +723,7 @@ RSpec.describe Weft::Context do
       klass = component_class
 
       expect do
-        described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        weft_context({ "order_id" => 1 }) do
           insert_tag(klass) do
             button "Load", loads: target, swap: :fill, target: "#pane"
           end
@@ -724,7 +737,7 @@ RSpec.describe Weft::Context do
       klass = component_class
 
       expect do
-        described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        weft_context({ "order_id" => 1 }) do
           insert_tag(klass) do
             button "Load", lint_probe: target
           end
@@ -745,7 +758,7 @@ RSpec.describe Weft::Context do
       end
 
       expect do
-        described_class.new({}, nil, wire_params: { "status" => "hot" }) do
+        weft_context({ "status" => "hot" }) do
           insert_tag(klass)
         end.to_s
       end.to raise_error(Weft::InvalidUsage, /DependentPanel.*not routable/m)
@@ -776,7 +789,7 @@ RSpec.describe Weft::Context do
     it "dispatches a registered preset kwarg through loads: expansion" do
       target = target_class
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           button "Hover me", test_short: target,
                              with: { item_id: "5" }, target: "#tip"
@@ -791,7 +804,7 @@ RSpec.describe Weft::Context do
     it "applies preset trigger as hx-trigger" do
       target = target_class
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           div test_short: target, with: { item_id: "1" }, target: :self
         end
@@ -803,7 +816,7 @@ RSpec.describe Weft::Context do
     it "allows user trigger: to override preset trigger" do
       target = target_class
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           div test_short: target, with: { item_id: "1" }, target: :self,
               trigger: :click
@@ -818,7 +831,7 @@ RSpec.describe Weft::Context do
       Weft.register_preset :self_target, trigger: :visible, swap: :fill, target: :self
       target = target_class
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           div self_target: target, with: { item_id: "1" }
         end
@@ -832,7 +845,7 @@ RSpec.describe Weft::Context do
       target = target_class
       klass = component_class
       expect do
-        described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        weft_context({ "order_id" => 1 }) do
           insert_tag(klass) do
             button "Nope", test_short: target, with: { item_id: "1" }
           end
@@ -842,7 +855,7 @@ RSpec.describe Weft::Context do
 
     it "passes through unregistered kwargs without expansion" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           button "Normal", data_foo: "bar"
         end
@@ -854,7 +867,7 @@ RSpec.describe Weft::Context do
     it "preserves other attributes alongside preset attrs" do
       target = target_class
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           button "Hover", test_short: target, with: { item_id: "1" },
                           target: "#tip", class: "btn"
@@ -868,7 +881,7 @@ RSpec.describe Weft::Context do
     it "defaults with: to nearest component attrs when omitted" do
       target = target_class
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 42 }) do
+      html = weft_context({ "order_id" => 42 }) do
         insert_tag(klass) do
           div test_short: target, target: :self
         end
@@ -887,7 +900,7 @@ RSpec.describe Weft::Context do
 
     it "expands a String-valued preset kwarg into a direct hx-get to that URL" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           button "Go", test_url: "/_components/thing?id=9"
         end
@@ -901,7 +914,7 @@ RSpec.describe Weft::Context do
 
     it "honors per-call target: and swap: overrides over the preset" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           button "Go", test_url: "/x", target: "#other", swap: :outer_html
         end
@@ -913,7 +926,7 @@ RSpec.describe Weft::Context do
 
     it "does not treat a String value for an unregistered kwarg name as a preset" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           button "Go", data_url: "/x"
         end
@@ -935,7 +948,7 @@ RSpec.describe Weft::Context do
       target = target_class
       klass = component_class
       name = preset_name
-      described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           div({ name => target, with: { id: "1" } }.merge(kwargs))
         end
@@ -1002,7 +1015,7 @@ RSpec.describe Weft::Context do
 
     it "retry: click + outerHTML + closest .weft-error, hx-get to the given URL" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           button "Retry", retry: "/_components/order_header?order_id=1"
         end
@@ -1016,7 +1029,7 @@ RSpec.describe Weft::Context do
 
     it "reopen_stream: click + outerHTML + closest [sse-swap], hx-get to the given URL" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           button "Resume live updates", reopen_stream: "/_components/order_header?order_id=1"
         end
@@ -1033,7 +1046,7 @@ RSpec.describe Weft::Context do
     it "raises on an action: Symbol no enclosing component declares" do
       klass = component_class
       expect do
-        described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        weft_context({ "order_id" => 1 }) do
           insert_tag(klass) do
             button "Advance", action: :advnace
           end
@@ -1044,7 +1057,7 @@ RSpec.describe Weft::Context do
     it "raises on a non-Hash navigate: value" do
       klass = component_class
       expect do
-        described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        weft_context({ "order_id" => 1 }) do
           insert_tag(klass) do
             button "Next", navigate: "/orders"
           end
@@ -1054,7 +1067,7 @@ RSpec.describe Weft::Context do
 
     it "raises on navigate: outside any component" do
       expect do
-        described_class.new({}, nil, wire_params: {}) do
+        weft_context({}) do
           button "Next", navigate: { page: 2 }
         end.to_s
       end.to raise_error(Weft::InvalidUsage, /component/)
@@ -1063,7 +1076,7 @@ RSpec.describe Weft::Context do
     it "raises on a navigate: key that is not a wire param of the navigated component" do
       klass = component_class
       expect do
-        described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        weft_context({ "order_id" => 1 }) do
           insert_tag(klass) do
             button "Next", navigate: { page: 2 }
           end
@@ -1075,7 +1088,7 @@ RSpec.describe Weft::Context do
       sub = Class.new(component_class) do
         def self.name = "SubHeader"
       end
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(sub) do
           button "Next", navigate: { order_id: 2 }
         end
@@ -1086,7 +1099,7 @@ RSpec.describe Weft::Context do
 
     it "accepts nil values on declared navigate: keys (the drop-a-param idiom)" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           button "Reset", navigate: { order_id: nil }
         end
@@ -1098,7 +1111,7 @@ RSpec.describe Weft::Context do
     it "raises on with: without loads: or a preset alongside" do
       klass = component_class
       expect do
-        described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        weft_context({ "order_id" => 1 }) do
           insert_tag(klass) do
             button "Advance", action: :advance, with: { order_id: 2 }
           end
@@ -1109,7 +1122,7 @@ RSpec.describe Weft::Context do
     it "raises on a standalone with:" do
       klass = component_class
       expect do
-        described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        weft_context({ "order_id" => 1 }) do
           insert_tag(klass) do
             div with: { order_id: 2 }
           end
@@ -1120,7 +1133,7 @@ RSpec.describe Weft::Context do
     it "raises on a non-Class loads: value" do
       klass = component_class
       expect do
-        described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        weft_context({ "order_id" => 1 }) do
           insert_tag(klass) do
             button "Load", loads: "ShipmentSummary", swap: :fill, target: :self
           end
@@ -1131,7 +1144,7 @@ RSpec.describe Weft::Context do
     it "raises on a registered preset name with a non-Class, non-String value" do
       klass = component_class
       expect do
-        described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+        weft_context({ "order_id" => 1 }) do
           insert_tag(klass) do
             button "Tip", tooltip: 5, target: "#tip"
           end
@@ -1141,7 +1154,7 @@ RSpec.describe Weft::Context do
 
     it "treats nil-valued Weft kwargs as absent, for conditional call sites" do
       klass = component_class
-      html = described_class.new({}, nil, wire_params: { "order_id" => 1 }) do
+      html = weft_context({ "order_id" => 1 }) do
         insert_tag(klass) do
           button "Plain", navigate: nil, loads: nil, tooltip: nil, with: nil
         end

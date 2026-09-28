@@ -11,13 +11,19 @@ module ArbreHelper
   # Use for Weft::Components that need action:/trigger: expansion. Pass
   # `wire:` to simulate request params — components resolve their declared
   # params from it, exactly as they would from a query string.
-  def render_weft(assigns = {}, wire: {}, &)
-    Weft::Context.new(assigns, nil, wire_params: wire, &).children.first
+  def render_weft(wire: {}, &)
+    weft_context(wire, &).children.first
   end
 
   # Renders a Weft::Context block and returns the full HTML string.
-  def render_weft_html(assigns = {}, wire: {}, &)
-    Weft::Context.new(assigns, nil, wire_params: wire, &).to_s
+  def render_weft_html(wire: {}, &)
+    weft_context(wire, &).to_s
+  end
+
+  # A context over +wire+ in a single-root frame. Weft's internal constructor;
+  # this helper is the demo's one dependency on it.
+  def weft_context(wire = {}, **, &)
+    Weft::Context.new(frame: Weft::Request::EventFrame.new(wire), **, &)
   end
 
   # Runs an action callable the way the Router does: against the state the

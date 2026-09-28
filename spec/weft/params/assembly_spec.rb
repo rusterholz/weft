@@ -31,7 +31,7 @@ RSpec.describe Weft::Params::Assembly do
     it "lands a handed kwarg in params, never in HTML chrome" do
       klass = receiver_class
       handed = order
-      ctx = Weft::Context.new { insert_tag(klass, order: handed) }
+      ctx = weft_context { insert_tag(klass, order: handed) }
       component = ctx.children.first
 
       expect(component.params.order).to be(handed)
@@ -50,7 +50,7 @@ RSpec.describe Weft::Params::Assembly do
         end
       end
 
-      ctx = Weft::Context.new { insert_tag(klass, label: "totals") }
+      ctx = weft_context { insert_tag(klass, label: "totals") }
 
       expect(ctx.children.first.class_list).to include("for-totals")
     end
@@ -63,7 +63,7 @@ RSpec.describe Weft::Params::Assembly do
       end
       handed = order
 
-      ctx = Weft::Context.new do
+      ctx = weft_context do
         insert_tag(first, order: handed)
         insert_tag(second)
       end
@@ -74,7 +74,7 @@ RSpec.describe Weft::Params::Assembly do
     it "raises NotReceived at the call site when a required handoff is missing" do
       klass = receiver_class
 
-      expect { Weft::Context.new { insert_tag(klass) } }.
+      expect { weft_context { insert_tag(klass) } }.
         to raise_error(Weft::NotReceived, /OrderSlip.*:order/)
     end
 
@@ -84,7 +84,7 @@ RSpec.describe Weft::Params::Assembly do
         receives :page_num, default: 1
         receives :accent, default: nil
       end
-      component = Weft::Context.new { insert_tag(klass) }.children.first
+      component = weft_context { insert_tag(klass) }.children.first
 
       expect(component.params.page_num).to eq(1)
       expect(component.params.accent).to be_nil
@@ -101,7 +101,7 @@ RSpec.describe Weft::Params::Assembly do
 
       it "prefers the handed value over the wire" do
         klass = dual_class
-        component = Weft::Context.new({}, nil, wire_params: { "status" => "stale" }) do
+        component = weft_context({ "status" => "stale" }) do
           insert_tag(klass, status: "fresh")
         end.children.first
 
@@ -110,7 +110,7 @@ RSpec.describe Weft::Params::Assembly do
 
       it "falls back to the wire when nothing is handed" do
         klass = dual_class
-        component = Weft::Context.new({}, nil, wire_params: { "status" => "shipped" }) do
+        component = weft_context({ "status" => "shipped" }) do
           insert_tag(klass)
         end.children.first
 
@@ -119,7 +119,7 @@ RSpec.describe Weft::Params::Assembly do
 
       it "resolves to nil without raising when no source supplies the key" do
         klass = dual_class
-        component = Weft::Context.new { insert_tag(klass) }.children.first
+        component = weft_context { insert_tag(klass) }.children.first
 
         expect(component.params.status).to be_nil
       end
@@ -192,7 +192,7 @@ RSpec.describe Weft::Params::Assembly do
     it "is a different failure from the one the same class raises with a call site" do
       klass = required_class
 
-      expect { Weft::Context.new { insert_tag(klass) } }.to raise_error(Weft::NotReceived)
+      expect { weft_context { insert_tag(klass) } }.to raise_error(Weft::NotReceived)
       expect { for_request(klass).order }.to raise_error(Weft::UnreachableHandoff)
     end
 
@@ -230,7 +230,7 @@ RSpec.describe Weft::Params::Assembly do
         end
       end
 
-      ctx = Weft::Context.new({}, nil, wire_params: { "order_id" => 7 }) { insert_tag(klass) }
+      ctx = weft_context({ "order_id" => 7 }) { insert_tag(klass) }
 
       expect(ctx.children.first.class_list).to include("pre-order-7")
       expect(ctx.to_s).to include("order-7")
@@ -244,7 +244,7 @@ RSpec.describe Weft::Params::Assembly do
       end
       klass.derives(:expensive) { |_p| runs += 1 }
 
-      Weft::Context.new({}, nil, wire_params: { "status" => "hot" }) { insert_tag(klass) }.to_s
+      weft_context({ "status" => "hot" }) { insert_tag(klass) }.to_s
 
       expect(runs).to eq(0)
     end
@@ -264,7 +264,7 @@ RSpec.describe Weft::Params::Assembly do
         span params.order
       end
 
-      Weft::Context.new { insert_tag(klass) }.to_s
+      weft_context { insert_tag(klass) }.to_s
 
       expect(runs).to eq(1)
     end
@@ -280,7 +280,7 @@ RSpec.describe Weft::Params::Assembly do
         end
       end
 
-      expect(Weft::Context.new { insert_tag(klass) }.to_s).to include("hello")
+      expect(weft_context { insert_tag(klass) }.to_s).to include("hello")
     end
 
     it "does not force derivations for serialization surfaces" do
@@ -292,7 +292,7 @@ RSpec.describe Weft::Params::Assembly do
         refreshes every: 5
       end
       klass.derives(:order) { |_p| runs += 1 }
-      component = Weft::Context.new({}, nil, wire_params: { "status" => "hot" }) do
+      component = weft_context({ "status" => "hot" }) do
         insert_tag(klass)
       end.children.first
 
@@ -307,7 +307,7 @@ RSpec.describe Weft::Params::Assembly do
         param :order_id
         derives(:order_id) { |_p| 99 }
       end
-      component = Weft::Context.new { insert_tag(klass) }.children.first
+      component = weft_context { insert_tag(klass) }.children.first
 
       expect(component.weft_component_url).to eq("/_components/dual_wire_derives?order_id=99")
     end
@@ -318,7 +318,7 @@ RSpec.describe Weft::Params::Assembly do
         derives(:doomed) { |_p| raise "boom" }
       end
 
-      expect { Weft::Context.new { insert_tag(klass) }.to_s }.not_to raise_error
+      expect { weft_context { insert_tag(klass) }.to_s }.not_to raise_error
     end
 
     it "defines fills a superclass's expectations through the bag" do
@@ -336,7 +336,7 @@ RSpec.describe Weft::Params::Assembly do
         defines label: "Drivers"
       end
 
-      expect(Weft::Context.new { insert_tag(child) }.to_s).to include("Drivers")
+      expect(weft_context { insert_tag(child) }.to_s).to include("Drivers")
     end
 
     # A pin claims its key. `defines` earns its keep over a plain constant
@@ -355,7 +355,7 @@ RSpec.describe Weft::Params::Assembly do
         insert_tag(child_class)
       end
 
-      parent = Weft::Context.new { insert_tag(parent_class) }.children.first
+      parent = weft_context { insert_tag(parent_class) }.children.first
       child = parent.children.find { |el| el.is_a?(child_class) }
 
       expect(child.params.label).to eq("local")
@@ -393,7 +393,7 @@ RSpec.describe Weft::Params::Assembly do
       it "outranks an inherited value it never declared" do
         page = filtering_page
 
-        rendered = Weft::Context.new(nil, nil, wire_params: { "label" => "Foo" }) { insert_tag(page) }.to_s
+        rendered = weft_context({ "label" => "Foo" }) { insert_tag(page) }.to_s
 
         expect(rendered).to include("<span>Drivers</span>")
       end
@@ -412,7 +412,7 @@ RSpec.describe Weft::Params::Assembly do
           end
         end
 
-        rendered = Weft::Context.new(nil, nil, wire_params: { "label" => "Mine" }) { insert_tag(card) }.to_s
+        rendered = weft_context({ "label" => "Mine" }) { insert_tag(card) }.to_s
 
         expect(rendered).to include("<span>Mine</span>")
       end
@@ -435,7 +435,7 @@ RSpec.describe Weft::Params::Assembly do
 
     it "prefers a handed value; the derivation never runs" do
       klass = dual_class
-      component = Weft::Context.new { insert_tag(klass, order: "handed") }.children.first
+      component = weft_context { insert_tag(klass, order: "handed") }.children.first
 
       expect(component.params.order).to eq("handed")
       expect(runs).to be_empty
@@ -443,7 +443,7 @@ RSpec.describe Weft::Params::Assembly do
 
     it "self-derives when nothing is handed — the dual softens the receives, no raise" do
       klass = dual_class
-      component = Weft::Context.new { insert_tag(klass) }.children.first
+      component = weft_context { insert_tag(klass) }.children.first
 
       expect(component.params.order).to eq("self-fetched")
     end
@@ -455,10 +455,10 @@ RSpec.describe Weft::Params::Assembly do
         derives(:status) { |_p| "derived" }
       end
 
-      wired = Weft::Context.new({}, nil, wire_params: { "status" => "hot" }) do
+      wired = weft_context({ "status" => "hot" }) do
         insert_tag(klass)
       end.children.first
-      bare = Weft::Context.new { insert_tag(klass) }.children.first
+      bare = weft_context { insert_tag(klass) }.children.first
 
       expect(wired.params.status).to eq("hot")
       expect(bare.params.status).to eq("derived")
@@ -479,7 +479,7 @@ RSpec.describe Weft::Params::Assembly do
         params.order if force
         insert_tag(child_class)
       end
-      parent = Weft::Context.new { insert_tag(parent_class) }.children.first
+      parent = weft_context { insert_tag(parent_class) }.children.first
       parent.children.find { |el| el.is_a?(child_class) }
     end
 
@@ -517,7 +517,7 @@ RSpec.describe Weft::Params::Assembly do
         insert_tag(child_class)
       end
 
-      Weft::Context.new({}, nil, branch_bag: delta_bag({ order: "from-a-verb-block" })) do
+      weft_context(branch_bag: delta_bag({ order: "from-a-verb-block" })) do
         insert_tag(parent_class)
       end.to_s
 
@@ -529,7 +529,7 @@ RSpec.describe Weft::Params::Assembly do
       klass = Class.new(Weft::Component) { def self.name = "OverruledDeriver" }
       klass.derives(:label) { |_p| "derived" }
 
-      Weft::Context.new({}, nil, branch_bag: delta_bag({ label: "from-a-verb-block" })) { insert_tag(klass) }.to_s
+      weft_context(branch_bag: delta_bag({ label: "from-a-verb-block" })) { insert_tag(klass) }.to_s
 
       expect(Weft.logger).to have_received(:warn).with(/OverruledDeriver.*:label.*outranks/m)
     end
@@ -538,7 +538,7 @@ RSpec.describe Weft::Params::Assembly do
       klass = Class.new(Weft::Component) { def self.name = "ClearedDeriver" }
       klass.derives(:label) { |_p| "derived" }
 
-      Weft::Context.new({}, nil, branch_bag: delta_bag({ label: nil })) { insert_tag(klass) }.to_s
+      weft_context(branch_bag: delta_bag({ label: nil })) { insert_tag(klass) }.to_s
 
       expect(Weft.logger).not_to have_received(:warn)
     end
@@ -554,7 +554,7 @@ RSpec.describe Weft::Params::Assembly do
         insert_tag(override) if instance_of?(base)
       end
 
-      parent = Weft::Context.new { insert_tag(base) }.children.first
+      parent = weft_context { insert_tag(base) }.children.first
       child = parent.children.find { |el| el.is_a?(override) }
 
       expect(child.params.foo).to eq("base")
@@ -567,7 +567,7 @@ RSpec.describe Weft::Params::Assembly do
       override = Class.new(base) { def self.name = "UnshadowedOverride" }
       override.derives(:foo) { |_p| "overridden" }
 
-      element = Weft::Context.new { insert_tag(override) }.children.first
+      element = weft_context { insert_tag(override) }.children.first
 
       expect(element.params.foo).to eq("overridden")
       expect(Weft.logger).not_to have_received(:warn)
@@ -580,7 +580,7 @@ RSpec.describe Weft::Params::Assembly do
         super(attributes)
         child_classes.each { |c| insert_tag(c) }
       end
-      Weft::Context.new { insert_tag(parent_class) }
+      weft_context { insert_tag(parent_class) }
     end
 
     it "rides an ancestor-forced value down: one derivation, same object" do
@@ -594,7 +594,7 @@ RSpec.describe Weft::Params::Assembly do
         insert_tag(child_class)
       end
 
-      ctx = Weft::Context.new { insert_tag(parent_class) }
+      ctx = weft_context { insert_tag(parent_class) }
       parent = ctx.children.first
       child = parent.children.find { |el| el.is_a?(child_class) }
 
@@ -695,7 +695,7 @@ RSpec.describe Weft::Params::Assembly do
         insert_tag(child_class)
       end
 
-      Weft::Context.new { insert_tag(parent_class) }.to_s
+      weft_context { insert_tag(parent_class) }.to_s
 
       expect(seen).to eq(%w[label-for-parent label-for-child])
     end
@@ -775,7 +775,7 @@ RSpec.describe Weft::Params::Assembly do
       parent_class.define_method(:build) do |_attributes = {}|
         insert_tag(child_class)
       end
-      Weft::Context.new({}, nil, wire_params: { "who" => "from-wire" }) { insert_tag(parent_class) }.to_s
+      weft_context({ "who" => "from-wire" }) { insert_tag(parent_class) }.to_s
 
       expect(seen).to eq(["from-wire"])
     end
@@ -803,7 +803,7 @@ RSpec.describe Weft::Params::Assembly do
         super(attributes)
         insert_tag(child_class)
       end
-      ctx = Weft::Context.new({}, nil, wire_params: wire) do
+      ctx = weft_context(wire) do
         insert_tag(parent_class, **parent_kwargs)
       end
       ctx.children.first.children.find { |el| el.is_a?(child_class) }
@@ -828,7 +828,7 @@ RSpec.describe Weft::Params::Assembly do
       end
       second = Class.new(Weft::Component) { def self.name = "QuietSibling" }
 
-      ctx = Weft::Context.new do
+      ctx = weft_context do
         insert_tag(first, order: Struct.new(:id).new(1))
         insert_tag(second)
       end
@@ -929,7 +929,7 @@ RSpec.describe Weft::Params::Assembly do
       end
 
       handed = order
-      ctx = Weft::Context.new { insert_tag(parent_class, order: handed) }
+      ctx = weft_context { insert_tag(parent_class, order: handed) }
       child = collect_child(ctx, child_class)
 
       expect(child.params.order).to be(handed)
@@ -947,7 +947,7 @@ RSpec.describe Weft::Params::Assembly do
         insert_tag(child_class)
       end
 
-      ctx = Weft::Context.new({}, nil, wire_params: { "section" => "west" }) do
+      ctx = weft_context({ "section" => "west" }) do
         insert_tag(page_class)
       end
       child = collect_child(ctx, child_class)
@@ -973,8 +973,8 @@ RSpec.describe Weft::Params::Assembly do
         param :page, type: :integer
       end
 
-      component = Weft::Context.new({}, nil, wire_params: { "page" => "3" },
-                                             branch_bag: delta_bag({ page: 5 })) do
+      component = weft_context({ "page" => "3" },
+                               branch_bag: delta_bag({ page: 5 })) do
         insert_tag(klass)
       end.children.first
 
@@ -987,7 +987,7 @@ RSpec.describe Weft::Params::Assembly do
         receives :label
       end
 
-      component = Weft::Context.new({}, nil, branch_bag: delta_bag({ label: "from-overlay" })) do
+      component = weft_context(branch_bag: delta_bag({ label: "from-overlay" })) do
         insert_tag(klass, label: "handed")
       end.children.first
 
@@ -1001,7 +1001,7 @@ RSpec.describe Weft::Params::Assembly do
       end
       order = Struct.new(:id).new(42)
 
-      component = Weft::Context.new({}, nil, branch_bag: delta_bag({ order: order })) do
+      component = weft_context(branch_bag: delta_bag({ order: order })) do
         insert_tag(klass)
       end.children.first
 
@@ -1014,8 +1014,8 @@ RSpec.describe Weft::Params::Assembly do
         param :status, type: :string, default: "fresh"
       end
 
-      component = Weft::Context.new({}, nil, wire_params: { "status" => "stale" },
-                                             branch_bag: delta_bag({ status: nil })) do
+      component = weft_context({ "status" => "stale" },
+                               branch_bag: delta_bag({ status: nil })) do
         insert_tag(klass)
       end.children.first
 
@@ -1071,8 +1071,8 @@ RSpec.describe Weft::Params::Assembly do
         derives(:tally) { |_p| 7 }
       end
 
-      component = Weft::Context.new({}, nil, wire_params: { "tally" => "3" },
-                                             branch_bag: delta_bag({ tally: nil })) do
+      component = weft_context({ "tally" => "3" },
+                               branch_bag: delta_bag({ tally: nil })) do
         insert_tag(klass)
       end.children.first
 
@@ -1086,7 +1086,7 @@ RSpec.describe Weft::Params::Assembly do
       end
 
       inner_component = nil
-      Weft::Context.new({}, nil, branch_bag: delta_bag({ account_id: "acct-9" })) do
+      weft_context(branch_bag: delta_bag({ account_id: "acct-9" })) do
         div do
           div do
             inner_component = insert_tag(inner)
@@ -1105,7 +1105,7 @@ RSpec.describe Weft::Params::Assembly do
       end
       primary_bag = Weft::Params.new({ order_id: "o-1" })
 
-      component = Weft::Context.new({}, nil, branch_bag: primary_bag) { insert_tag(klass) }.children.first
+      component = weft_context(branch_bag: primary_bag) { insert_tag(klass) }.children.first
 
       expect(component.params[:order_id]).to eq("o-1")
     end
@@ -1118,7 +1118,7 @@ RSpec.describe Weft::Params::Assembly do
       order = Struct.new(:id).new(1)
       primary_bag = Weft::Params.new({ order: order })
 
-      component = Weft::Context.new({}, nil, branch_bag: primary_bag) { insert_tag(klass) }.children.first
+      component = weft_context(branch_bag: primary_bag) { insert_tag(klass) }.children.first
 
       expect(component.params.order).to be(order)
     end
@@ -1133,8 +1133,8 @@ RSpec.describe Weft::Params::Assembly do
       end
 
       child_component = nil
-      Weft::Context.new({}, nil, wire_params: { "label" => "from-tree" },
-                                 branch_bag: Weft::Params.new({ label: "from-branch" })) do
+      weft_context({ "label" => "from-tree" },
+                   branch_bag: Weft::Params.new({ label: "from-branch" })) do
         insert_tag(parent) do
           child_component = insert_tag(child)
         end
