@@ -109,7 +109,7 @@ end
 
 When you call a method inside an Arbre block, what actually receives it? Two rules cover nearly everything:
 
-**Rule 1 — the routing chain.** A method the enclosing object doesn't itself define is routed by Arbre, in order: methods on the **current element** first (that's how `add_class` or `set_attribute` work bare inside a block), then keys in the context's **assigns** hash, then the **helpers** object, and finally a normal `NoMethodError`. Inside a Weft component you rarely think about assigns and helpers — your component's own methods and ordinary Ruby scope do the work — but the chain matters when you use `Arbre::Context` directly ([Testing](#testing-components)) and when names collide (below).
+**Rule 1 — the routing chain.** A method the enclosing object doesn't itself define is routed by Arbre, in order: methods on the **current element** first (that's how `add_class` or `set_attribute` work bare inside a block), then keys in the context's **assigns** hash, then the **helpers** object, and finally a normal `NoMethodError`. Weft renders with both of those empty (a component's inputs arrive through `params`, never as bare names), so inside a Weft render the chain runs from the current element straight to the error. It still matters when names collide (below).
 
 **Rule 2 — real methods win.** The routing only happens via `method_missing`, so a method that *does* exist on the enclosing object binds there, not to the element you're inside. Your component's own helper methods work naturally inside nested blocks for exactly this reason (during `build`, the enclosing object is your component). But the same rule has a trap: generic element methods like `add_child`, `content`, and `parent` exist on *every* Arbre object — including your component and the root context — so calling them bare inside a `div` block does not touch the div. When you mean the element, take it as a block parameter and be explicit:
 
@@ -233,7 +233,7 @@ end
 
 `within(element) { ... }` temporarily makes any element the current one. It's the tool for components whose sections fill up at different times.
 
-For inspection, the tree is searchable: `find_by_tag("a")` and `find_by_class("nav-item")` return matching descendants, `parent` and `ancestors` walk upward, and `children` enumerates directly. These shine in tests ([below](#testing-components)) and in the rare component that post-processes its own output.
+For inspection, the tree is searchable: `find_by_tag("a")` and `find_by_class("nav-item")` return matching descendants, `parent` and `ancestors` walk upward, and `children` enumerates directly. They earn their keep in the rare component that post-processes its own output.
 
 Two content accessors to keep straight: `content` *reads* the children rendered as HTML — but `content=` **replaces**, clearing every existing child first:
 
@@ -297,23 +297,11 @@ RSpec.describe AttendeeList do
 end
 ```
 
-`Component.render` is the gem-provided entry point and covers most component testing — its keyword arguments are exactly the wire params a request would carry. When you want the element tree rather than the string — asserting on classes, structure, or specific descendants — build a `Weft::Context` and search it. Its `wire_params:` argument stands in for the request, so the component's declared params resolve just as they would over the wire:
+`Component.render` is the gem-provided entry point and covers most component testing — its keyword arguments are exactly the wire params a request would carry.
 
-```ruby
-ctx = Weft::Context.new({}, nil, wire_params: { "event_id" => "trivia-night" }) do
-  attendee_list
-end
-list = ctx.children.first
-expect(list.class_list).to include("roster")
-expect(ctx.find_by_tag("li").length).to eq(2)
-```
+Two cases `render` doesn't reach yet: asserting on the element tree rather than the string (classes, structure, specific descendants), and a component whose values arrive by `receives` from a call site rather than over the wire. Both are getting a dedicated entry point in the next release, shaped like `render`. Until then, test a `receives`-driven component through the component that builds it.
 
-A value the component `receives` is handed the way it is in production — as a builder kwarg, `attendee_list(roster: some_roster)` — since a declared `receives` key consumes the kwarg rather than letting it fall through to an HTML attribute. Capture that value into a local first: the block runs *inside* the context, so a bare `let` name isn't in scope there.
-
-Two Arbre-specific notes for test code:
-
-- **Give test component classes real names.** `builder_method` resolves its class by name at call time, so an anonymous class (`Class.new(Weft::Component)`) with a stubbed `name` raises `NameError` the first time its builder is invoked — and under Arbre 1.x, even `insert_tag` with a truly anonymous class crashes. Define named classes (a `TestCard = Class.new(...)` constant works) rather than fighting it.
-- **`assigns` and `helpers` are Arbre's channels, not Weft's.** `Weft::Context.new(assigns, helpers, wire_params:)` still carries Arbre's two data slots — `assigns` (resolved through Arbre's lookup chain) and `helpers` (an object whose methods become callable bare in the block). Weft components read `params` and use neither; reach for these only when a block holds raw Arbre code that expects them.
+One Arbre-specific note for test code: **give test component classes real names.** `builder_method` resolves its class by name at call time, so an anonymous class (`Class.new(Weft::Component)`) with a stubbed `name` raises `NameError` the first time its builder is invoked — and under Arbre 1.x, even `insert_tag` with a truly anonymous class crashes. Define named classes (a `TestCard = Class.new(...)` constant works) rather than fighting it.
 
 ## Arbre 1.x vs 2.x
 

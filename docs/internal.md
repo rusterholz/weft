@@ -236,7 +236,7 @@ Three lifetimes, and conflating them is the most common way to break this area.
 
 | scope | lives for | holds |
 |-------|-----------|-------|
-| **per-delivery** | one delivered swap-set | the wire universe, the slot register |
+| **per-delivery** | one delivered swap-set | the wire universe, the slot register (the event frame) |
 | **per-root** | one root element tree | the branch bag, and the overlay riding on it |
 | **per-tree** | one element tree | the DOM ids already emitted |
 
@@ -249,10 +249,27 @@ The universe never occupies a rung, because inheritance moves values and a sourc
 handed to each branch as an argument from the render environment, so a root with no lineage whatever
 still has the whole of it.
 
-> **Stated intention, not current structure:** the per-delivery members are hand-threaded today. They
-> are intended to move onto a single object owned by the delivery, read directly rather than passed —
-> which also collapses the repeated recomputation of the universe into one value. No such object exists
-> yet; do not write code that assumes one.
+### The event frame
+
+The per-delivery members live on one object, `Weft::Request::EventFrame`, and every root reads them
+from its context rather than having them passed down. A `Weft::Context` carries exactly two things: the
+**frame** (per-delivery) and the **branch bag** (per-root). The per-tree registers, the one-shot
+handoff staging and the emitted DOM ids, stay on the context itself, because the tree is their scope.
+
+A frame holds the universe and, when the delivery needs one, the slot register:
+
+- **Arbitrated** frames carry a slot register: an action response with its companions, or one push on a
+  stream. Each gets a fresh register, since each is a separate swap-set.
+- **Unarbitrated** frames carry none, and nothing claims a slot in them: a plain GET render, and every
+  recovery. A recovery stands in for a root that already claimed its slot, so it inherits that claim
+  rather than contesting it. Competing would turn two failed companions rendering the same error
+  component into a collision.
+
+The Router computes the universe once per request, in the unarbitrated `request_frame`, and every
+arbitrated frame built during that request shares the same frozen object. In practice the universe does
+not vary between the frames of one request: a stream's pushes all answer one request, and a page adds
+its path params once. It is frozen because it is shared: a write from one root would otherwise reach
+its siblings.
 
 "Cross-branch" names nothing in this system. Siblings share an ancestor and have no channel between
 them; the only way one value reaches two siblings is by sitting in their common ancestor's bag or
