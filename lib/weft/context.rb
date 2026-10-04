@@ -50,13 +50,12 @@ module Weft
     # Arbre adds a tag to its parent only after the build returns.
     SLOT_TAKEN = :weft_slot_taken
 
-    # Two channels: the delivery-wide frame and this root's lineage. Arbre's
-    # own assigns and helpers are passed empty: a bare name resolving from
-    # assigns would be an undeclared, unranked params channel beside the bag.
-    def initialize(frame:, branch_bag: nil, &)
+    # Weft's two channels, the delivery-wide frame and this root's lineage,
+    # beside Arbre's own assigns and helpers, which pass through untouched.
+    def initialize(assigns = {}, helpers = nil, frame:, branch_bag: nil, &)
       @frame = frame
       @branch_bag = branch_bag
-      super({}, nil, &)
+      super(assigns, helpers, &)
     end
 
     # @api private

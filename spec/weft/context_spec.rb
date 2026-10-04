@@ -28,7 +28,7 @@ RSpec.describe Weft::Context do
       expect { described_class.new }.to raise_error(ArgumentError, /frame/)
     end
 
-    it "has no Arbre assigns for a bare name to fall back on" do
+    it "passes Arbre's assigns through, so a bare name can resolve from them" do
       probe = Class.new(Weft::Component) do
         def self.name = "ProbeCard"
 
@@ -38,8 +38,11 @@ RSpec.describe Weft::Context do
         end
       end
 
-      expect { described_class.new(frame: Weft::Request::EventFrame.new({})) { insert_tag(probe) } }.
-        to raise_error(NameError, /order/)
+      html = described_class.new({ order: "A-1" }, frame: Weft::Request::EventFrame.new({})) do
+        insert_tag(probe)
+      end.to_s
+
+      expect(html).to include("A-1")
     end
   end
 

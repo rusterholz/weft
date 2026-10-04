@@ -5,8 +5,8 @@ require "spec_helper"
 RSpec.describe Oms::EditableOrderHeader, type: :component do
   let(:order) { Oms::Order.create!(customer_name: "Acme Corp", lat: 0.0, lon: 0.0, status: "submitted") }
 
-  def render_editor(wire: { "order_id" => order.id })
-    render_weft_html(wire: wire) { editable_order_header }
+  def render_editor(wire: { "order_id" => order.id }, assigns: { order: order })
+    render_weft_html(assigns, wire: wire) { editable_order_header }
   end
 
   it "prefills the customer name from the order" do

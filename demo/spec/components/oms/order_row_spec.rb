@@ -10,39 +10,33 @@ RSpec.describe Oms::OrderRow, type: :component do
   end
 
   it "renders as a tr" do
-    record = order
-    component = render_weft { order_row order: record }
+    component = render_weft({ order: order }) { order_row order: order }
     expect(component.tag_name).to eq("tr")
   end
 
   it "shows a truncated order ID linking to the order" do
-    record = order
-    html = render_weft_html { order_row order: record }
+    html = render_weft_html({ order: order }) { order_row order: order }
     expect(html).to include(order.id[..7])
     expect(html).to include("href=\"/orders/#{order.id}\"")
   end
 
   it "shows the customer name" do
-    record = order
-    html = render_weft_html { order_row order: record }
+    html = render_weft_html({ order: order }) { order_row order: order }
     expect(html).to include("Alice Smith")
   end
 
   it "shows a status badge" do
-    record = order
-    html = render_weft_html { order_row order: record }
+    html = render_weft_html({ order: order }) { order_row order: order }
     expect(html).to include("badge-submitted")
   end
 
   it "shows line item count" do
-    record = order
-    html = render_weft_html { order_row order: record }
+    html = render_weft_html({ order: order }) { order_row order: order }
     expect(html).to include("<td class=\"mono\">1</td>")
   end
 
   it "includes an inline expand button wired via the inline_expand: preset" do
-    record = order
-    html = render_weft_html { order_row order: record }
+    html = render_weft_html({ order: order }) { order_row order: order }
     expect(html).to include("hx-get=\"/_components/oms/order_inline_detail?order_id=#{order.id}\"")
     expect(html).to include('hx-swap="afterend"')
     expect(html).to include('hx-trigger="click once"')
@@ -50,14 +44,12 @@ RSpec.describe Oms::OrderRow, type: :component do
   end
 
   it "derives a unique DOM id from the handed-off order id" do
-    record = order
-    html = render_weft_html { order_row order_id: record.id, order: record }
+    html = render_weft_html({ order: order }) { order_row order_id: order.id, order: order }
     expect(html).to include("id=\"oms-order-row-#{order.id}\"")
   end
 
   it "wires a cancel dismissal with a browser confirm" do
-    record = order
-    html = render_weft_html { order_row order_id: record.id, order: record }
+    html = render_weft_html({ order: order }) { order_row order_id: order.id, order: order }
     expect(html).to include('hx-delete="/_components/oms/order_row/cancel"')
     expect(html).to include('hx-swap="delete"')
     expect(html).to include("hx-confirm=")
