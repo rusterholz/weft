@@ -141,9 +141,8 @@ Weft learns to say what a thing *is*: components name their own identity instead
   - This is the change that makes identity survive inheritance: a subclass can now replace its parent's identity outright, which a first-param convention could never express
   - `Weft::Registry::Eligibility` is now `Weft::Addressing`, and a trailing `Component` is stripped from a DOM id exactly as it already was from a route path
 
-- **Weft's Render Context Is Weft's Own** – `Weft::Context.new(assigns, helpers, wire_params:)` is no longer a way in. Building one by hand put Weft's internal render environment into your test code, and it opened a second road for values into a component: any bare name in a `build` could resolve from Arbre's `assigns` hash, undeclared and unranked, beside `params`. Weft now renders with that road closed.
-  - Test with `Component.render`, whose keyword arguments are the wire params a request would carry
-  - Asserting on the element tree, and handing a component its `receives` values directly, get their own entry point before this release ships
+- **Render Components With `Component.render`** – `Component.render` is how to render a component on its own, in a test or a console; its keyword arguments are the wire params a request would carry. `Weft::Context` is internal and no longer takes `wire_params:`, so move code that built one by hand to `Component.render`.
+  - An entry point that renders to an element tree and accepts `receives` values arrives in this release
 
 - **Component URLs Say What They Are** – `weft_url` is now `weft_component_url`, naming the component's own GET URL rather than leaving "weft url" to be guessed at. `refresh_url` is gone; it existed only because `weft_url` didn't say what it was for.
 
