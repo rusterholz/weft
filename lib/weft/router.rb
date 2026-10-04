@@ -151,29 +151,31 @@ module Weft
       @request_universe ||= filtered_params.freeze
     end
 
-    # A frame for one delivery, or for a recovery standing in for a root.
-    # Over the request's universe unless given another (a page's, which
-    # carries its route's path params).
+    # A frame for one delivery, over the request's universe unless given
+    # another (a page's, which carries its route's path params). A recovery
+    # renders in the frame of the delivery it ships in.
     def new_frame(universe = nil) = Weft::Request::EventFrame.new(universe || request_universe)
 
     # Render a component as HTML. inner: true returns children only
     # (for SSE innerHTML swap where the wrapper element must persist).
     def render_component(component_class, inner: false)
       state = Weft::Params::Assembly.for_request(component_class, request_universe)
-      component = build_root(component_class, new_frame, branch_bag: state)
+      frame = new_frame
+      component = build_root(component_class, frame, branch_bag: state)
       inner ? component.content : component.to_s
     rescue StandardError => e
-      render_error(component_class, state || Weft::Params.new({}), e)
+      render_error(component_class, state || Weft::Params.new({}), e, frame: frame)
     end
 
     # Build a component as the root of a fresh tree; it resolves its own
     # declared params from the frame's universe at construction. Arbre's
     # builder attributes stay pure chrome — params travel their own channel.
     # `branch_bag` lets the root inherit a primary's bag (OOB companions),
-    # carrying any verb-block delta already applied to it.
-    def build_root(component_class, frame, branch_bag: nil)
+    # carrying any verb-block delta already applied to it. `fills` is the slot
+    # a recovery stands in for: the root wears and claims that id.
+    def build_root(component_class, frame, branch_bag: nil, fills: nil)
       klass = component_class
-      Weft::Context.new(frame: frame, branch_bag: branch_bag) { insert_tag(klass) }.children.first
+      Weft::Context.new(frame: frame, branch_bag: branch_bag, fills: fills) { insert_tag(klass) }.children.first
     end
 
     # Render a Page as a full HTML document. Query/body params and
@@ -183,13 +185,14 @@ module Weft
     # (B1 / C1 page-context); the gem-default catches StandardError.
     def render_page(page_class, route_params)
       universe = request_universe.merge(route_params).freeze
+      frame = new_frame(universe)
       klass = page_class
-      Weft::Context.new(frame: new_frame(universe)) { insert_tag(klass) }.to_s
+      Weft::Context.new(frame: frame) { insert_tag(klass) }.to_s
     rescue StandardError => e
       handle_page_chain_failure(e,
                                 originating_page_class: page_class,
                                 originating_params: Weft::Params::Assembly.for_request(page_class, universe),
-                                originating_universe: universe)
+                                originating_frame: frame)
     end
 
     def htmx_request?

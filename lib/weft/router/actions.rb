@@ -89,7 +89,7 @@ module Weft
         (primary ? primary.to_s : "") +
           render_companions(action_companions(action, component_class, primary, composed), frame)
       rescue StandardError => e
-        render_action_error(action, action.renders, composed, e)
+        render_action_error(action, action.renders, composed, e, frame: frame)
       end
 
       # Which companions ride this response, in precedence order: the
@@ -154,9 +154,9 @@ module Weft
       # Error handling for actions. Adds HX-Reswap header when the action's
       # swap strategy is destructive (e.g., :delete) so the error fragment
       # renders visibly instead of the element being silently removed.
-      def render_action_error(action, component_class, resolved_params, error)
+      def render_action_error(action, component_class, resolved_params, error, frame: nil)
         headers["HX-Reswap"] = "outerHTML" if action.swap == :delete
-        render_error(component_class, resolved_params, error)
+        render_error(component_class, resolved_params, error, frame: frame)
       end
     end
   end

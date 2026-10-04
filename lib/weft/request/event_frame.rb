@@ -13,9 +13,8 @@ module Weft
     #
     # The slot register records the DOM id each root claims, so two roots in
     # one delivery (an action's primary and a companion, say) can't both land
-    # on one element. A recovery stands in for a root that already holds its
-    # slot, so it renders in a frame of its own and inherits that claim rather
-    # than contesting it.
+    # on one element. A root whose build raises gives its slot back, and its
+    # recovery, rendering in the same frame, fills that slot in its place.
     class EventFrame
       attr_reader :universe, :slots
 

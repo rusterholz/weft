@@ -34,13 +34,17 @@ module Weft
     # the primary's own build.
     attr_reader :branch_bag
 
+    # The slot a root stands in for, when it renders as a recovery: the failed
+    # root's DOM id, which this root wears and claims in place of its own.
+    attr_reader :fills
+
     # @api private
     # Every DOM id this render has emitted, at any depth, mapped to the class
     # that emitted it — the register behind the duplicate-id warning.
     #
-    # Deliberately separate from the frame's slots, which span a whole delivery and
-    # tracks ROOT components only, because it exists to catch precisely what
-    # slots cannot see: chrome nested inside a wrapper, colliding silently.
+    # Separate from the frame's slots, which span a whole delivery and track
+    # ROOT components only: this one catches what slots cannot see, chrome
+    # nested inside a wrapper, colliding silently.
     def dom_ids_seen
       @dom_ids_seen ||= {}
     end
@@ -50,12 +54,27 @@ module Weft
     # Arbre adds a tag to its parent only after the build returns.
     SLOT_TAKEN = :weft_slot_taken
 
-    # Weft's two channels, the delivery-wide frame and this root's lineage,
-    # beside Arbre's own assigns and helpers, which pass through untouched.
-    def initialize(assigns = {}, helpers = nil, frame:, branch_bag: nil, &)
+    # Weft's channels, the delivery-wide frame and this root's lineage and
+    # slot, beside Arbre's own assigns and helpers, which pass through
+    # untouched. A build that raises gives back any slot its root claimed, so
+    # its recovery can take the slot over in the same frame.
+    def initialize(assigns = {}, helpers = nil, frame:, branch_bag: nil, fills: nil, &)
       @frame = frame
       @branch_bag = branch_bag
+      @fills = fills
       super(assigns, helpers, &)
+    rescue StandardError
+      claimed_slots.each { |id| frame.slots.delete(id) }
+      raise
+    end
+
+    # @api private
+    # Claims +id+ in the frame's register for a root of this render, or throws
+    # SLOT_TAKEN with it when another root already holds it.
+    def claim_slot!(id)
+      throw SLOT_TAKEN, id unless frame.slots.add?(id)
+
+      claimed_slots << id
     end
 
     # @api private
@@ -76,5 +95,9 @@ module Weft
       @staged_received = nil
       values
     end
+
+    private
+
+    def claimed_slots = (@claimed_slots ||= [])
   end
 end

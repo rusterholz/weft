@@ -153,9 +153,10 @@ module Weft
     def build(attributes = {})
       warn_declared_chrome_collisions(attributes)
       super
-      # Guarded rather than assigned: an anonymous component renders no id
+      # Guarded rather than assigned: a component with no id renders no id
       # attribute at all, where `self.id = nil` would leave an empty one.
-      self.id = weft_dom_id unless self.class.anonymous?
+      worn = dom_id_to_wear
+      self.id = worn if worn
       claim_dom_slot!
       warn_duplicate_dom_id!
       apply_refresh_attrs
@@ -245,18 +246,6 @@ module Weft
       Weft::Addressing.ticket?(carried) ? carried.to_s : Weft::Addressing.issue_ticket
     end
 
-    # Speak for this fragment's DOM slot, or abandon the render.
-    #
-    # A response delivers at most one fragment per DOM id — that is simply how
-    # an out-of-band swap is addressed — so when a slot is already spoken for,
-    # continuing would be work thrown away. `super` has run by here but the
-    # component's own build body has not, and that body is where the cost is:
-    # the derivations it forces, the children it renders. Leaving now costs
-    # the caller nothing, because Arbre attaches a tag to its parent only
-    # after the build returns.
-    #
-    # Only roots arbitrate. Duplicate ids among a fragment's own descendants
-    # are that fragment's business, not the response's.
     # Weft cannot infer whether a class needs a DOM id: what makes one wrong is
     # rendering more than one instance on a page, which is a property of the
     # render rather than of the class — a singleton and repeated chrome declare
@@ -290,16 +279,35 @@ module Weft
       false
     end
 
+    # A root standing in for a failed one wears that root's id; anything else
+    # wears its own, unless it is anonymous.
+    def dom_id_to_wear
+      return arbre_context.fills if render_root? && arbre_context.fills
+
+      weft_dom_id unless self.class.anonymous?
+    end
+
+    def render_root? = parent.equal?(arbre_context)
+
+    # Speak for this fragment's DOM slot, or abandon the render.
+    #
+    # A response delivers at most one fragment per DOM id — that is simply how
+    # an out-of-band swap is addressed — so when a slot is already spoken for,
+    # continuing would be work thrown away. `super` has run by here but the
+    # component's own build body has not, and that body is where the cost is:
+    # the derivations it forces, the children it renders. Leaving now costs
+    # the caller nothing, because Arbre attaches a tag to its parent only
+    # after the build returns.
+    #
+    # Only roots arbitrate. Duplicate ids among a fragment's own descendants
+    # are that fragment's business, not the response's. A root filling a
+    # failed root's slot claims it even when anonymous, since it wears that id.
     def claim_dom_slot!
-      return if self.class.anonymous?
+      return unless render_root? && (arbre_context.fills || !self.class.anonymous?)
 
-      slots = arbre_context.frame.slots
-      return unless slots && parent.equal?(arbre_context)
-      return if slots.add?(id)
-
-      # Caught by Weft::Router::Companions#attempt_companion, which turns this
-      # into a warning naming both declarations.
-      throw Weft::Context::SLOT_TAKEN, id
+      # A lost claim throws SLOT_TAKEN, caught by the Router where roots share
+      # a frame, which turns it into a warning naming both declarations.
+      arbre_context.claim_slot!(id)
     end
 
     def apply_refresh_attrs

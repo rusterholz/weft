@@ -46,6 +46,57 @@ RSpec.describe Weft::Context do
     end
   end
 
+  describe "slot claims" do
+    let(:frame) { Weft::Request::EventFrame.new({ "order_id" => "7" }) }
+
+    def slot_card(name, &body)
+      Class.new(Weft::Component) do
+        define_singleton_method(:name) { name }
+        param :order_id
+        identifies_by :order_id
+
+        define_method(:build) do |attributes = {}|
+          super(attributes, &nil)
+          instance_exec(&body) if body
+        end
+      end
+    end
+
+    it "keeps the slot a root claimed when its build completes" do
+      card = slot_card("KeptSlotCard")
+      described_class.new(frame: frame) { insert_tag(card) }
+
+      expect(frame.slots).to eq(Set["kept-slot-card-7"])
+    end
+
+    it "gives the slot back when the root's build raises after claiming it" do
+      card = slot_card("ReleasedSlotCard") { raise "boom" }
+
+      expect { described_class.new(frame: frame) { insert_tag(card) } }.to raise_error("boom")
+      expect(frame.slots).to be_empty
+    end
+
+    it "has a root that fills a slot wear and claim that id instead of its own" do
+      card = slot_card("StandInCard")
+      html = described_class.new(frame: frame, fills: "failed-card-7") { insert_tag(card) }.to_s
+
+      expect(html).to include('id="failed-card-7"')
+      expect(html).not_to include("stand-in-card-7")
+      expect(frame.slots).to eq(Set["failed-card-7"])
+    end
+
+    it "has an anonymous root that fills a slot wear and claim it too" do
+      card = Class.new(Weft::Component) do
+        def self.name = "AnonymousStandIn"
+        anonymous!
+      end
+      html = described_class.new(frame: frame, fills: "failed-card-7") { insert_tag(card) }.to_s
+
+      expect(html).to include('id="failed-card-7"')
+      expect(frame.slots).to eq(Set["failed-card-7"])
+    end
+  end
+
   describe "branch bag" do
     it "carries a bag for root components to branch from" do
       bag = Weft::Params.new({ order_id: 7 })

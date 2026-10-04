@@ -261,9 +261,12 @@ delivery gets a frame of its own, so a fresh register: a plain GET render, an ac
 companions, each push on a stream. Only roots claim, so a register matters only where one delivery
 renders several roots side by side.
 
-A recovery renders in a frame of its own too. It stands in for a root that already claimed its slot, so
-it inherits that claim rather than contesting it; sharing the failed root's register would turn two
-failed companions rendering the same error component into a collision.
+A recovery renders in the frame of the delivery it ships in, and **fills** the failed root's slot: it
+wears that root's DOM id from the start of its build and claims it, rather than claiming an id of its
+own. For that to work, a root whose build raises gives back the slot it claimed (the claim happens
+before the build body runs, so a body that raises would otherwise leave it held by a fragment that
+never ships). A companion that failed before reaching its claim never held the slot, so its recovery
+contests it like any other companion, and stands down if an earlier one already took it.
 
 The Router computes the universe once per request, in `request_universe`, and every frame built during
 that request shares the same frozen object. In practice the universe does not vary between the frames
