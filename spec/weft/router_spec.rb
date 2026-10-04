@@ -225,6 +225,134 @@ RSpec.describe Weft::Router do
     end
   end
 
+  describe "one frame per delivery" do
+    # Each probe records the frame its tree was built in.
+    def frame_probe(name, seen, &body)
+      Class.new(Weft::Component) do
+        define_singleton_method(:name) { name }
+        param :order_id
+        identifies_by :order_id
+
+        define_method(:build) do |attributes = {}|
+          # &nil: super here would otherwise forward frame_probe's own block.
+          super(attributes, &nil)
+          seen << [name, arbre_context.frame]
+          instance_exec(&body) if body
+        end
+      end
+    end
+
+    it "renders an action's primary and its companions in one frame" do
+      seen = []
+      primary = frame_probe("FramedPrimary", seen)
+      primary.performs(:touch) { nil }
+      primary.brings(frame_probe("FramedCompanion", seen))
+
+      post "/_components/framed_primary/touch", order_id: "7"
+
+      frames = seen.map(&:last)
+      expect(seen.map(&:first)).to eq(%w[FramedPrimary FramedCompanion])
+      expect(frames.uniq.size).to eq(1)
+      expect(frames.first.slots).to eq(Set["framed-primary-7", "framed-companion-7"])
+    end
+
+    it "renders a companion's recovery in the response's frame, in the failed companion's slot" do
+      seen = []
+      stand_in = frame_probe("FrameStandIn", seen)
+      failing = frame_probe("FrameFailing", seen) { raise "boom" }
+      failing.recovers(from: StandardError, with: stand_in)
+      primary = frame_probe("FrameHost", seen)
+      primary.performs(:touch) { nil }
+      primary.brings(failing)
+      allow(Weft.logger).to receive(:error)
+
+      post "/_components/frame_host/touch", order_id: "7"
+
+      host_frame = seen.assoc("FrameHost").last
+      expect(seen.assoc("FrameStandIn").last).to be(host_frame)
+      expect(host_frame.slots).to eq(Set["frame-host-7", "frame-failing-7"])
+      expect(last_response.body).to include('id="frame-failing-7"')
+    end
+
+    it "renders a failed GET's recovery in the request's frame, in the failed root's slot" do
+      seen = []
+      stand_in = frame_probe("GetStandIn", seen)
+      failing = frame_probe("FailingGet", seen) { raise "boom" }
+      failing.recovers(from: StandardError, with: stand_in)
+
+      get "/_components/failing_get", order_id: "7"
+
+      frame = seen.assoc("FailingGet").last
+      expect(seen.assoc("GetStandIn").last).to be(frame)
+      expect(frame.slots).to eq(Set["failing-get-7"])
+      expect(last_response.body).to include('id="failing-get-7"')
+    end
+
+    it "renders a push's recovery in the push's frame, in the push's slot" do
+      seen = []
+      stand_in = frame_probe("PushStandIn", seen)
+      failing = frame_probe("FailingPush", seen) { raise "boom" }
+      failing.pushes(every: 5, attempts: 1)
+      failing.recovers(from: StandardError, with: stand_in)
+      router = described_class.new!(downstream_app)
+      allow(router).to receive_messages(filtered_params: { "order_id" => "7" },
+                                        request: Struct.new(:path).new("/stream-test"))
+      allow(Weft.logger).to receive(:error)
+
+      router.send(:run_push_loop, frame_sink, failing)
+
+      push_frame = seen.assoc("FailingPush").last
+      expect(seen.assoc("PushStandIn").last).to be(push_frame)
+      expect(push_frame.slots).to eq(Set["failing-push-7"])
+    end
+
+    # The failing companion raises before its build reaches the claim, so its
+    # slot is held by nobody until its recovery takes it; a later companion
+    # aimed at the same id must still find it taken.
+    it "keeps a slot single when a companion fails before claiming it" do # rubocop:disable RSpec/ExampleLength
+      seen = []
+      early = Class.new(Weft::Component) do
+        def self.name = "EarlyFailure"
+        param :order_id
+        def weft_dom_id = "shared-slot"
+        def build(*) = raise("boom")
+      end
+      early.recovers(from: StandardError, with: frame_probe("EarlyStandIn", seen))
+      later = Class.new(Weft::Component) do
+        def self.name = "LaterClaimant"
+        param :order_id
+        def weft_dom_id = "shared-slot"
+      end
+      primary = frame_probe("SlotHost", seen)
+      primary.performs(:touch) { nil }
+      primary.brings(early)
+      primary.brings(later)
+      allow(Weft.logger).to receive(:error)
+      allow(Weft.logger).to receive(:warn)
+
+      post "/_components/slot_host/touch", order_id: "7"
+
+      expect(last_response.body.scan('id="shared-slot"').size).to eq(1)
+      expect(Weft.logger).to have_received(:warn).with(/shared-slot/)
+    end
+
+    it "gives each push on a stream a frame of its own" do
+      seen = []
+      pushing = frame_probe("FramedPush", seen)
+      pushing.pushes(every: 5)
+      router = described_class.new!(downstream_app)
+      # A fresh hash per call, as Sinatra's params would be.
+      allow(router).to receive(:filtered_params).and_invoke(-> { { "order_id" => "7" } })
+
+      2.times { router.send(:push_component_event, frame_sink, pushing) }
+
+      first, second = seen.map(&:last)
+      expect(first).not_to be(second)
+      expect(first.universe).to be(second.universe)
+      expect([first.slots, second.slots]).to all(eq(Set["framed-push-7"]))
+    end
+  end
+
   describe "one universe per request" do
     let!(:badge_class) do
       Class.new(Weft::Component) do
@@ -1241,6 +1369,7 @@ RSpec.describe Weft::Router do
       order = []
       allow(router).to receive(:content_type)
       allow(router).to receive(:headers)
+      allow(router).to receive(:filtered_params).and_return({})
       allow(router).to receive(:stream).and_yield(frame_sink)
       allow(router).to receive(:sleep) { order << :sleep }
       allow(router).to receive(:push_component_event) do
@@ -1258,6 +1387,7 @@ RSpec.describe Weft::Router do
       order = []
       allow(router).to receive(:content_type)
       allow(router).to receive(:headers)
+      allow(router).to receive(:filtered_params).and_return({})
       allow(router).to receive(:stream).and_yield(frame_sink)
       allow(router).to receive(:sleep) { order << :sleep }
       allow(router).to receive(:push_component_event) do
@@ -1348,6 +1478,20 @@ RSpec.describe Weft::Router do
           raise "boom"
         end
       end
+    end
+
+    # The push's frame is built from the request's params, so a request that
+    # can't be read fails before there is a frame to recover in. That failure
+    # still has to spend the budget and close the stream, not escape the loop.
+    it "still closes the stream when the request's own params can't be read" do
+      component_class = failing_class(attempts: 1)
+      out = frame_sink
+      allow(router).to receive(:stream).and_yield(out)
+      allow(router).to receive(:filtered_params).and_raise(Weft::UnreadableRequest, "invalid %-encoding")
+
+      router.send(:stream_component, component_class)
+
+      expect(out.last).to eq("event: weft:close\ndata: \n\n")
     end
 
     it "routes a failing push through the recovers chain, shipping content-only under the original event id" do
@@ -1599,10 +1743,12 @@ RSpec.describe Weft::Router do
     end
   end
 
-  describe "build_component_with_wire" do
-    it "builds a component that resolves its params from the wire source" do
+  describe "build_root" do
+    let(:frame) { Weft::Request::EventFrame.new({ status: "shipped", value: 10 }) }
+
+    it "builds a component that resolves its params from the frame's universe" do
       router = described_class.new!(downstream_app)
-      component = router.send(:build_component_with_wire, stat_card_class, { status: "shipped", value: 10 })
+      component = router.send(:build_root, stat_card_class, frame)
 
       expect(component).to be_a(Weft::Component)
       expect(component.weft_dom_id).to eq("stat-card-shipped")
@@ -1612,7 +1758,7 @@ RSpec.describe Weft::Router do
 
     it "returns children-only HTML via content (for SSE innerHTML swap)" do
       router = described_class.new!(downstream_app)
-      component = router.send(:build_component_with_wire, stat_card_class, { status: "shipped", value: 10 })
+      component = router.send(:build_root, stat_card_class, frame)
 
       # content returns children only — no wrapper div
       expect(component.content).not_to include('id="stat-card-shipped"')

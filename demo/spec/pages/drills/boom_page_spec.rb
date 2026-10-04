@@ -9,7 +9,6 @@ RSpec.describe Drills::BoomPage, type: :component do
   end
 
   it "raises on every build" do
-    klass = described_class
-    expect { render_weft_html { insert_tag(klass) } }.to raise_error(RuntimeError, /drill/)
+    expect { described_class.render }.to raise_error(RuntimeError, /drill/)
   end
 end

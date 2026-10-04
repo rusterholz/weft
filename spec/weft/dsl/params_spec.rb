@@ -654,7 +654,7 @@ RSpec.describe Weft::DSL::Params do
         end
       end
 
-      html = Weft::Context.new({}, nil, wire_params: { "page" => "2" }) do
+      html = weft_context({ "page" => "2" }) do
         insert_tag(component_class)
       end.to_s
 
@@ -695,7 +695,7 @@ RSpec.describe Weft::DSL::Params do
         def self.name = "WidePager"
         param :per_page, default: 100
       end
-      component = Weft::Context.new { insert_tag(child) }.children.first
+      component = weft_context { insert_tag(child) }.children.first
 
       expect(component.params.per_page).to eq(100)
       expect(component.weft_component_url).to eq("/_components/wide_pager?per_page=100")
@@ -766,7 +766,7 @@ RSpec.describe Weft::DSL::Params do
     end
 
     def nested_in(card, badge, wire: {}, **parent_kwargs)
-      ctx = Weft::Context.new({}, nil, wire_params: wire) { insert_tag(card, **parent_kwargs) }
+      ctx = weft_context(wire) { insert_tag(card, **parent_kwargs) }
       ctx.children.first.children.find { |el| el.is_a?(badge) }
     end
 
@@ -840,7 +840,7 @@ RSpec.describe Weft::DSL::Params do
       end
 
       def badges_under(row, badge, wire)
-        ctx = Weft::Context.new({}, nil, wire_params: wire) { insert_tag(row) }
+        ctx = weft_context(wire) { insert_tag(row) }
         ctx.children.first.children.map { |card| card.children.find { |el| el.is_a?(badge) } }
       end
 
@@ -876,7 +876,7 @@ RSpec.describe Weft::DSL::Params do
         receives :order
       end
       handed = order
-      component = Weft::Context.new({}, nil, wire_params: { "status" => "hot" }) do
+      component = weft_context({ "status" => "hot" }) do
         insert_tag(klass, order: handed)
       end.children.first
 
@@ -897,7 +897,7 @@ RSpec.describe Weft::DSL::Params do
         insert_tag(child_class)
       end
 
-      ctx = Weft::Context.new { insert_tag(parent_class) }
+      ctx = weft_context { insert_tag(parent_class) }
       child = ctx.children.first.children.find { |el| el.is_a?(child_class) }
 
       # region is readable (inheritance axis) but not part of the refresh contract
@@ -910,7 +910,7 @@ RSpec.describe Weft::DSL::Params do
         param :status
         receives :status
       end
-      component = Weft::Context.new { insert_tag(klass, status: "fresh") }.children.first
+      component = weft_context { insert_tag(klass, status: "fresh") }.children.first
 
       expect(component.weft_component_url).to eq("/_components/dual_card?status=fresh")
     end
@@ -921,7 +921,7 @@ RSpec.describe Weft::DSL::Params do
         receives :order
       end
       handed = order
-      component = Weft::Context.new { insert_tag(klass, order: handed) }.children.first
+      component = weft_context { insert_tag(klass, order: handed) }.children.first
 
       expect(component.weft_dom_id).to eq("slip-card")
     end
@@ -933,7 +933,7 @@ RSpec.describe Weft::DSL::Params do
         receives :feed
         pushes every: 5
       end
-      component = Weft::Context.new({}, nil, wire_params: { "symbol" => "WEFT" }) do
+      component = weft_context({ "symbol" => "WEFT" }) do
         insert_tag(klass, feed: Object.new)
       end.children.first
 
@@ -947,7 +947,7 @@ RSpec.describe Weft::DSL::Params do
   # the failure, instead of raising a second time on top of it.
   describe "refusing wire values a declaration cannot accept" do
     def build(klass, wire)
-      Weft::Context.new({}, nil, wire_params: wire) { insert_tag(klass) }.children.first
+      weft_context(wire) { insert_tag(klass) }.children.first
     end
 
     it "refuses a value the declared type cannot represent" do

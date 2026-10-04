@@ -236,7 +236,7 @@ Three lifetimes, and conflating them is the most common way to break this area.
 
 | scope | lives for | holds |
 |-------|-----------|-------|
-| **per-delivery** | one delivered swap-set | the wire universe, the slot register |
+| **per-delivery** | one delivered swap-set | the wire universe, the slot register (the event frame) |
 | **per-root** | one root element tree | the branch bag, and the overlay riding on it |
 | **per-tree** | one element tree | the DOM ids already emitted |
 
@@ -249,10 +249,29 @@ The universe never occupies a rung, because inheritance moves values and a sourc
 handed to each branch as an argument from the render environment, so a root with no lineage whatever
 still has the whole of it.
 
-> **Stated intention, not current structure:** the per-delivery members are hand-threaded today. They
-> are intended to move onto a single object owned by the delivery, read directly rather than passed —
-> which also collapses the repeated recomputation of the universe into one value. No such object exists
-> yet; do not write code that assumes one.
+### The event frame
+
+The per-delivery members live on one object, `Weft::Request::EventFrame`, and every root reads them
+from its context rather than having them passed down. A `Weft::Context` carries exactly two things: the
+**frame** (per-delivery) and the **branch bag** (per-root). The per-tree registers, the one-shot
+handoff staging and the emitted DOM ids, stay on the context itself, because the tree is their scope.
+
+A frame holds the universe and the slot register, where each root records the DOM id it claims. Every
+delivery gets a frame of its own, so a fresh register: a plain GET render, an action response with its
+companions, each push on a stream. Only roots claim, so a register matters only where one delivery
+renders several roots side by side.
+
+A recovery renders in the frame of the delivery it ships in, and **fills** the failed root's slot: it
+wears that root's DOM id from the start of its build and claims it, rather than claiming an id of its
+own. For that to work, a root whose build raises gives back the slot it claimed (the claim happens
+before the build body runs, so a body that raises would otherwise leave it held by a fragment that
+never ships). A companion that failed before reaching its claim never held the slot, so its recovery
+contests it like any other companion, and stands down if an earlier one already took it.
+
+The Router computes the universe once per request, in `request_universe`, and every frame built during
+that request shares the same frozen object. In practice the universe does not vary between the frames
+of one request: a stream's pushes all answer one request, and a page adds its path params once. It is
+frozen because it is shared: a write from one root would otherwise reach its siblings.
 
 "Cross-branch" names nothing in this system. Siblings share an ancestor and have no channel between
 them; the only way one value reaches two siblings is by sitting in their common ancestor's bag or

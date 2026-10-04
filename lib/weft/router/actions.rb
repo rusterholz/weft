@@ -14,7 +14,8 @@ module Weft
     # `render_error`; the small `render_action_error` wrapper sets the
     # destructive-swap header before delegating.
     #
-    # Depends on Router internals: `filtered_params`, `handle_redirect`,
+    # Depends on Router internals: `request_universe`, `new_frame`,
+    # `build_root`, `handle_redirect`,
     # `apply_announcement_header`, `render_error`, `headers`, and the
     # companion slice's `render_companions` / `applicable_companions` /
     # `explicitly_named_companions`.
@@ -59,7 +60,7 @@ module Weft
       # and control has passed on — the rendering component's chain against
       # state 2.
       def handle_action(action, component_class)
-        state = Weft::Params::Assembly.for_request(component_class, filtered_params)
+        state = Weft::Params::Assembly.for_request(component_class, request_universe)
         returned = Weft::DSL::Sandbox.run(state, &action.callable) if action.callable
         return handle_redirect(returned) if returned.is_a?(Weft::Redirect)
       rescue StandardError => e
@@ -83,12 +84,12 @@ module Weft
       def render_action_response(action, component_class, state, returned)
         composed = state % (returned.is_a?(Hash) ? returned : {})
         apply_announcement_header(component_class, action.name)
-        slots = Set.new
-        primary = build_action_primary(action, composed, slots)
+        frame = new_frame
+        primary = build_action_primary(action, composed, frame)
         (primary ? primary.to_s : "") +
-          render_companions(action_companions(action, component_class, primary, composed), slots)
+          render_companions(action_companions(action, component_class, primary, composed), frame)
       rescue StandardError => e
-        render_action_error(action, action.renders, composed, e)
+        render_action_error(action, action.renders, composed, e, frame: frame)
       end
 
       # Which companions ride this response, in precedence order: the
@@ -108,8 +109,7 @@ module Weft
       def target_companions(action, component_class, primary, composed)
         context = action.renders.equal?(component_class) ? :action : :transfer
         lineage = companion_lineage(primary, composed)
-        env = { universe: filtered_params, branch_bag: lineage }
-        applicable_companions(action.renders, context, action.name).map { |inc| [inc, lineage, env] }
+        applicable_companions(action.renders, context, action.name).map { |inc| [inc, lineage] }
       end
 
       # The declaring component's companions on a transfer. This branch
@@ -121,8 +121,7 @@ module Weft
       # inherited nothing here would pay a second time for work the response
       # has already done.
       def declarer_companions(component_class, action_name, composed)
-        env = { universe: filtered_params, branch_bag: composed }
-        explicitly_named_companions(component_class, action_name).map { |inc| [inc, composed, env] }
+        explicitly_named_companions(component_class, action_name).map { |inc| [inc, composed] }
       end
 
       # Delete-swap actions skip the primary render: htmx discards the body
@@ -137,10 +136,10 @@ module Weft
       # Declared defaults don't ride a branch, so the target's own fallbacks
       # stay its own; to override an inherited value, return the key (an
       # explicit nil clears it).
-      def build_action_primary(action, composed, slots)
+      def build_action_primary(action, composed, frame)
         return nil if action.swap == :delete
 
-        build_component_with_wire(action.renders, filtered_params, branch_bag: composed, slots: slots)
+        build_root(action.renders, frame, branch_bag: composed)
       end
 
       # The bag a companion block reads AND the bag its component branches —
@@ -155,9 +154,9 @@ module Weft
       # Error handling for actions. Adds HX-Reswap header when the action's
       # swap strategy is destructive (e.g., :delete) so the error fragment
       # renders visibly instead of the element being silently removed.
-      def render_action_error(action, component_class, resolved_params, error)
+      def render_action_error(action, component_class, resolved_params, error, frame: nil)
         headers["HX-Reswap"] = "outerHTML" if action.swap == :delete
-        render_error(component_class, resolved_params, error)
+        render_error(component_class, resolved_params, error, frame: frame)
       end
     end
   end

@@ -11,6 +11,8 @@
 # rather than hand-written htmx — the app expresses only intent ("retry, using
 # this URL") and inherits the standard swap behavior for free.
 class ErrorComponent < Weft::Defaults::ErrorComponent
+  builder_method :error_component
+
   # Rendered via Weft.configuration.error_component and the recovers chain,
   # not addressed directly — so it does not route. (abstract! does not inherit
   # from the gem default, hence the re-declaration.)

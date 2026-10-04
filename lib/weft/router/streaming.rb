@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "weft/params/assembly"
-require "weft/resolver"
 
 module Weft
   class Router
@@ -16,8 +15,9 @@ module Weft
     # attempts budget; when it runs out, the CLOSE_EVENT frame tells the
     # client to stop reconnecting and the connection closes.
     #
-    # Depends on Router internals: `build_component`, `render_push_companions`,
-    # `render_push_recovery`, `pass`, `content_type`, `headers`, `stream`.
+    # Depends on Router internals: `build_root`, `request_universe`,
+    # `new_frame`, `render_push_companions`, `render_push_recovery`,
+    # `pass`, `content_type`, `headers`, `stream`.
     module Streaming
       # SSE event name that tells htmx-ext-sse to close the EventSource and
       # stop reconnecting; every pushing component's wrapper names it in its
@@ -60,28 +60,28 @@ module Weft
       # busy-looping.
       def run_push_loop(out, klass)
         interval = klass.push_config[:every]
-        attempts = klass.push_config[:attempts] || Weft.configuration.push_attempts
+        attempts = push_attempts(klass)
         after_first = !klass.push_config.fetch(:immediate, true)
         failures = 0
         loop do
           sleep interval if after_first
           after_first = true
-          push_component_event(out, klass)
+          frame = new_frame
+          push_component_event(out, klass, frame)
           failures = 0
         rescue Errno::EPIPE, IOError
           break
         rescue StandardError => e
           failures += 1
-          break unless push_failure_frames(out, klass, e, failures: failures, attempts: attempts)
+          break unless push_failure_frames(out, klass, e, frame, failures: failures, attempts: attempts)
         end
       end
 
-      def push_component_event(out, component_class)
-        slots = Set.new
-        component = build_component(component_class, slots: slots)
-        env = { universe: filtered_params, branch_bag: component.params }
-        html = component.content +
-               render_push_companions(component_class, component.params, render_env: env, slots: slots)
+      def push_attempts(klass) = klass.push_config[:attempts] || Weft.configuration.push_attempts
+
+      def push_component_event(out, component_class, frame = new_frame)
+        component = build_root(component_class, frame)
+        html = component.content + render_push_companions(component_class, component.params, frame)
         out << format_sse_event(component.weft_dom_id, html)
       end
 
@@ -89,10 +89,10 @@ module Weft
       # a component target) and, once the attempts budget is spent, the close
       # event that tells the client to stop reconnecting. Returns false when
       # the stream is done — budget exhausted or the client vanished mid-write.
-      def push_failure_frames(out, component_class, error, failures:, attempts:)
+      def push_failure_frames(out, component_class, error, frame, failures:, attempts:)
         Weft.logger.error("SSE push error for #{component_class.name}: #{error.message}")
         remaining = attempts - failures
-        push_recovery_frame(out, component_class, error, remaining)
+        push_recovery_frame(out, component_class, error, remaining, frame)
         return true if remaining.positive?
 
         Weft.logger.error(
@@ -105,13 +105,16 @@ module Weft
       end
 
       # Resolve, render, write. The event name is recomputed from the class and
-      # its assembled bag — the failed build left no instance to ask. Any
+      # its assembled bag — the failed build left no instance to ask — and is
+      # the slot the recovery fills in the failed push's frame. Any
       # render-path StandardError is logged and swallowed: the failure already
       # counts against the budget, and the close logic must still run.
-      def push_recovery_frame(out, component_class, error, attempts_remaining)
-        state = Weft::Params::Assembly.for_request(component_class, filtered_params)
-        html = render_push_recovery(component_class, state, error, attempts_remaining: attempts_remaining)
-        out << format_sse_event(component_class.weft_dom_id_for(state), html) if html
+      def push_recovery_frame(out, component_class, error, attempts_remaining, frame)
+        state = Weft::Params::Assembly.for_request(component_class, request_universe)
+        slot = component_class.weft_dom_id_for(state)
+        html = render_push_recovery(component_class, state, error,
+                                    attempts_remaining: attempts_remaining, frame: frame || new_frame, fills: slot)
+        out << format_sse_event(slot, html) if html
       rescue Errno::EPIPE, IOError
         raise
       rescue StandardError => e

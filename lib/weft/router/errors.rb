@@ -79,7 +79,7 @@ module Weft
       # Walk a Page-context recovers chain (B1, B2, C1 page-context, C4).
       # `originating_page_class` is nil for routing misses (no specific Page);
       # the gem-default chain on Weft::Page handles those.
-      def handle_page_chain_failure(error, originating_page_class:, originating_params: nil, originating_wire: nil)
+      def handle_page_chain_failure(error, originating_page_class:, originating_params: nil, originating_frame: nil)
         root = originating_page_class || Weft::Page
         entry = root.recovery_for(error)
         return page_safety_net(error) unless entry
@@ -98,7 +98,7 @@ module Weft
         block_delta = invoke_recovery_block(entry, state, error)
 
         dispatch_page_target(target, block_delta, error, entry,
-                             universe: originating_wire, branch_bag: state)
+                             frame: originating_frame, branch_bag: state)
       end
 
       # The recovery render is caught here, where the failing page's state is
@@ -107,14 +107,13 @@ module Weft
       # class — and reports the RECOVERY's error, hiding the one that broke
       # the page. Mirrors render_error: log the second failure, surface the
       # first, and stop rather than recurse.
-      def dispatch_page_target(target, block_delta, error, entry, universe:, branch_bag:)
+      def dispatch_page_target(target, block_delta, error, entry, frame:, branch_bag:)
         if page_target?(target)
-          dispatch_page_recovery(target, block_delta, error, entry,
-                                 universe: universe, branch_bag: branch_bag)
+          dispatch_page_recovery(target, block_delta, error, entry, frame: frame, branch_bag: branch_bag)
         else
           render_recovery_component(target, block_delta, error,
                                     component_ctx: { status: recovery_status(error, entry) },
-                                    universe: universe, branch_bag: branch_bag)
+                                    frame: frame, branch_bag: branch_bag)
         end
       rescue StandardError => e
         Weft.logger.error("Page recovery render failed: #{e.class}: #{e.message}")
@@ -124,15 +123,17 @@ module Weft
       # Render or redirect for a Page recovery target. htmx requests get the
       # Page's body content as a fragment; traditional requests get the full
       # document. Status comes from the exception, or the entry's override.
-      # The page renders against the request's universe; the recovery values
-      # ride as overlays (one universe per request).
-      def dispatch_page_recovery(page_class, block_delta, error, entry = nil, universe: nil, branch_bag: nil)
+      # The page renders in the failing page's frame when there is one (its
+      # universe carries the route's path params), else a fresh one over the
+      # request's; the recovery values ride as overlays (one universe per
+      # request).
+      def dispatch_page_recovery(page_class, block_delta, error, entry = nil, frame: nil, branch_bag: nil)
         wire_status = recovery_status(error, entry)
         delta = block_delta.merge(auto_param_overlay(error, { status: wire_status }))
         status wire_status
-        wire = universe || filtered_params
+        frame ||= new_frame
         lineage = recovery_lineage(branch_bag, delta)
-        htmx_request? ? page_body_html(page_class, wire, lineage) : render_full_page(page_class, wire, lineage)
+        htmx_request? ? page_body_html(page_class, frame, lineage) : render_full_page(page_class, frame, lineage)
       end
 
       # The bag a recovery render inherits: whatever the request had composed,
@@ -141,19 +142,17 @@ module Weft
       # one rather than nil, so the lineage is unconditional.
       def recovery_lineage(branch_bag, delta) = (branch_bag || Weft::Params.new({})) % delta
 
-      def render_full_page(page_class, wire_params, branch_bag = nil)
+      def render_full_page(page_class, frame, branch_bag = nil)
         klass = page_class
-        Weft::Context.new({}, nil, wire_params: wire_params,
-                                   branch_bag: branch_bag) { insert_tag(klass) }.to_s
+        Weft::Context.new(frame: frame, branch_bag: branch_bag) { insert_tag(klass) }.to_s
       end
 
       # Extract the rendered HTML inside a Page's <body>. For htmx fragment
       # responses to full-document failures — the surrounding doc shell is
       # already on the client; only the body content should swap.
-      def page_body_html(page_class, wire_params, branch_bag = nil)
+      def page_body_html(page_class, frame, branch_bag = nil)
         klass = page_class
-        ctx = Weft::Context.new({}, nil, wire_params: wire_params,
-                                         branch_bag: branch_bag) { insert_tag(klass) }
+        ctx = Weft::Context.new(frame: frame, branch_bag: branch_bag) { insert_tag(klass) }
         page_instance = ctx.children.first
         body_el = page_instance.children.find { |c| c.respond_to?(:tag_name) && c.tag_name == "body" }
         body_el ? body_el.children.join : page_instance.to_s
@@ -179,15 +178,16 @@ module Weft
       # already forced, so an error component rendering from the same record
       # costs no second query. Bags are for blocks and identity; the wire hash
       # below is for URLs, and stays a plain hash because a retry URL has no
-      # business forcing a derivation to build itself.
-      def render_error(component_class, state, error)
+      # business forcing a derivation to build itself. +frame+ is the delivery
+      # the failure happened in, which its recovery ships in too.
+      def render_error(component_class, state, error, frame: nil)
         entry = component_class.recovery_for(error)
         if entry
           # D1: htmx + :redirect knob + gem-default fallthrough → HX-Redirect.
           return htmx_redirect_to_error_page(error) if d1_applies?(entry, error)
 
           begin
-            return render_recovery(component_class, entry, state, error)
+            return render_recovery(component_class, entry, state, error, frame)
           rescue StandardError => e
             # The recovery handler itself raised — fall through to the hardcoded
             # safety net rather than recursing. Surface the original error;
@@ -204,7 +204,7 @@ module Weft
       # feeds retry URLs and redirect query strings, where materializing a
       # derivation would run user code in the middle of error handling.
       def error_wire_params(component_class)
-        Weft::Resolver.resolve(component_class, filtered_params)
+        Weft::Resolver.resolve(component_class, request_universe)
       end
 
       # D1 applies when: the htmx_errors knob is :redirect, the request is htmx,
@@ -228,14 +228,13 @@ module Weft
       # Execute a matched recovery entry: invoke the block, then dispatch to
       # either a Page-redirect (HX-Redirect / 302) or a fragment render
       # depending on the target's type.
-      def render_recovery(component_class, entry, state, error)
+      def render_recovery(component_class, entry, state, error, frame)
         block_result = invoke_recovery_block(entry, state, error)
         target = component_class.resolve_recovery_target(entry)
         wire = error_wire_params(component_class)
         component_ctx = {
-          originating_id: resolved_dom_id(component_class,
-                                          unbuilt_instance(component_class, filtered_params,
-                                                           branch_bag: state), state),
+          originating_id: resolved_dom_id(component_class, unbuilt_instance(component_class, branch_bag: state),
+                                          state),
           originating_tag: component_tag_for(component_class),
           retry_url: compute_retry_url(component_class, wire),
           status: recovery_status(error, entry)
@@ -244,7 +243,8 @@ module Weft
         if page_target?(target)
           redirect_to_recovery_page(target, wire.merge(block_result), error, component_ctx)
         else
-          render_recovery_component(target, block_result, error, component_ctx: component_ctx, branch_bag: state)
+          render_recovery_component(target, block_result, error,
+                                    component_ctx: component_ctx, frame: frame, branch_bag: state)
         end
       end
 
@@ -268,8 +268,8 @@ module Weft
       # already paid for. Where the same component goes on to render, pass that instance
       # rather than making a second one — the two would carry separate bags,
       # and a derivation behind a declared param would run in each.
-      def unbuilt_instance(component_class, wire_params, branch_bag: nil)
-        component_class.new(Weft::Context.new({}, nil, wire_params: wire_params, branch_bag: branch_bag))
+      def unbuilt_instance(component_class, branch_bag: nil)
+        component_class.new(Weft::Context.new(frame: new_frame, branch_bag: branch_bag))
       rescue StandardError
         nil
       end
@@ -310,15 +310,6 @@ module Weft
       # would only invent blank ones.
       def unresolved_dom_id(component_class)
         "#{component_class.weft_dom_id_base}-unresolved-#{SecureRandom.hex(4)}"
-      end
-
-      # A recovery fragment stands in the failing component's place, so it
-      # wears the failing component's id — a swap addressed anywhere else
-      # lands somewhere else, or nowhere at all. A page-context failure has no
-      # originating component, and its target keeps its own id.
-      def claim_dom_id(component, dom_id)
-        component.set_attribute("id", dom_id) if dom_id
-        component
       end
 
       # GET URL to render the failing component fresh: its resolved_component_path
@@ -365,8 +356,9 @@ module Weft
       # No status (headers are long flushed on a live stream), no companions
       # (their params presume the successful build that didn't happen), and no
       # htmx_errors redirect knob (an HTTP-path concern). Returns nil when the
-      # chain yields nothing; the caller owns rescue and logging.
-      def render_push_recovery(component_class, state, error, attempts_remaining:)
+      # chain yields nothing; the caller owns rescue and logging. The target
+      # renders in the failed push's frame, filling the push's slot.
+      def render_push_recovery(component_class, state, error, attempts_remaining:, frame:, fills:)
         entry = component_class.component_recovery_for(error)
         return nil unless entry
 
@@ -378,7 +370,7 @@ module Weft
           status: recovery_status(error, entry)
         }
         delta = block_delta.merge(auto_param_overlay(error, component_ctx))
-        build_component_with_wire(target, filtered_params, branch_bag: recovery_lineage(state, delta)).content
+        build_root(target, frame, branch_bag: recovery_lineage(state, delta), fills: fills).content
       end
 
       # The target resolves its own schema from the request's universe; the
@@ -392,12 +384,18 @@ module Weft
       # target wanting its own value regardless declares that derivation under
       # a key of its own — inheriting outranks deriving, as it does for a
       # nested child.
-      def render_recovery_component(target, block_delta, error, component_ctx:, universe: nil, branch_bag: nil)
+      #
+      # The fragment stands in the failing component's place, so it renders in
+      # that component's frame and fills its slot, wearing its id: a swap
+      # addressed anywhere else lands somewhere else, or nowhere at all. A
+      # page-context failure has no originating component, and its target
+      # keeps its own id. A failure that came before any frame existed gets a
+      # fresh one here, inside the caller's rescue.
+      def render_recovery_component(target, block_delta, error, component_ctx:, frame: nil, branch_bag: nil)
         delta = block_delta.merge(auto_param_overlay(error, component_ctx))
         status component_ctx.fetch(:status) { recovery_status(error) }
-        component = build_component_with_wire(target, universe || filtered_params,
-                                              branch_bag: recovery_lineage(branch_bag, delta))
-        claim_dom_id(component, component_ctx[:originating_id]).to_s
+        build_root(target, frame || new_frame, branch_bag: recovery_lineage(branch_bag, delta),
+                                               fills: component_ctx[:originating_id]).to_s
       end
 
       # The auto-injected values as an overlay: non-nil values only — a nil
@@ -448,7 +446,7 @@ module Weft
         component_name = component_class.name || "Component"
         retry_url = compute_retry_url(component_class, error_wire_params(component_class))
 
-        Weft::Context.new({}, nil) do
+        Weft::Context.new(frame: new_frame) do
           error_style = "padding:1rem; border:1px solid #fca5a5; border-radius:6px; " \
                         "background:#fef2f2; color:#991b1b; font-size:0.875rem"
           div(class: "weft-error", style: error_style) do

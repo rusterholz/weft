@@ -3,6 +3,7 @@
 require "arbre"
 require "uri"
 
+require "weft/addressing"
 require "weft/context"
 require "weft/context/interception"
 require "weft/context/traversal"
@@ -13,7 +14,7 @@ require "weft/error"
 require "weft/page/assets"
 require "weft/page/head"
 require "weft/registry"
-require "weft/addressing"
+require "weft/request/event_frame"
 
 module Weft
   # Document shell component. Renders the full HTML skeleton (doctype,
@@ -126,13 +127,10 @@ module Weft
 
       # Render this page as a full HTML document outside any Arbre DSL context.
       # The kwargs are pseudo-wire: exactly what a request's query/path params
-      # would carry. Used by the Router for full-document responses, and
-      # available to users for testing or standalone rendering.
+      # would carry. For testing or standalone rendering.
       def render(**wire_params)
         klass = self
-        Weft::Context.new({}, nil, wire_params: wire_params) do
-          insert_tag(klass)
-        end.to_s
+        Weft::Context.new(frame: Weft::Request::EventFrame.new(wire_params)) { insert_tag(klass) }.to_s
       end
 
       private

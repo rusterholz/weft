@@ -3,10 +3,7 @@
 require "spec_helper"
 
 RSpec.describe DrillsPage, type: :component do
-  def rendered
-    klass = described_class
-    render_weft_html { insert_tag(klass) }
-  end
+  def rendered = described_class.render
 
   it "auto-routes at /drills" do
     expect(described_class.page_path).to eq("/drills")

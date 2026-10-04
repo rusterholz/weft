@@ -141,6 +141,9 @@ Weft learns to say what a thing *is*: components name their own identity instead
   - This is the change that makes identity survive inheritance: a subclass can now replace its parent's identity outright, which a first-param convention could never express
   - `Weft::Registry::Eligibility` is now `Weft::Addressing`, and a trailing `Component` is stripped from a DOM id exactly as it already was from a route path
 
+- **Render Components With `Component.render`** – `Component.render` is how to render a component on its own, in a test or a console; its keyword arguments are the wire params a request would carry. `Weft::Context` is internal and no longer takes `wire_params:`, so move code that built one by hand to `Component.render`.
+  - An entry point that renders to an element tree and accepts `receives` values arrives in this release
+
 - **Component URLs Say What They Are** – `weft_url` is now `weft_component_url`, naming the component's own GET URL rather than leaving "weft url" to be guessed at. `refresh_url` is gone; it existed only because `weft_url` didn't say what it was for.
 
 - **Announcements Have Their Own Word** – The verb that sends an event out to the page is now `announces`, which leaves `trigger:` meaning exactly one thing: the browser event that fires an element's request. htmx spells opposite ends of the same round trip `hx-trigger` and `HX-Trigger`; weft no longer inherits that ambiguity, so you can read a class body and know which direction an event travels.

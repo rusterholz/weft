@@ -8,7 +8,7 @@ require "spec_helper"
 # so it never hand-writes htmx.
 RSpec.describe ErrorComponent, type: :component do
   def render_error(**attrs)
-    render_weft_html(wire: attrs) { insert_tag(ErrorComponent) }
+    render_weft_html(wire: attrs) { error_component }
   end
 
   it "renders the retry button via the :retry preset" do
@@ -43,9 +43,7 @@ RSpec.describe ErrorComponent, type: :component do
 
     def render_push_error_for(card_class, order_id)
       state = Weft::Params::Assembly.for_request(card_class, { "order_id" => order_id })
-      Weft::Context.new({}, nil,
-                        wire_params: { attempts_remaining: 2, status_code: 500 },
-                        branch_bag: state) { insert_tag(ErrorComponent) }.to_s
+      weft_context({ attempts_remaining: 2, status_code: 500 }, branch_bag: state) { error_component }.to_s
     end
 
     it "uses the failed card's own title when the derivation still answers" do

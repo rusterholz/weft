@@ -80,7 +80,7 @@ RSpec.describe Weft::Action do
       action = described_class.new(name: :advance, method: :post, renders: component_class)
       klass = component_class
 
-      ctx = Weft::Context.new({}, nil, wire_params: { "order_id" => 42 }) { insert_tag(klass) }
+      ctx = weft_context({ "order_id" => 42 }) { insert_tag(klass) }
       component = ctx.children.first
 
       htmx = action.to_htmx_attrs(component)
@@ -94,7 +94,7 @@ RSpec.describe Weft::Action do
     it "uses custom swap strategy" do
       action = described_class.new(name: :close, swap: :delete, renders: component_class)
       klass = component_class
-      ctx = Weft::Context.new({}, nil, wire_params: { "order_id" => 1 }) { insert_tag(klass) }
+      ctx = weft_context({ "order_id" => 1 }) { insert_tag(klass) }
 
       htmx = action.to_htmx_attrs(ctx.children.first)
       expect(htmx["hx-swap"]).to eq("delete")
@@ -103,7 +103,7 @@ RSpec.describe Weft::Action do
     it "uses custom target selector" do
       action = described_class.new(name: :add, renders: component_class, target: "#items-list")
       klass = component_class
-      ctx = Weft::Context.new({}, nil, wire_params: { "order_id" => 1 }) { insert_tag(klass) }
+      ctx = weft_context({ "order_id" => 1 }) { insert_tag(klass) }
 
       htmx = action.to_htmx_attrs(ctx.children.first)
       expect(htmx["hx-target"]).to eq("#items-list")

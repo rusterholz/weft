@@ -10,8 +10,8 @@ module Weft
     # component declares via `brings`, riding alongside its response with the
     # `hx-swap-oob` attribute set so htmx swaps each into its own DOM slot.
     #
-    # Depends on Router internals: `filtered_params`,
-    # `build_component_with_wire`, and the Errors slice's identity and
+    # Depends on Router internals: `request_universe`, `build_root`, and the
+    # Errors slice's identity and
     # recovery helpers (`unbuilt_instance`, `resolved_dom_id`,
     # `invoke_recovery_block`, `auto_param_overlay`, `component_tag_for`,
     # `compute_retry_url`, `recovery_status`).
@@ -22,9 +22,9 @@ module Weft
       # transfer's destination, so only unfiltered companions — "every
       # response I render in" — qualify; `on:` and `when:` both name contexts
       # a stream never enters.
-      def render_push_companions(component_class, primary_params, render_env:, slots:)
+      def render_push_companions(component_class, primary_params, frame)
         render_companions(applicable_companions(component_class, :push, nil).
-                            map { |inc| [inc, primary_params, render_env] }, slots)
+                            map { |inc| [inc, primary_params] }, frame)
       end
 
       # The companions of one component that fire in one context.
@@ -40,22 +40,21 @@ module Weft
         component_class.companions.select { |inc| inc[:on]&.include?(action_name) }
       end
 
-      # Render a planned set of companions: each entry pairs a companion
-      # with the params view its block reads and the environment its
-      # component builds in, because companions arriving from different
-      # branches of one response fork at different points.
-      def render_companions(plan, slots)
+      # Render a planned set of companions: each entry pairs a companion with
+      # the lineage its block reads and its component branches, because
+      # companions arriving from different branches of one response fork at
+      # different points. All of them build in the response's one frame.
+      def render_companions(plan, frame)
         return "" if plan.empty?
 
         winners = {}
-        plan.filter_map { |companion, view, env| companion_fragment(companion, view, env, slots, winners) }.
-          join.html_safe
+        plan.filter_map { |companion, base| companion_fragment(companion, base, frame, winners) }.join.html_safe
       end
 
       # One companion's fragment, or nil when it yields none. `winners` records
       # who took each slot, so a collision can name the declaration it lost to.
-      def companion_fragment(companion, view, env, slots, winners)
-        fragment = attempt_companion(companion, view, env, slots, winners)
+      def companion_fragment(companion, base, frame, winners)
+        fragment = attempt_companion(companion, base, frame, winners)
         winners[fragment.id] = companion if fragment
         fragment
       end
@@ -68,26 +67,32 @@ module Weft
       # build. Companions differing in an id-bearing param claim different
       # slots and both ride — which is what makes two of a kind, a left eye
       # and a right eye, a legitimate pair rather than a clash.
-      def attempt_companion(companion, view, env, slots, winners)
-        lineage = companion_lineage_for(companion, view, env)
+      def attempt_companion(companion, base, frame, winners)
+        lineage = companion_lineage_for(companion, base)
+        claim_or_stand_down(companion, winners) do
+          build_root(companion[:component_class], frame, branch_bag: lineage)
+        end
+      rescue StandardError => e
+        # A delta block that raised leaves no lineage of its own; the companion
+        # falls back to what it inherited from the response.
+        recovered_companion(companion, lineage || base, e, frame, winners)
+      end
+
+      # The yielded build as a companion fragment, or nil with a warning when
+      # its slot is already spoken for. Where Component#claim_dom_slot!'s throw
+      # surfaces: one catch per build, so standing down affects only this one.
+      # The block's trailing nil is the no-contest value; the component itself
+      # is captured by assignment so a successful build can't read as an id.
+      def claim_or_stand_down(companion, winners)
         component = nil
-        # Where Component#claim_dom_slot!'s throw surfaces — one catch per
-        # companion, so standing down affects only this one. The block's
-        # trailing nil is the no-contest value; the component itself is
-        # captured by assignment so a successful build can't read as an id.
         contested = catch(Weft::Context::SLOT_TAKEN) do
-          component = build_component_with_wire(companion[:component_class], companion_universe(env),
-                                                branch_bag: lineage, slots: slots)
+          component = yield
           nil
         end
         return as_companion(component) unless contested
 
         warn_companion_collision(contested, winners[contested], companion)
         nil
-      rescue StandardError => e
-        # A delta block that raised leaves no lineage of its own; the companion
-        # falls back to what it inherited from the response.
-        recovered_companion(companion, env, lineage || env[:branch_bag], e)
       end
 
       # Each companion is an OOB-delivered child: it renders against the
@@ -99,15 +104,12 @@ module Weft
       # carrying only its own delta, so two of them holding different values for
       # one key never see each other's. An empty delta hands back the very same
       # bag, so a blockless companion costs nothing.
-      def companion_lineage_for(companion, view, env)
-        base = env[:branch_bag]
+      def companion_lineage_for(companion, base)
         return base unless companion[:block]
 
-        delta = Weft::DSL::Sandbox.run(view, &companion[:block])
+        delta = Weft::DSL::Sandbox.run(base, &companion[:block])
         delta.is_a?(Hash) ? base % delta : base
       end
-
-      def companion_universe(env) = env.fetch(:universe) { filtered_params }
 
       # A companion is a courtesy, not a contract: the response belongs to
       # the primary, whose render, status and headers a failing bystander
@@ -118,26 +120,26 @@ module Weft
       # response cannot redirect, and a companion must never navigate on the
       # primary's behalf.
       #
-      # The recovery renders without the slot register: it inherits the failed
-      # companion's claim rather than competing with it, since a build that
-      # raised after claiming its slot still holds one.
+      # The recovery renders in the response's frame and fills the failed
+      # companion's slot, which the failed build gave back. A companion that
+      # failed before reaching its claim never held the slot, so its recovery
+      # contests it like any companion would, and stands down if it is taken.
       #
       # Two lineages are in scope here and the choice is load-bearing: the
       # target branches the failed companion's OWN bag, not the host's that
       # the companion branched. That is the lineage the recovery block read,
       # and the block's return rides over it as an overlay.
-      def recovered_companion(companion, env, lineage, error)
+      def recovered_companion(companion, lineage, error, frame, winners)
         klass = companion[:component_class]
         log_companion_failure(companion, error)
         entry = klass.component_recovery_for(error)
         return nil unless entry
 
-        dom_id = failed_companion_dom_id(klass, env, lineage)
-        state = companion_state(klass, env, lineage)
-        component = build_component_with_wire(klass.resolve_recovery_target(entry), companion_universe(env),
-                                              branch_bag: companion_recovery_lineage(klass, state, entry, error,
-                                                                                     dom_id))
-        as_companion(claim_dom_id(component, dom_id))
+        dom_id = failed_companion_dom_id(klass, lineage)
+        recovery_lineage = companion_recovery_lineage(klass, companion_state(klass, lineage), entry, error, dom_id)
+        claim_or_stand_down(companion, winners) do
+          build_root(klass.resolve_recovery_target(entry), frame, branch_bag: recovery_lineage, fills: dom_id)
+        end
       rescue StandardError => e
         Weft.logger.error("Companion recovery render failed: #{e.class}: #{e.message}")
         nil
@@ -146,8 +148,8 @@ module Weft
       # Identity comes from exactly what the failed render was given — a delta
       # that moves an id-bearing param moves the slot with it, and an error
       # fragment addressed anywhere else lands on the wrong element.
-      def failed_companion_dom_id(klass, env, lineage)
-        resolved_dom_id(klass, unbuilt_instance(klass, companion_universe(env), branch_bag: lineage))
+      def failed_companion_dom_id(klass, lineage)
+        resolved_dom_id(klass, unbuilt_instance(klass, branch_bag: lineage))
       end
 
       # The state the failed build was given — its own wire schema over the
@@ -159,8 +161,8 @@ module Weft
       # visits declared keys only, but the overlay rides on the bag rather than
       # in it, so a companion block's ad-hoc delta stays readable in the recovery
       # block exactly as it was readable in the block that produced it.
-      def companion_state(klass, env, lineage)
-        Weft::Params::Assembly.call(klass, companion_universe(env), branched_from: lineage)
+      def companion_state(klass, lineage)
+        Weft::Params::Assembly.call(klass, request_universe, branched_from: lineage)
       end
 
       # The lineage the recovery target branches: the failed companion's own

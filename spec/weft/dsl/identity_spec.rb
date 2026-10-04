@@ -4,7 +4,7 @@ require "arbre"
 
 RSpec.describe Weft::DSL::Identity do
   def render_in_context(klass, wire_params: {})
-    Weft::Context.new({}, nil, wire_params: wire_params) { insert_tag(klass) }.children.first
+    weft_context(wire_params) { insert_tag(klass) }.children.first
   end
 
   describe ".identifies_by" do
@@ -150,7 +150,7 @@ RSpec.describe Weft::DSL::Identity do
         anonymous!
       end
 
-      html = Weft::Context.new({}, nil, slots: Set.new) do
+      html = weft_context do
         3.times { insert_tag(klass) }
       end.to_s
 
@@ -213,7 +213,7 @@ RSpec.describe Weft::DSL::Identity do
   describe "the blank-identifier warning's remedy" do
     def render_blank(klass)
       allow(Weft.logger).to receive(:warn)
-      Weft::Context.new { insert_tag(klass) }.to_s
+      weft_context { insert_tag(klass) }.to_s
     end
 
     it "names the wire door for a param" do
@@ -282,7 +282,7 @@ RSpec.describe Weft::DSL::Identity do
     end
 
     def render_nested(klass, count)
-      Weft::Context.new { div { count.times { insert_tag(klass) } } }.to_s
+      weft_context { div { count.times { insert_tag(klass) } } }.to_s
     end
 
     it "warns when one render emits an id twice" do
@@ -308,7 +308,7 @@ RSpec.describe Weft::DSL::Identity do
       klass = repeated
       allow(Weft.logger).to receive(:warn)
 
-      Weft::Context.new do
+      weft_context do
         div { div { div { 3.times { insert_tag(klass) } } } }
       end.to_s
 
@@ -340,7 +340,7 @@ RSpec.describe Weft::DSL::Identity do
 
       allow(Weft.logger).to receive(:warn)
 
-      Weft::Context.new do
+      weft_context do
         div { %w[a b c].each { |id| insert_tag(distinct, row_id: id) } }
       end.to_s
 

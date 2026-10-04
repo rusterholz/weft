@@ -3,21 +3,27 @@
 # Test helper for rendering components in isolation.
 #
 # Everything here renders through Weft::Context, which is the context a
-# request builds. A bare Arbre::Context is deliberately not offered: nothing
-# in the app or the gem ever creates one, so a component tested in one is
-# being exercised down a path no user reaches.
+# request builds. No bare Arbre::Context is offered: nothing in the app or the
+# gem creates one, so a component tested in one would run down a path no user
+# reaches.
 module ArbreHelper
   # Renders a Weft::Context block and returns the first top-level element.
   # Use for Weft::Components that need action:/trigger: expansion. Pass
   # `wire:` to simulate request params — components resolve their declared
   # params from it, exactly as they would from a query string.
   def render_weft(assigns = {}, wire: {}, &)
-    Weft::Context.new(assigns, nil, wire_params: wire, &).children.first
+    weft_context(wire, assigns, &).children.first
   end
 
   # Renders a Weft::Context block and returns the full HTML string.
   def render_weft_html(assigns = {}, wire: {}, &)
-    Weft::Context.new(assigns, nil, wire_params: wire, &).to_s
+    weft_context(wire, assigns, &).to_s
+  end
+
+  # A context over +wire+ in a frame of its own. Weft's internal constructor;
+  # this helper is the demo's one dependency on it.
+  def weft_context(wire = {}, assigns = {}, **, &)
+    Weft::Context.new(assigns, nil, frame: Weft::Request::EventFrame.new(wire), **, &)
   end
 
   # Runs an action callable the way the Router does: against the state the
