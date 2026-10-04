@@ -256,8 +256,7 @@ module Weft
     # after the build returns.
     #
     # Only roots arbitrate. Duplicate ids among a fragment's own descendants
-    # are that fragment's business, not the response's, and a response that
-    # has nothing to arbitrate carries no register at all.
+    # are that fragment's business, not the response's.
     # Weft cannot infer whether a class needs a DOM id: what makes one wrong is
     # rendering more than one instance on a page, which is a property of the
     # render rather than of the class — a singleton and repeated chrome declare

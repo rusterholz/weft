@@ -11,16 +11,17 @@ module Weft
     # component projects it through its own declarations. It is frozen because
     # every root in the delivery shares the one object.
     #
-    # The slot register exists only on deliveries whose roots compete for DOM
-    # ids: an action response and its companions, or one push. A render that
-    # stands in for a root that already claimed its slot (a recovery) is built
-    # in an unarbitrated frame, so it inherits the claim rather than contesting it.
+    # The slot register records the DOM id each root claims, so two roots in
+    # one delivery (an action's primary and a companion, say) can't both land
+    # on one element. A recovery stands in for a root that already holds its
+    # slot, so it renders in a frame of its own and inherits that claim rather
+    # than contesting it.
     class EventFrame
       attr_reader :universe, :slots
 
-      def initialize(universe, arbitrated: false)
+      def initialize(universe)
         @universe = universe.frozen? ? universe : universe.dup.freeze
-        @slots = Set.new if arbitrated
+        @slots = Set.new
       end
     end
   end

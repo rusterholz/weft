@@ -144,23 +144,23 @@ module Weft
       params.except("splat", "captures")
     end
 
-    # The frame every render outside slot arbitration shares: a plain GET, and
-    # every recovery, which stands in for a root rather than competing with it.
-    # Its universe is computed once and is the one every other frame in this
-    # request reads: an action response's, or each push on a stream.
-    def request_frame
-      @request_frame ||= Weft::Request::EventFrame.new(filtered_params)
+    # Everything the client sent, computed once: every frame this request
+    # renders reads the one object, whether that is a single response or each
+    # push on a stream.
+    def request_universe
+      @request_universe ||= filtered_params.freeze
     end
 
-    # A delivery whose roots compete for DOM ids: an action response with its
-    # companions, or one push.
-    def arbitrated_frame = Weft::Request::EventFrame.new(request_frame.universe, arbitrated: true)
+    # A frame for one delivery, or for a recovery standing in for a root.
+    # Over the request's universe unless given another (a page's, which
+    # carries its route's path params).
+    def new_frame(universe = nil) = Weft::Request::EventFrame.new(universe || request_universe)
 
     # Render a component as HTML. inner: true returns children only
     # (for SSE innerHTML swap where the wrapper element must persist).
     def render_component(component_class, inner: false)
-      state = Weft::Params::Assembly.for_request(component_class, request_frame.universe)
-      component = build_root(component_class, request_frame, branch_bag: state)
+      state = Weft::Params::Assembly.for_request(component_class, request_universe)
+      component = build_root(component_class, new_frame, branch_bag: state)
       inner ? component.content : component.to_s
     rescue StandardError => e
       render_error(component_class, state || Weft::Params.new({}), e)
@@ -182,14 +182,14 @@ module Weft
     # Page render failures walk the failing Page's recovers chain
     # (B1 / C1 page-context); the gem-default catches StandardError.
     def render_page(page_class, route_params)
-      frame = Weft::Request::EventFrame.new(request_frame.universe.merge(route_params))
+      universe = request_universe.merge(route_params).freeze
       klass = page_class
-      Weft::Context.new(frame: frame) { insert_tag(klass) }.to_s
+      Weft::Context.new(frame: new_frame(universe)) { insert_tag(klass) }.to_s
     rescue StandardError => e
       handle_page_chain_failure(e,
                                 originating_page_class: page_class,
-                                originating_params: Weft::Params::Assembly.for_request(page_class, frame.universe),
-                                originating_frame: frame)
+                                originating_params: Weft::Params::Assembly.for_request(page_class, universe),
+                                originating_universe: universe)
     end
 
     def htmx_request?

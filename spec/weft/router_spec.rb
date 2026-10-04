@@ -234,14 +234,15 @@ RSpec.describe Weft::Router do
         identifies_by :order_id
 
         define_method(:build) do |attributes = {}|
-          super(attributes)
+          # &nil: super here would otherwise forward frame_probe's own block.
+          super(attributes, &nil)
           seen << [name, arbre_context.frame]
           instance_exec(&body) if body
         end
       end
     end
 
-    it "renders an action's primary and its companions in one arbitrated frame" do
+    it "renders an action's primary and its companions in one frame" do
       seen = []
       primary = frame_probe("FramedPrimary", seen)
       primary.performs(:touch) { nil }
@@ -255,7 +256,7 @@ RSpec.describe Weft::Router do
       expect(frames.first.slots).to eq(Set["framed-primary-7", "framed-companion-7"])
     end
 
-    it "renders a recovery outside the slot register, over the same universe" do
+    it "renders a recovery in a frame of its own, over the same universe" do
       seen = []
       stand_in = frame_probe("FrameStandIn", seen)
       failing = frame_probe("FrameFailing", seen) { raise "boom" }
@@ -270,7 +271,8 @@ RSpec.describe Weft::Router do
       host_frame = seen.assoc("FrameHost").last
       recovery_frame = seen.assoc("FrameStandIn").last
       expect(recovery_frame).not_to be(host_frame)
-      expect(recovery_frame.slots).to be_nil
+      expect(host_frame.slots).to include("frame-failing-7")
+      expect(recovery_frame.slots).not_to include("frame-failing-7")
       expect(recovery_frame.universe).to be(host_frame.universe)
     end
 
@@ -279,7 +281,8 @@ RSpec.describe Weft::Router do
       pushing = frame_probe("FramedPush", seen)
       pushing.pushes(every: 5)
       router = described_class.new!(downstream_app)
-      allow(router).to receive(:filtered_params).and_return({ "order_id" => "7" })
+      # A fresh hash per call, as Sinatra's params would be.
+      allow(router).to receive(:filtered_params).and_invoke(-> { { "order_id" => "7" } })
 
       2.times { router.send(:push_component_event, frame_sink, pushing) }
 

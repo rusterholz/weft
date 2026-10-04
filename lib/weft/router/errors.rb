@@ -79,7 +79,7 @@ module Weft
       # Walk a Page-context recovers chain (B1, B2, C1 page-context, C4).
       # `originating_page_class` is nil for routing misses (no specific Page);
       # the gem-default chain on Weft::Page handles those.
-      def handle_page_chain_failure(error, originating_page_class:, originating_params: nil, originating_frame: nil)
+      def handle_page_chain_failure(error, originating_page_class:, originating_params: nil, originating_universe: nil)
         root = originating_page_class || Weft::Page
         entry = root.recovery_for(error)
         return page_safety_net(error) unless entry
@@ -98,7 +98,7 @@ module Weft
         block_delta = invoke_recovery_block(entry, state, error)
 
         dispatch_page_target(target, block_delta, error, entry,
-                             frame: originating_frame, branch_bag: state)
+                             universe: originating_universe, branch_bag: state)
       end
 
       # The recovery render is caught here, where the failing page's state is
@@ -107,13 +107,13 @@ module Weft
       # class — and reports the RECOVERY's error, hiding the one that broke
       # the page. Mirrors render_error: log the second failure, surface the
       # first, and stop rather than recurse.
-      def dispatch_page_target(target, block_delta, error, entry, frame:, branch_bag:)
+      def dispatch_page_target(target, block_delta, error, entry, universe:, branch_bag:)
         if page_target?(target)
-          dispatch_page_recovery(target, block_delta, error, entry, frame: frame, branch_bag: branch_bag)
+          dispatch_page_recovery(target, block_delta, error, entry, universe: universe, branch_bag: branch_bag)
         else
           render_recovery_component(target, block_delta, error,
                                     component_ctx: { status: recovery_status(error, entry) },
-                                    frame: frame, branch_bag: branch_bag)
+                                    universe: universe, branch_bag: branch_bag)
         end
       rescue StandardError => e
         Weft.logger.error("Page recovery render failed: #{e.class}: #{e.message}")
@@ -123,14 +123,14 @@ module Weft
       # Render or redirect for a Page recovery target. htmx requests get the
       # Page's body content as a fragment; traditional requests get the full
       # document. Status comes from the exception, or the entry's override.
-      # The page renders against the failing page's frame when there is one
-      # (its universe carries the route's path params), else the request's; the
-      # recovery values ride as overlays (one universe per request).
-      def dispatch_page_recovery(page_class, block_delta, error, entry = nil, frame: nil, branch_bag: nil)
+      # The page renders over the failing page's universe when there is one
+      # (it carries the route's path params), else the request's; the recovery
+      # values ride as overlays (one universe per request).
+      def dispatch_page_recovery(page_class, block_delta, error, entry = nil, universe: nil, branch_bag: nil)
         wire_status = recovery_status(error, entry)
         delta = block_delta.merge(auto_param_overlay(error, { status: wire_status }))
         status wire_status
-        frame ||= request_frame
+        frame = new_frame(universe)
         lineage = recovery_lineage(branch_bag, delta)
         htmx_request? ? page_body_html(page_class, frame, lineage) : render_full_page(page_class, frame, lineage)
       end
@@ -202,7 +202,7 @@ module Weft
       # feeds retry URLs and redirect query strings, where materializing a
       # derivation would run user code in the middle of error handling.
       def error_wire_params(component_class)
-        Weft::Resolver.resolve(component_class, request_frame.universe)
+        Weft::Resolver.resolve(component_class, request_universe)
       end
 
       # D1 applies when: the htmx_errors knob is :redirect, the request is htmx,
@@ -266,7 +266,7 @@ module Weft
       # rather than making a second one — the two would carry separate bags,
       # and a derivation behind a declared param would run in each.
       def unbuilt_instance(component_class, branch_bag: nil)
-        component_class.new(Weft::Context.new(frame: request_frame, branch_bag: branch_bag))
+        component_class.new(Weft::Context.new(frame: new_frame, branch_bag: branch_bag))
       rescue StandardError
         nil
       end
@@ -375,7 +375,7 @@ module Weft
           status: recovery_status(error, entry)
         }
         delta = block_delta.merge(auto_param_overlay(error, component_ctx))
-        build_root(target, request_frame, branch_bag: recovery_lineage(state, delta)).content
+        build_root(target, new_frame, branch_bag: recovery_lineage(state, delta)).content
       end
 
       # The target resolves its own schema from the request's universe; the
@@ -389,10 +389,10 @@ module Weft
       # target wanting its own value regardless declares that derivation under
       # a key of its own — inheriting outranks deriving, as it does for a
       # nested child.
-      def render_recovery_component(target, block_delta, error, component_ctx:, frame: nil, branch_bag: nil)
+      def render_recovery_component(target, block_delta, error, component_ctx:, universe: nil, branch_bag: nil)
         delta = block_delta.merge(auto_param_overlay(error, component_ctx))
         status component_ctx.fetch(:status) { recovery_status(error) }
-        component = build_root(target, frame || request_frame, branch_bag: recovery_lineage(branch_bag, delta))
+        component = build_root(target, new_frame(universe), branch_bag: recovery_lineage(branch_bag, delta))
         claim_dom_id(component, component_ctx[:originating_id]).to_s
       end
 
@@ -444,7 +444,7 @@ module Weft
         component_name = component_class.name || "Component"
         retry_url = compute_retry_url(component_class, error_wire_params(component_class))
 
-        Weft::Context.new(frame: request_frame) do
+        Weft::Context.new(frame: new_frame) do
           error_style = "padding:1rem; border:1px solid #fca5a5; border-radius:6px; " \
                         "background:#fef2f2; color:#991b1b; font-size:0.875rem"
           div(class: "weft-error", style: error_style) do

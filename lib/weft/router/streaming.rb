@@ -15,8 +15,8 @@ module Weft
     # attempts budget; when it runs out, the CLOSE_EVENT frame tells the
     # client to stop reconnecting and the connection closes.
     #
-    # Depends on Router internals: `build_root`, `request_frame`,
-    # `arbitrated_frame`, `render_push_companions`, `render_push_recovery`,
+    # Depends on Router internals: `build_root`, `request_universe`,
+    # `new_frame`, `render_push_companions`, `render_push_recovery`,
     # `pass`, `content_type`, `headers`, `stream`.
     module Streaming
       # SSE event name that tells htmx-ext-sse to close the EventSource and
@@ -77,7 +77,7 @@ module Weft
       end
 
       def push_component_event(out, component_class)
-        frame = arbitrated_frame
+        frame = new_frame
         component = build_root(component_class, frame)
         html = component.content + render_push_companions(component_class, component.params, frame)
         out << format_sse_event(component.weft_dom_id, html)
@@ -107,7 +107,7 @@ module Weft
       # render-path StandardError is logged and swallowed: the failure already
       # counts against the budget, and the close logic must still run.
       def push_recovery_frame(out, component_class, error, attempts_remaining)
-        state = Weft::Params::Assembly.for_request(component_class, request_frame.universe)
+        state = Weft::Params::Assembly.for_request(component_class, request_universe)
         html = render_push_recovery(component_class, state, error, attempts_remaining: attempts_remaining)
         out << format_sse_event(component_class.weft_dom_id_for(state), html) if html
       rescue Errno::EPIPE, IOError

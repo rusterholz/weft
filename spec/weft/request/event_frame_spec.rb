@@ -25,18 +25,20 @@ RSpec.describe Weft::Request::EventFrame do
   end
 
   describe "#slots" do
-    it "is absent on a delivery with nothing to arbitrate" do
-      expect(described_class.new({}).slots).to be_nil
+    it "starts as an empty register" do
+      expect(described_class.new({}).slots).to eq(Set.new)
     end
 
-    it "is an empty register on an arbitrated delivery" do
-      expect(described_class.new({}, arbitrated: true).slots).to eq(Set.new)
+    it "is a register of the frame's own, never another frame's" do
+      universe = { "status" => "shipped" }.freeze
+
+      expect(described_class.new(universe).slots).not_to be(described_class.new(universe).slots)
     end
   end
 
   it "shares a universe that is already frozen rather than copying it" do
     universe = { "status" => "shipped" }.freeze
 
-    expect(described_class.new(universe, arbitrated: true).universe).to be(universe)
+    expect(described_class.new(universe).universe).to be(universe)
   end
 end

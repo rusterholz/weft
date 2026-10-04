@@ -150,7 +150,7 @@ RSpec.describe Weft::DSL::Identity do
         anonymous!
       end
 
-      html = Weft::Context.new(frame: Weft::Request::EventFrame.new({}, arbitrated: true)) do
+      html = weft_context do
         3.times { insert_tag(klass) }
       end.to_s
 

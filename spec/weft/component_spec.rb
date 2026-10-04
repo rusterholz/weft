@@ -177,8 +177,10 @@ RSpec.describe Weft::Component do
       end
 
       weft_context do
-        insert_tag(component_class, title: "a")
-        insert_tag(component_class, title: "b")
+        div do
+          insert_tag(component_class, title: "a")
+          insert_tag(component_class, title: "b")
+        end
       end.to_s
 
       expect(Weft.logger).to have_received(:warn).twice.with(/title/)

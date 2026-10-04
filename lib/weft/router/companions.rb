@@ -10,7 +10,7 @@ module Weft
     # component declares via `brings`, riding alongside its response with the
     # `hx-swap-oob` attribute set so htmx swaps each into its own DOM slot.
     #
-    # Depends on Router internals: `request_frame`, `build_root`, and the
+    # Depends on Router internals: `request_universe`, `new_frame`, `build_root`, and the
     # Errors slice's identity and
     # recovery helpers (`unbuilt_instance`, `resolved_dom_id`,
     # `invoke_recovery_block`, `auto_param_overlay`, `component_tag_for`,
@@ -113,7 +113,7 @@ module Weft
       # response cannot redirect, and a companion must never navigate on the
       # primary's behalf.
       #
-      # The recovery renders without the slot register: it inherits the failed
+      # The recovery renders in a frame of its own: it inherits the failed
       # companion's claim rather than competing with it, since a build that
       # raised after claiming its slot still holds one.
       #
@@ -129,7 +129,7 @@ module Weft
 
         dom_id = failed_companion_dom_id(klass, lineage)
         state = companion_state(klass, lineage)
-        component = build_root(klass.resolve_recovery_target(entry), request_frame,
+        component = build_root(klass.resolve_recovery_target(entry), new_frame,
                                branch_bag: companion_recovery_lineage(klass, state, entry, error, dom_id))
         as_companion(claim_dom_id(component, dom_id))
       rescue StandardError => e
@@ -154,7 +154,7 @@ module Weft
       # in it, so a companion block's ad-hoc delta stays readable in the recovery
       # block exactly as it was readable in the block that produced it.
       def companion_state(klass, lineage)
-        Weft::Params::Assembly.call(klass, request_frame.universe, branched_from: lineage)
+        Weft::Params::Assembly.call(klass, request_universe, branched_from: lineage)
       end
 
       # The lineage the recovery target branches: the failed companion's own

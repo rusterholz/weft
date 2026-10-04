@@ -256,20 +256,19 @@ from its context rather than having them passed down. A `Weft::Context` carries 
 **frame** (per-delivery) and the **branch bag** (per-root). The per-tree registers, the one-shot
 handoff staging and the emitted DOM ids, stay on the context itself, because the tree is their scope.
 
-A frame holds the universe and, when the delivery needs one, the slot register:
+A frame holds the universe and the slot register, where each root records the DOM id it claims. Every
+delivery gets a frame of its own, so a fresh register: a plain GET render, an action response with its
+companions, each push on a stream. Only roots claim, so a register matters only where one delivery
+renders several roots side by side.
 
-- **Arbitrated** frames carry a slot register: an action response with its companions, or one push on a
-  stream. Each gets a fresh register, since each is a separate swap-set.
-- **Unarbitrated** frames carry none, and nothing claims a slot in them: a plain GET render, and every
-  recovery. A recovery stands in for a root that already claimed its slot, so it inherits that claim
-  rather than contesting it. Competing would turn two failed companions rendering the same error
-  component into a collision.
+A recovery renders in a frame of its own too. It stands in for a root that already claimed its slot, so
+it inherits that claim rather than contesting it; sharing the failed root's register would turn two
+failed companions rendering the same error component into a collision.
 
-The Router computes the universe once per request, in the unarbitrated `request_frame`, and every
-arbitrated frame built during that request shares the same frozen object. In practice the universe does
-not vary between the frames of one request: a stream's pushes all answer one request, and a page adds
-its path params once. It is frozen because it is shared: a write from one root would otherwise reach
-its siblings.
+The Router computes the universe once per request, in `request_universe`, and every frame built during
+that request shares the same frozen object. In practice the universe does not vary between the frames
+of one request: a stream's pushes all answer one request, and a page adds its path params once. It is
+frozen because it is shared: a write from one root would otherwise reach its siblings.
 
 "Cross-branch" names nothing in this system. Siblings share an ancestor and have no channel between
 them; the only way one value reaches two siblings is by sitting in their common ancestor's bag or
