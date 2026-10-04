@@ -10,10 +10,7 @@ class TestPage < DropshipUI::Page; end
 RSpec.describe DropshipUI::Page, type: :component do
   let(:concrete_page) { TestPage }
 
-  def render_concrete(**attrs)
-    klass = concrete_page
-    render_weft_html { insert_tag(klass, **attrs) }
-  end
+  def render_concrete = concrete_page.render
 
   it "renders as an html element with DOCTYPE" do
     html = render_concrete
@@ -30,9 +27,8 @@ RSpec.describe DropshipUI::Page, type: :component do
       def self.name = "SpecificPage"
       title "Specific Page"
     end
-    klass = subclass
 
-    html = render_weft_html { insert_tag(klass) }
+    html = subclass.render
     expect(html).to include("<title>Specific Page</title>")
   end
 

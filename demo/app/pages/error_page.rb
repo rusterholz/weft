@@ -22,6 +22,6 @@ class ErrorPage < ApplicationPage
   # and the page therefore *looks* safe.
   def build(attributes = {})
     super
-    insert_tag(ErrorComponent)
+    error_component
   end
 end

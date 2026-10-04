@@ -15,6 +15,6 @@ class NotFoundPage < ApplicationPage
   # would only paint them onto its wrapper as HTML attributes.
   def build(attributes = {})
     super
-    insert_tag(NotFoundComponent)
+    not_found_component
   end
 end

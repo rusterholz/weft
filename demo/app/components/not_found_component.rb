@@ -4,6 +4,8 @@
 # Weft::Defaults::NotFoundComponent for the auto-injected param schema
 # and overrides visuals to match the DropshipUI design system.
 class NotFoundComponent < Weft::Defaults::NotFoundComponent
+  builder_method :not_found_component
+
   # Rendered via Weft.configuration.not_found_component and the recovers chain,
   # not addressed directly — so it does not route. (abstract! does not inherit
   # from the gem default, hence the re-declaration.)

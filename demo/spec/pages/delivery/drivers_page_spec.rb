@@ -12,10 +12,7 @@ RSpec.describe Delivery::DriversPage, type: :component do
     expect(described_class).to be_routable
   end
 
-  def rendered(attrs = {})
-    klass = described_class
-    render_weft_html { insert_tag(klass, **attrs) }
-  end
+  def rendered = described_class.render
 
   it "renders the Drivers heading" do
     expect(rendered).to include("Drivers")
