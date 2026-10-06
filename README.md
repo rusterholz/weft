@@ -131,6 +131,25 @@ end
 
 These four classes use all of the DSL verbs, but only two of the interaction presets (`lazy` and `load_more`). The [DSL reference](docs/dsl.md) has the complete set for your perusal, and the [Examples](docs/examples/README.md) contain twenty-one worked patterns along with the wire traffic each one produces.
 
+## Why Weft, and When
+
+Weft starts from one question: what if the whole app were described as components? A weft component declares its params, its actions, and how it stays current, and weft derives the rest: the routes, the DOM ids, and the htmx attributes you'd otherwise write by hand. There are no controllers or routes files to keep in step, and an interactive component answers at its own URL, so unless it relies on objects its parent hands it, you can open it, refresh it, or test it on its own. That suits an interface made of many small, live pieces that each know how to update themselves.
+
+Each of the usual alternatives shares some of that ground:
+
+- **Hotwire** (Turbo and Stimulus) shares weft's bet on HTML over the wire, and it's the Rails default: in a new Rails app, it's already there. You keep writing the routes, controllers and templates, and Turbo swaps in what they return; weft derives that plumbing from the component instead. Stimulus also gives behavior that never needs the server, like an instant toggle, a home of its own. In weft that's still yours to write, as it would be with htmx alone.
+- **ViewComponent** shares weft's idea that views should be reusable, testable classes. It's mature, stable, feature-complete by its own description, and the established choice in Rails. But a ViewComponent only renders: the routes, controller actions and Turbo or Stimulus wiring that make it interactive live somewhere else, where a weft component declares its own.
+- **Phlex** shares weft's choice of plain Ruby classes over templates, works with or without Rails, and reads more like a weft component than anything else here. (Weft writes its HTML with Arbre, the builder behind ActiveAdmin's views.) But Phlex leaves interactivity to whatever you pair it with, and weft builds it into the component.
+- **ReActionView** shares weft's aim of live pages without a client app, starting from the ERB templates you already have: if your app lives in ERB, it meets you there. It also gives the browser state of its own, which weft doesn't. Weft's state rides each component's params, and there are no templates or controllers to answer from: the component is the whole unit.
+- **React**, often with **Apollo Federation** once several teams share an app, has the deepest ecosystem there is for rich client-side behavior, and Apollo composes each team's data graph behind a central router. Weft keeps the UI on the server with no JavaScript build, and it's headed toward federation without the router: one weft app rendering another's components in its own pages, with the goal that each app need only know the others exist.
+
+### Today's Caveats
+
+- Weft is 0.x, so a minor release may carry breaking changes. The [CHANGELOG](CHANGELOG.md) lists every one.
+- Weft components can't yet render inside Rails views. Today weft runs on Sinatra, standalone or as Rack middleware beside an existing app, Rails included; a companion gem for Rails comes next.
+- Federation is a direction, not a feature yet.
+- The ecosystem is just starting to grow: the [Examples](docs/examples/README.md) cover twenty-one patterns, but there's no component library to install yet.
+
 ## Documentation
 
 - **[Build your first Weft app](docs/tutorial.md)** -- the tutorial: empty directory to a working app with pages, components, a validated form action, and live updates.
