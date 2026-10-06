@@ -146,9 +146,9 @@ Each of the usual alternatives shares some of that ground:
 ### Today's Caveats
 
 - Weft is 0.x, so a minor release may carry breaking changes. The [CHANGELOG](CHANGELOG.md) lists every one.
-- Weft components can't yet render inside Rails views. Today weft runs on Sinatra, standalone or as Rack middleware beside an existing app, Rails included; a companion gem for Rails is coming.
+- Weft components can't yet render inside Rails views. Today weft runs on Sinatra, standalone or as Rack middleware beside an existing app, Rails included; a companion gem for Rails comes next.
 - Federation is a direction, not a feature yet.
-- The ecosystem is young: the [Examples](docs/examples/README.md) cover twenty-one patterns, but there's no component library to install yet.
+- The ecosystem is just starting to grow: the [Examples](docs/examples/README.md) cover twenty-one patterns, but there's no component library to install yet.
 
 ## Documentation
 
