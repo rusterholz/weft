@@ -30,6 +30,7 @@ require "weft/context"
 require "weft/resolver"
 require "weft/page"
 require "weft/redirect"
+require "weft/request"
 require "weft/router"
 require "weft/version"
 
