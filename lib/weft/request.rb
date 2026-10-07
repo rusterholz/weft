@@ -6,6 +6,7 @@ require "sinatra/base"
 require "stringio"
 
 require "weft/error"
+require "weft/params/assembly"
 require "weft/request/htmx"
 
 module Weft
@@ -127,6 +128,13 @@ module Weft
     def universe
       @universe ||= Sinatra::IndifferentHash[@request.params].merge(@route_params || {}).freeze
     end
+
+    # @api private
+    # The request's root bag: assembled from nothing but the universe, and the
+    # bag every root of the request branches, a recovery's included. Built
+    # once, on first read; private and without a reader of its own, since the
+    # request owns its root rather than handing it out.
+    def earth = @earth ||= Weft::Params::Assembly.empty(universe)
 
     # @api private
     # The path params of the page route this request matched, said once, by

@@ -54,14 +54,13 @@ module Weft
       # walks that component's own chain and answers with a fragment, exactly
       # as a failed render of it would; a page path walks that page's; a path
       # weft doesn't know falls to the gem-default Page chain, as a routing
-      # miss does. The state is an empty bag, since there is no request to
-      # read one from — a recovery here redraws nothing, because nothing
-      # arrived to redraw.
+      # miss does. The state is the request's earth, which stands over nothing
+      # — a recovery here redraws nothing, because nothing arrived to redraw.
       def handle_unreadable_request(sinatra_error)
         error = unreadable_request(sinatra_error)
         path = request.path_info
         component_class, = find_component_and_action(path)
-        return render_error(component_class, Weft::Params.new({}), error) if component_class&.routable?
+        return render_error(component_class, request_earth, error) if component_class&.routable?
 
         page_class, = Weft.registry.match_page(path)
         handle_page_chain_failure(error, originating_page_class: page_class)
@@ -93,9 +92,9 @@ module Weft
         # below inherits it with the block's return riding over it as an
         # overlay. An empty delta leaves the two identical; a non-empty one is
         # what the block is for. With no originating bag (a routing miss, say)
-        # the request's universe is assembled into an empty one, so the
-        # inheritance is unconditional and the recovery still sees the wire.
-        state = originating_params || Weft::Params::Assembly.empty(request_universe)
+        # the request's earth stands in, so the inheritance is unconditional
+        # and the recovery still sees the wire.
+        state = originating_params || request_earth
         block_delta = invoke_recovery_block(entry, state, error)
 
         dispatch_page_target(target, block_delta, error, entry,
@@ -138,11 +137,10 @@ module Weft
 
       # The bag a recovery render inherits: whatever the request had composed,
       # with the recovery's own values layered on as an overlay so they outrank
-      # the target's wire at any depth. An absent originating bag is an empty
-      # one over the request's universe rather than nil, so the lineage is
-      # unconditional.
+      # the target's wire at any depth. An absent originating bag is the
+      # request's earth rather than nil, so the lineage is unconditional.
       def recovery_lineage(branch_bag, delta)
-        (branch_bag || Weft::Params::Assembly.empty(request_universe)) % delta
+        (branch_bag || request_earth) % delta
       end
 
       def render_full_page(page_class, frame, branch_bag = nil)

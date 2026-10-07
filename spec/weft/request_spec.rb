@@ -227,6 +227,34 @@ RSpec.describe Weft::Request do
     end
   end
 
+  describe "the earth: the root bag every root of the request branches" do
+    def earth_of(request) = request.send(:earth)
+
+    it "is one bag per request, holding nothing but the universe" do
+      request = request_for("/?status=shipped")
+
+      earth = earth_of(request)
+
+      expect(earth_of(request)).to be(earth)
+      expect(earth.keys).to eq([])
+      expect(earth.send(:universe)).to be(request.send(:universe))
+    end
+
+    it "carries the route's params, which can't change once it exists" do
+      request = request_for("/orders/42")
+      request.send(:record_route_params, { order_id: "42" })
+
+      expect(earth_of(request).send(:universe)).to eq("order_id" => "42")
+    end
+
+    it "stands over nothing for an unreadable request" do
+      request = request_for("/?bad=%")
+      request.send(:unreadable!)
+
+      expect(earth_of(request).send(:universe)).to eq({})
+    end
+  end
+
   describe "#logger" do
     it "is weft's logger" do
       expect(request_for.logger).to equal(Weft.logger)

@@ -160,6 +160,16 @@ module Weft
     # and carried by every bag the exchange branches.
     def request_universe = weft_request.send(:universe)
 
+    # The request's root bag: what a recovery with no originating bag starts
+    # from, and what every root crosses from.
+    def request_earth = weft_request.send(:earth)
+
+    # A root's own bag: a crossing from the request's earth into its class,
+    # with no hand-off door, since no call site exists to hand anything over.
+    def root_bag(component_class, request = weft_request)
+      Weft::Params::Assembly.call(component_class, branched_from: request.send(:earth), handoffs: nil)
+    end
+
     # A frame for one delivery of the exchange's request. A recovery renders
     # in the frame of the delivery it ships in.
     def new_frame(request = weft_request) = Weft::Request::EventFrame.new(request)
@@ -167,12 +177,12 @@ module Weft
     # Render a component as HTML. inner: true returns children only
     # (for SSE innerHTML swap where the wrapper element must persist).
     def render_component(component_class, inner: false)
-      state = Weft::Params::Assembly.for_request(component_class, request_universe)
+      state = root_bag(component_class)
       frame = new_frame
       component = build_root(component_class, frame, branch_bag: state)
       inner ? component.content : component.to_s
     rescue StandardError => e
-      render_error(component_class, state || Weft::Params::Assembly.empty(request_universe), e, frame: frame)
+      render_error(component_class, state || request_earth, e, frame: frame)
     end
 
     # Build a component as the root of a fresh tree, branching +branch_bag+:
@@ -191,14 +201,14 @@ module Weft
     # (B1 / C1 page-context); the gem-default catches StandardError.
     def render_page(page_class, route_params)
       weft_request.send(:record_route_params, route_params)
-      root = Weft::Params::Assembly.for_request(page_class, request_universe)
+      root = root_bag(page_class)
       frame = new_frame
       klass = page_class
       Weft::Context.new(frame: frame, branch_bag: root) { insert_tag(klass) }.to_s
     rescue StandardError => e
       handle_page_chain_failure(e,
                                 originating_page_class: page_class,
-                                originating_params: root || Weft::Params::Assembly.empty(request_universe),
+                                originating_params: root || request_earth,
                                 originating_frame: frame)
     end
 

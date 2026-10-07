@@ -15,7 +15,7 @@ module Weft
     # attempts budget; when it runs out, the CLOSE_EVENT frame tells the
     # client to stop reconnecting and the connection closes.
     #
-    # Depends on Router internals: `build_root`, `request_universe`,
+    # Depends on Router internals: `build_root`, `root_bag`,
     # `weft_request`, `new_frame`, `render_push_companions`, `render_push_recovery`,
     # `pass`, `content_type`, `headers`, `stream`.
     module Streaming
@@ -83,7 +83,7 @@ module Weft
       def push_attempts(klass) = klass.push_config[:attempts] || Weft.configuration.push_attempts
 
       def push_component_event(out, component_class, frame = new_frame)
-        root = Weft::Params::Assembly.for_request(component_class, frame.request.send(:universe))
+        root = root_bag(component_class, frame.request)
         component = build_root(component_class, frame, branch_bag: root)
         html = component.content + render_push_companions(component_class, component.params, frame)
         out << format_sse_event(component.weft_dom_id, html)
@@ -114,7 +114,7 @@ module Weft
       # render-path StandardError is logged and swallowed: the failure already
       # counts against the budget, and the close logic must still run.
       def push_recovery_frame(out, component_class, error, attempts_remaining, frame)
-        state = Weft::Params::Assembly.for_request(component_class, request_universe)
+        state = root_bag(component_class)
         slot = component_class.weft_dom_id_for(state)
         html = render_push_recovery(component_class, state, error,
                                     attempts_remaining: attempts_remaining, frame: frame || new_frame, fills: slot)

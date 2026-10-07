@@ -61,7 +61,7 @@ module Weft
       # from params in the verb sandbox), else "Weft".
       def resolved_page_title
         case (declared = self.class.title_declaration)
-        when Proc then Weft::DSL::Sandbox.run(@params || Weft::Params.new({}), &declared)
+        when Proc then Weft::DSL::Sandbox.run(@params, &declared)
         when nil then "Weft"
         else declared
         end

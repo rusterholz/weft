@@ -14,7 +14,7 @@ module Weft
     # `render_error`; the small `render_action_error` wrapper sets the
     # destructive-swap header before delegating.
     #
-    # Depends on Router internals: `request_universe`, `new_frame`,
+    # Depends on Router internals: `root_bag`, `request_earth`, `new_frame`,
     # `build_root`, `handle_redirect`,
     # `apply_announcement_header`, `render_error`, `headers`, and the
     # companion slice's `render_companions` / `applicable_companions` /
@@ -60,11 +60,11 @@ module Weft
       # and control has passed on — the rendering component's chain against
       # state 2.
       def handle_action(action, component_class)
-        state = Weft::Params::Assembly.for_request(component_class, request_universe)
+        state = root_bag(component_class)
         returned = Weft::DSL::Sandbox.run(state, &action.callable) if action.callable
         return handle_redirect(returned) if returned.is_a?(Weft::Redirect)
       rescue StandardError => e
-        render_action_error(action, component_class, state || Weft::Params::Assembly.empty(request_universe), e)
+        render_action_error(action, component_class, state || request_earth, e)
       else
         render_action_response(action, component_class, state, returned)
       end
