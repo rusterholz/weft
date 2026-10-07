@@ -328,8 +328,9 @@ like its success.
 **The id** is the first of: `env["weft.request_id"]`, the `X-Request-Id` header with everything but
 word characters, `-` and `@` stripped and capped at 255, and a fresh UUID. It is written back to
 `env["weft.request_id"]` when the request is wrapped. An `after` filter sets `X-Request-Id` on every
-response weft answers, unless the response already has one; a response forwarded to the app downstream
-(the Router's `forward` marks it) is left alone. Weft writes no `rack.` env key, and `request.logger`
+response weft answers, unless the response already has one. A request forwarded to the app downstream
+(the Router's `forward` marks it) has its id settled and written to the env first, and its response
+is left alone. Weft writes no `rack.` env key, and `request.logger`
 is `Weft.logger`.
 
 **`Weft::Request.wrap` is the one conversion.** A `Weft::Request` is used as is; anything carrying a

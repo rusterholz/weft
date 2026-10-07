@@ -60,7 +60,7 @@ Weft takes the first of these it finds:
 2. the `X-Request-Id` header your proxy or load balancer sent, with anything but letters, digits, `_`, `-` and `@` stripped, and capped at 255 characters;
 3. a fresh UUID.
 
-Whichever it is, Weft writes it to `env["weft.request_id"]`, so Rack middleware and apps sharing the request see the same one. A response that already set its own `X-Request-Id` keeps it, and a request Weft passes on to the app behind it (when it runs as middleware) is that app's to label.
+Whichever it is, Weft writes it to `env["weft.request_id"]`, so Rack middleware and apps sharing the request see the same one. A response that already set its own `X-Request-Id` keeps it. When Weft runs as middleware and passes a request on to the app behind it, the id is waiting in the env, and the response is that app's to label.
 
 Weft's own log lines don't carry the id yet.
 

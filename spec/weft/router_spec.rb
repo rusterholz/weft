@@ -427,6 +427,21 @@ RSpec.describe Weft::Router do
       expect(last_response.headers).not_to have_key("X-Request-Id")
     end
 
+    it "hands a request it passes downstream its id in the env, without labeling the response" do
+      echo = ->(env) { [200, { "content-type" => "text/plain" }, [env["weft.request_id"].to_s]] }
+      response = Rack::MockRequest.new(described_class.new(echo)).get("/not-weft", "HTTP_X_REQUEST_ID" => "edge-9")
+
+      expect(response.body).to eq("edge-9")
+      expect(response.headers).not_to have_key("X-Request-Id")
+    end
+
+    it "gives a request it passes downstream a fresh id when none came in" do
+      echo = ->(env) { [200, { "content-type" => "text/plain" }, [env["weft.request_id"].to_s]] }
+      response = Rack::MockRequest.new(described_class.new(echo)).get("/not-weft")
+
+      expect(response.body).to match(/\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/)
+    end
+
     it "keeps an X-Request-Id the response already carries" do
       stamped = Class.new(described_class) { before { headers["X-Request-Id"] = "set-by-app" } }
       response = Rack::MockRequest.new(stamped.new(downstream_app)).get("/_components/stat_card")

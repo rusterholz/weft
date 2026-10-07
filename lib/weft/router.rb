@@ -119,8 +119,11 @@ module Weft
     # This exchange's request, one object for every frame it renders.
     def weft_request = @weft_request ||= Weft::Request.wrap(request)
 
+    # A request passed downstream still has its id settled and written to the
+    # env, where the app behind reads it; only the response goes unlabeled.
     def forward
       @weft_forwarded = true
+      weft_request
       super
     end
 
