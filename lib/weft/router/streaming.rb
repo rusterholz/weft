@@ -112,7 +112,7 @@ module Weft
       # render-path StandardError is logged and swallowed: the failure already
       # counts against the budget, and the close logic must still run.
       def push_recovery_frame(out, component_class, error, attempts_remaining, frame)
-        state = root_bag(component_class)
+        state = root_bag(component_class, frame&.request || weft_request)
         slot = component_class.weft_dom_id_for(state)
         html = render_push_recovery(component_class, state, error,
                                     attempts_remaining: attempts_remaining, frame: frame || new_frame, fills: slot)
