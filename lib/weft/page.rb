@@ -171,11 +171,12 @@ module Weft
 
     # Params resolve at construction (see Weft::Component#initialize) so
     # user build bodies can read them before super — e.g. computing body
-    # chrome from a record looked up by param.
+    # chrome from a record looked up by param. A page that declares nothing
+    # still has a bag, branched from the request's like any other.
     def initialize(*)
       super
       @request = arbre_context.frame.request
-      @params = assembled_params if self.class.declared_keys.any?
+      @params = assembled_params
     end
 
     # The request this page renders for, a Weft::Request; see

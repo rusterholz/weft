@@ -419,6 +419,30 @@ RSpec.describe Weft::Page do
 
       expect(html).to include("item=99")
     end
+
+    it "has a bag in build even when it declares nothing, as a component does" do
+      page_class = Class.new(described_class) do
+        def self.name = "PlainPage"
+
+        def build(attributes = {})
+          super
+          div { text_node "bag=#{params.class} keys=#{params.keys.inspect}" }
+        end
+      end
+
+      html = weft_context { insert_tag(page_class) }.to_s
+
+      expect(html).to include("bag=Weft::Params keys=[]")
+    end
+
+    it "hands a page that declares nothing a bag in its blocks too" do
+      page_class = Class.new(described_class) do
+        def self.name = "PlainTitledPage"
+        title { |params| "titled #{params.class}" }
+      end
+
+      expect(weft_context { insert_tag(page_class) }.to_s).to include("<title>titled Weft::Params</title>")
+    end
   end
 
   describe "inheritance" do
