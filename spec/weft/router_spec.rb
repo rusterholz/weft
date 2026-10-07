@@ -435,6 +435,73 @@ RSpec.describe Weft::Router do
     end
   end
 
+  describe "the request a build reads" do
+    def request_card(name, &body)
+      Class.new(Weft::Component) do
+        define_singleton_method(:name) { name }
+        param :order_id
+        identifies_by :order_id
+        define_method(:build) do |attributes = {}|
+          super(attributes, &nil)
+          instance_exec(&body)
+        end
+      end
+    end
+
+    it "is the exchange's request, in build, in a private helper, and inside a nested element" do
+      card = request_card("RequestCard") { div { text_node "#{request.id} #{via_helper} #{request.htmx?}" } }
+      card.define_method(:via_helper) { request.header("X-Note") }
+      card.send(:private, :via_helper)
+
+      get "/_components/request_card", { order_id: "7" }, "HTTP_X_NOTE" => "noted", "HTTP_HX_REQUEST" => "true"
+
+      expect(last_response.body).to include("#{last_response.headers['X-Request-Id']} noted true")
+    end
+
+    it "is the same request on a page and the components inside it" do
+      card = request_card("InPageCard") { text_node "card=#{request.id}" }
+      Class.new(Weft::Page) do
+        def self.name = "RequestPage"
+        self.page_path = "/request-page"
+        define_method(:build) do |attributes = {}|
+          super(attributes, &nil)
+          text_node "page=#{request.id} path=#{request.path}"
+          insert_tag(card)
+        end
+      end
+
+      get "/request-page", {}, "HTTP_X_REQUEST_ID" => "page-1"
+
+      expect(last_response.body).to include("page=page-1 path=/request-page", "card=page-1")
+    end
+
+    it "leaves weft's internals out of build: frame is no name it can call" do
+      request_card("NoInternalsCard") { text_node frame.inspect }
+      allow(Weft.logger).to receive(:error)
+
+      get "/_components/no_internals_card", order_id: "7"
+
+      expect(last_response.body).to include("NameError")
+    end
+
+    it "is the request that opened the stream, on every push" do
+      card = request_card("PushIdCard") { text_node "id=#{request.id}" }
+      card.pushes(every: 5)
+      router = described_class.new!(downstream_app)
+      router.request = Sinatra::Request.new(Rack::MockRequest.env_for("/x?order_id=7", "HTTP_X_REQUEST_ID" => "opener"))
+      out = frame_sink
+      allow(router).to receive_messages(content_type: nil, headers: nil)
+      allow(router).to receive(:stream) { |*, &block| block.call(out) }
+      sleeps = 0
+      allow(router).to receive(:sleep) { raise IOError if (sleeps += 1) > 1 }
+
+      router.send(:stream_component, card)
+
+      expect(out.grep(/id=/).size).to eq(2)
+      expect(out.grep(/id=/)).to all(include("id=opener"))
+    end
+  end
+
   describe "one universe per request" do
     let!(:badge_class) do
       Class.new(Weft::Component) do

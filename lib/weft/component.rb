@@ -139,9 +139,15 @@ module Weft
     # super" pattern needs that.
     def initialize(*)
       super
+      @request = arbre_context.frame.request
       @params = assembled_params
       @weft_ticket = resolve_weft_ticket if self.class.unique?
     end
+
+    # The request this component renders for, a Weft::Request: its id, its
+    # headers, htmx's headers. Readable wherever `params` is, never nil; a
+    # push on a stream reads the request that opened the stream.
+    attr_reader :request
 
     # This instance's ticket, or nil unless the class is `unique!`.
     #
@@ -218,9 +224,7 @@ module Weft
 
     # This element's DOM id. A `unique!` component hands over the ticket it is
     # holding; every other kind composes its id from params alone.
-    def weft_dom_id
-      self.class.weft_dom_id_for(params, weft_ticket)
-    end
+    def weft_dom_id = self.class.weft_dom_id_for(params, weft_ticket)
 
     # What has to ride a request for that request to come back to *this*
     # element: its wire params, plus its ticket when it has one.

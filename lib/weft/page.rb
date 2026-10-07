@@ -174,8 +174,13 @@ module Weft
     # chrome from a record looked up by param.
     def initialize(*)
       super
+      @request = arbre_context.frame.request
       @params = assembled_params if self.class.declared_keys.any?
     end
+
+    # The request this page renders for, a Weft::Request; see
+    # Weft::Component#request.
+    attr_reader :request
 
     def build(attributes = {})
       warn_declared_chrome_collisions(attributes)
