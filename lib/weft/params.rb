@@ -66,6 +66,10 @@ module Weft
 
       attr_reader :block
 
+      # Where the derivation was declared: two thunks with one site are one
+      # declaration, whichever class carried it into the crossing.
+      attr_reader :site
+
       # The bag this derivation belongs to — the one its declaring component
       # resolved at construction, which is what its `build` reads. Set once, by
       # the Assembly that introduced the thunk; an inherited thunk keeps the
@@ -78,9 +82,10 @@ module Weft
       # by render order. Seeing neither is the only symmetric answer.
       attr_accessor :home
 
-      def initialize(block, contextual: false)
+      def initialize(block, contextual: false, site: nil)
         @block = block
         @contextual = contextual
+        @site = site
         @home = nil
         @value = UNSET
         @error = UNSET
@@ -92,7 +97,7 @@ module Weft
       def contextual? = @contextual
 
       # A fresh, unforced twin for a branch to own.
-      def unforced_copy = self.class.new(@block, contextual: @contextual)
+      def unforced_copy = self.class.new(@block, contextual: @contextual, site: @site)
 
       # The exception this derivation raised, or nil if it hasn't failed.
       def error = @error.equal?(UNSET) ? nil : @error

@@ -72,6 +72,7 @@ Weft learns to say what a thing *is*: components name their own identity instead
 
 - **Say Where A Derived Value Belongs** (`contextual:`/`override:` on `derives`) – Two keywords for the cases the default doesn't fit. `contextual: true` makes a value a function of *where it's read*, so each component inheriting it computes its own — right for a label assembled from keys its readers differ on, and it runs once per reader even when nothing changed, so keep those cheap and pure. `override: true` claims the key for one component and everything inside it: "in here, `:user` is the customer being viewed, not the person viewing," computed once, invisible outside that subtree. It outranks an inherited value and nothing else — a wire value still wins, and so does a key a verb block returned.
   - `contextual` implies `override`, since a contextual derivation that deferred to an ancestor could never run; declaring `contextual: true, override: false` is refused rather than quietly ignored
+  - An override nested inside its own declaration (a tree of one component class, or a subclass inside its parent) reuses the answer from above rather than computing it again; a class that writes its own `override: true` computes its own
 
 ### Bug Fixes:
 

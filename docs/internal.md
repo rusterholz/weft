@@ -277,9 +277,15 @@ from the request's path, and the wire hash merged over both. Handed a `Weft::Par
 that bag as the root's parent, and the request's wire plays no part.
 
 A crossing from a bag into the class that bag was crossed into already answers every key the same,
-and shares the outcome of a plain derivation, because the inherited thunk outranks the class's own.
-An `override: true` derivation (`defines` included) and a `contextual: true` one get a fresh thunk at
-every crossing into their class, so a second crossing runs them again.
+and shares the outcome of every derivation but a contextual one. A plain derivation is shared because
+the inherited thunk outranks the class's own. An `override: true` one (`defines` included) is shared
+because an override belongs to its **declaration site**: an inherited thunk is kept when the class
+being crossed into carries the same declaration, whether its own, a superclass's, or one a shared
+module wrote into each class from a single line. A class that writes its own declaration is a new
+site, so with K and L each overriding a key, K → K → K holds one thunk and K → L → K builds three. A
+pin's site includes its value, since one line can pin a different value in each class it runs for. A
+`contextual: true` derivation crosses as an unforced copy and is computed afresh at every crossing,
+its own class's included.
 
 ### The event frame
 

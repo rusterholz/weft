@@ -1178,30 +1178,106 @@ RSpec.describe Weft::Params::Assembly do
       expect(runs[:total]).to eq(1)
     end
 
-    it "shares an overriding derivation the same way" do
-      pending "re-crossing redeclares an override: derivation, so the second bag runs it again (M6.5)"
-      counts = runs
-      klass.derives(:total, override: true) { |_p| counts[:total] += 1 and 42 }
-      once = cross(klass, base)
-      twice = cross(klass, once)
+    # An override belongs to the declaration that wrote it: crossing back into
+    # the same declaration keeps the thunk, and a class that writes its own
+    # declaration is a new site that computes its own.
+    describe "an overriding derivation" do
+      def overriding(name, counts)
+        Class.new(Weft::Component) do
+          define_singleton_method(:name) { name }
+          derives(:total, override: true) { |_p| counts[name] += 1 and name }
+        end
+      end
 
-      once[:total]
-      twice[:total]
+      def force_each(*bags) = bags.map { |bag| bag[:total] }
 
-      expect(runs[:total]).to eq(1)
+      it "keeps one thunk across crossings into the same declaration" do
+        k = overriding("K", runs)
+
+        once = cross(k, base)
+        twice = cross(k, once)
+        thrice = cross(k, twice)
+
+        expect(force_each(once, twice, thrice)).to eq(%w[K K K])
+        expect(runs).to eq("K" => 1)
+      end
+
+      it "computes afresh at every crossing into a different declaration" do
+        counts = runs
+        k = overriding("K", runs)
+        l = Class.new(Weft::Component) do
+          def self.name = "L"
+          derives(:total, override: true) { |_p| counts["L"] += 1 and "L" }
+        end
+
+        once = cross(k, base)
+        twice = cross(l, once)
+        thrice = cross(k, twice)
+
+        expect(force_each(once, twice, thrice)).to eq(%w[K L K])
+        expect(runs).to eq("K" => 2, "L" => 1)
+      end
+
+      it "counts a subclass that inherits the declaration as the same site" do
+        k = overriding("K", runs)
+        sub = Class.new(k) { def self.name = "SubK" }
+
+        once = cross(k, base)
+        twice = cross(sub, once)
+        thrice = cross(k, twice)
+
+        expect(force_each(once, twice, thrice)).to eq(%w[K K K])
+        expect(runs).to eq("K" => 1)
+      end
+
+      it "counts a declaration a shared module makes in each class as one site" do
+        counts = runs
+        shared = Module.new do
+          define_singleton_method(:included) do |base|
+            base.derives(:total, override: true) { |_p| counts[:module] += 1 and "shared" }
+          end
+        end
+        k = Class.new(Weft::Component) { def self.name = "ModuleK" }.tap { |c| c.include(shared) }
+        l = Class.new(Weft::Component) { def self.name = "ModuleL" }.tap { |c| c.include(shared) }
+
+        once = cross(k, base)
+        twice = cross(l, once)
+
+        expect(force_each(once, twice)).to eq(%w[shared shared])
+        expect(runs).to eq(module: 1)
+      end
+
+      it "takes a pin written on one line with another value as a new site" do
+        shared = Module.new do
+          def self.included(base) = base.defines(label: base.name)
+        end
+        k = Class.new(Weft::Component) { def self.name = "PinnedK" }.tap { |c| c.include(shared) }
+        l = Class.new(Weft::Component) { def self.name = "PinnedL" }.tap { |c| c.include(shared) }
+
+        expect(cross(l, cross(k, base))[:label]).to eq("PinnedL")
+      end
+
+      it "keeps a pinned value's thunk the same way" do
+        k = Class.new(Weft::Component) do
+          def self.name = "PinK"
+          defines label: "pinned"
+        end
+
+        once = cross(k, base)
+        twice = cross(k, once)
+
+        expect(twice.send(:branch_data)[:label]).to be(once.send(:branch_data)[:label])
+      end
     end
 
-    it "shares a contextual derivation the same way" do
-      pending "re-crossing copies a contextual derivation unforced, so the second bag runs it again (M6.5)"
+    it "computes a contextual derivation afresh at every crossing, its own included" do
       counts = runs
       klass.derives(:total, contextual: true) { |_p| counts[:total] += 1 and 42 }
-      once = cross(klass, base)
-      twice = cross(klass, once)
+      bags = [klass, klass, klass].each_with_object([base]) { |k, acc| acc << cross(k, acc.last) }.drop(1)
 
-      once[:total]
-      twice[:total]
+      bags.each { |bag| bag[:total] }
 
-      expect(runs[:total]).to eq(1)
+      expect(runs[:total]).to eq(3)
     end
   end
 end

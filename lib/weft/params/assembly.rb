@@ -168,9 +168,28 @@ module Weft
         return @received[key] unless @received[key].nil?
 
         wire_level = @overlays.key?(key) ? @overlays[key] : @wire[key]
-        levels = overriding?(key) ? [wire_level, derived_thunk(key)] : [wire_level, @inherited[key], derived_thunk(key)]
+        below = overriding?(key) ? [overriding_thunk(key)] : [@inherited[key], derived_thunk(key)]
+        levels = [wire_level, *below]
         levels.find { |v| !v.nil? }
       end
+
+      # An override belongs to its declaration, not to each crossing: one
+      # inherited from the very declaration this class carries (its own, a
+      # superclass's, a shared module's) is kept, outcome and all. A class that
+      # writes its own declaration is a new site. A contextual derivation
+      # arrives here as the unforced copy the branch made, so it still computes
+      # afresh at every crossing.
+      def overriding_thunk(key)
+        inherited = @inherited[key]
+        site = declaration_site(@component_class.derived_params[key])
+        return inherited if inherited.is_a?(Weft::Params::Thunk) && inherited.site == site
+
+        derived_thunk(key)
+      end
+
+      # Where a derivation was written; a pin's site includes its value, since
+      # one line can pin a different value in each class it runs for.
+      def declaration_site(meta) = meta[:site] || meta[:source_location]
 
       def overriding?(key) = @component_class.derived_params[key]&.[](:override) || false
 
@@ -186,7 +205,7 @@ module Weft
 
       def derived_thunk(key)
         meta = @component_class.derived_params[key]
-        Weft::Params::Thunk.new(meta[:block], contextual: meta[:contextual]) if meta
+        Weft::Params::Thunk.new(meta[:block], contextual: meta[:contextual], site: declaration_site(meta)) if meta
       end
 
       # The wire door's default wins for dual keys — its meta always carries
