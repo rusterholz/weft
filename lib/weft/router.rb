@@ -210,7 +210,7 @@ module Weft
     rescue StandardError => e
       handle_page_chain_failure(e,
                                 originating_page_class: page_class,
-                                originating_params: root || request_earth,
+                                originating_params: root,
                                 originating_frame: frame)
     end
 
