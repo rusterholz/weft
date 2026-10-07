@@ -442,6 +442,12 @@ RSpec.describe Weft::Page do
       expect(page_class.render({ order_id: "7" }, env_for("/drivers/3"))).to include("order=7 tab= path=/drivers/3")
     end
 
+    it "matches its route inside an app mounted below a script name" do
+      env = Rack::MockRequest.env_for("/orders/5", "SCRIPT_NAME" => "/app")
+
+      expect(page_class.render({}, env)).to include("order=5")
+    end
+
     it "takes nothing from the path of an empty request" do
       expect(page_class.render({}, nil)).to include("order= tab= path=/")
     end

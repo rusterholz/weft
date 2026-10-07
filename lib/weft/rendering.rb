@@ -36,7 +36,7 @@ module Weft
       return wire if wire.is_a?(Weft::Params)
       raise ArgumentError, "wire must be a Hash or a Weft::Params, got #{wire.inspect}" unless wire.is_a?(Hash)
 
-      own = Sinatra::IndifferentHash[request.send(:universe)].merge(route_params_in(request.path))
+      own = Sinatra::IndifferentHash[request.send(:universe)].merge(route_params_in(request.path_info))
       Weft::Params::Assembly.empty(own.merge(wire))
     end
 
