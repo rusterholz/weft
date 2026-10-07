@@ -180,6 +180,53 @@ RSpec.describe Weft::Request do
     end
   end
 
+  describe "the universe it sources" do
+    def universe_of(request) = request.send(:universe)
+
+    it "is everything the client sent, query and form alike, frozen" do
+      request = request_for("/orders?status=shipped", method: "POST", input: "note=hi",
+                                                      "CONTENT_TYPE" => "application/x-www-form-urlencoded")
+
+      expect(universe_of(request)).to eq("status" => "shipped", "note" => "hi")
+      expect(universe_of(request)).to be_frozen
+    end
+
+    it "is computed once" do
+      request = request_for("/?a=1")
+      first = universe_of(request)
+
+      expect(universe_of(request)).to be(first)
+    end
+
+    it "carries the route's path params, which outrank a query value of the same name" do
+      request = request_for("/orders/42?order_id=99&tab=items")
+      request.send(:record_route_params, { order_id: "42" })
+
+      expect(universe_of(request)).to eq("order_id" => "42", "tab" => "items")
+    end
+
+    it "takes the route's params once, and only before the universe is read" do
+      request = request_for("/orders/42")
+      request.send(:record_route_params, { order_id: "42" })
+      expect { request.send(:record_route_params, { order_id: "43" }) }.to raise_error(Weft::InvalidUsage)
+
+      read = request_for("/orders/42")
+      universe_of(read)
+      expect { read.send(:record_route_params, { order_id: "42" }) }.to raise_error(Weft::InvalidUsage)
+    end
+
+    it "is empty once the request is known to be unreadable" do
+      request = request_for("/?bad=%", method: "GET")
+      request.send(:unreadable!)
+
+      expect(universe_of(request)).to eq({})
+    end
+
+    it "is empty for the empty request" do
+      expect(universe_of(described_class.wrap(nil))).to eq({})
+    end
+  end
+
   describe "#logger" do
     it "is weft's logger" do
       expect(request_for.logger).to equal(Weft.logger)

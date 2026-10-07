@@ -17,6 +17,7 @@ require "weft/dsl/recoveries"
 require "weft/dsl/announcements"
 require "weft/dsl/updates"
 require "weft/error"
+require "weft/params/assembly"
 require "weft/registry"
 require "weft/request"
 require "weft/request/event_frame"
@@ -88,8 +89,9 @@ module Weft
       #   StatCard.render(status: "shipped")  # => "<div id=\"...\">...</div>"
       def render(**wire_params)
         klass = self
-        frame = Weft::Request::EventFrame.new(wire_params, request: Weft::Request.wrap(nil))
-        Weft::Context.new(frame: frame) { insert_tag(klass) }.to_s
+        frame = Weft::Request::EventFrame.new(Weft::Request.wrap(nil))
+        root = Weft::Params::Assembly.empty(wire_params)
+        Weft::Context.new(frame: frame, branch_bag: root) { insert_tag(klass) }.to_s
       end
 
       # @api private
@@ -131,7 +133,7 @@ module Weft
     recovers from: StandardError, with: :error_component
 
     # Params resolve at construction, not build: the context (which carries
-    # the wire source and any staged handoff) is the constructor's one
+    # the bag to branch and any staged handoff) is the constructor's one
     # argument, and resolving here makes `params` available even before
     # `super` in user build bodies — the "compute chrome from params, then
     # super" pattern needs that.

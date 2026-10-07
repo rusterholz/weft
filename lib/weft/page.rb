@@ -13,6 +13,7 @@ require "weft/dsl/recoveries"
 require "weft/error"
 require "weft/page/assets"
 require "weft/page/head"
+require "weft/params/assembly"
 require "weft/registry"
 require "weft/request"
 require "weft/request/event_frame"
@@ -131,8 +132,9 @@ module Weft
       # would carry. For testing or standalone rendering.
       def render(**wire_params)
         klass = self
-        frame = Weft::Request::EventFrame.new(wire_params, request: Weft::Request.wrap(nil))
-        Weft::Context.new(frame: frame) { insert_tag(klass) }.to_s
+        frame = Weft::Request::EventFrame.new(Weft::Request.wrap(nil))
+        root = Weft::Params::Assembly.empty(wire_params)
+        Weft::Context.new(frame: frame, branch_bag: root) { insert_tag(klass) }.to_s
       end
 
       private

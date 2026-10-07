@@ -5,6 +5,7 @@ require "securerandom"
 require "sinatra/base"
 require "stringio"
 
+require "weft/error"
 require "weft/request/htmx"
 
 module Weft
@@ -116,6 +117,34 @@ module Weft
     def htmx = @htmx ||= Htmx.new(self)
 
     private
+
+    # @api private
+    # Everything the client sent, undeclared keys included, plus the matched
+    # route's path params, which outrank a query value of the same name. Each
+    # component projects it through its own declarations. Frozen and computed
+    # once: every bag of the exchange carries this one object. Private, and
+    # reached with `send`: it is the raw wire that `params` exists to replace.
+    def universe
+      @universe ||= Sinatra::IndifferentHash[@request.params].merge(@route_params || {}).freeze
+    end
+
+    # @api private
+    # The path params of the page route this request matched, said once, by
+    # whoever matched it, before anything reads the universe.
+    def record_route_params(params)
+      if @route_params || @universe
+        raise Weft::InvalidUsage, "route params are recorded once, before the universe is read"
+      end
+
+      @route_params = params.to_h { |key, value| [key.to_s, value] }
+    end
+
+    # @api private
+    # A request whose body or query could not be parsed sent nothing weft can
+    # read, so its universe is empty rather than raising again at every read.
+    def unreadable!
+      @universe = {}.freeze
+    end
 
     def adopt_id
       env = @request.env

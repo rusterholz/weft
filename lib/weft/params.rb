@@ -141,14 +141,22 @@ module Weft
     # keeps speaking at its own rung below the component it was staged for,
     # while data demotes to "inherited" on the way down. A nearer call site's
     # values merge over an ancestor's, per key.
-    def initialize(data, defaults: {}, owner: nil, overlay: {}, handoff: {})
+    # +universe+ is everything the request sent, which the bag carries for the
+    # branches it hands it to rather than holding as values: every crossing
+    # projects it through the crossed-into class's declarations. Frozen, and
+    # shared by reference down the whole lineage.
+    def initialize(data, defaults: {}, owner: nil, overlay: {}, handoff: {}, universe: EMPTY_UNIVERSE)
       @data = data
       @defaults = defaults
       @owner = owner
       @overlay = overlay
       @handoff = handoff
+      @universe = universe
       @forcing = []
     end
+
+    EMPTY_UNIVERSE = {}.freeze
+    private_constant :EMPTY_UNIVERSE
 
     # This bag with +values+ layered on — the non-crossing branch: same
     # declarations, same defaults, a delta on top. Nothing materializes;
@@ -170,7 +178,8 @@ module Weft
       return self if delta.empty?
 
       self.class.new(@data.merge(delta.compact), defaults: @defaults, owner: @owner,
-                                                 overlay: @overlay.merge(delta), handoff: @handoff)
+                                                 overlay: @overlay.merge(delta), handoff: @handoff,
+                                                 universe: @universe)
     end
 
     # nil means no source had this key — so the read falls to the declared
@@ -318,6 +327,11 @@ module Weft
     # The handoff values a crossing branch re-applies at level 1. Private for
     # the same namespace reason as the two above.
     def handoff_slot = @handoff
+
+    # @api private
+    # The universe this bag came from, which a crossing branch hands to the
+    # child. Private for the same namespace reason as the slots above.
+    attr_reader :universe
 
     # Ask a thunk for its outcome, with this bag as the block's argument
     # (derivations chain by reading sibling keys). The memo lives on the Thunk,

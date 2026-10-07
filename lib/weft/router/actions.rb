@@ -64,7 +64,7 @@ module Weft
         returned = Weft::DSL::Sandbox.run(state, &action.callable) if action.callable
         return handle_redirect(returned) if returned.is_a?(Weft::Redirect)
       rescue StandardError => e
-        render_action_error(action, component_class, state || Weft::Params.new({}), e)
+        render_action_error(action, component_class, state || Weft::Params::Assembly.empty(request_universe), e)
       else
         render_action_response(action, component_class, state, returned)
       end

@@ -92,9 +92,10 @@ module Weft
         # One lineage for both halves: the block reads this bag, and the render
         # below inherits it with the block's return riding over it as an
         # overlay. An empty delta leaves the two identical; a non-empty one is
-        # what the block is for. An absent originating bag is an empty one
-        # rather than nil, so the inheritance is unconditional.
-        state = originating_params || Weft::Params.new({})
+        # what the block is for. With no originating bag (a routing miss, say)
+        # the request's universe is assembled into an empty one, so the
+        # inheritance is unconditional and the recovery still sees the wire.
+        state = originating_params || Weft::Params::Assembly.empty(request_universe)
         block_delta = invoke_recovery_block(entry, state, error)
 
         dispatch_page_target(target, block_delta, error, entry,
@@ -123,10 +124,9 @@ module Weft
       # Render or redirect for a Page recovery target. htmx requests get the
       # Page's body content as a fragment; traditional requests get the full
       # document. Status comes from the exception, or the entry's override.
-      # The page renders in the failing page's frame when there is one (its
-      # universe carries the route's path params), else a fresh one over the
-      # request's; the recovery values ride as overlays (one universe per
-      # request).
+      # The page renders in the failing page's frame when there is one, else a
+      # fresh one; the recovery values ride as overlays on the lineage, which
+      # carries the request's universe (one universe per request).
       def dispatch_page_recovery(page_class, block_delta, error, entry = nil, frame: nil, branch_bag: nil)
         wire_status = recovery_status(error, entry)
         delta = block_delta.merge(auto_param_overlay(error, { status: wire_status }))
@@ -139,8 +139,11 @@ module Weft
       # The bag a recovery render inherits: whatever the request had composed,
       # with the recovery's own values layered on as an overlay so they outrank
       # the target's wire at any depth. An absent originating bag is an empty
-      # one rather than nil, so the lineage is unconditional.
-      def recovery_lineage(branch_bag, delta) = (branch_bag || Weft::Params.new({})) % delta
+      # one over the request's universe rather than nil, so the lineage is
+      # unconditional.
+      def recovery_lineage(branch_bag, delta)
+        (branch_bag || Weft::Params::Assembly.empty(request_universe)) % delta
+      end
 
       def render_full_page(page_class, frame, branch_bag = nil)
         klass = page_class

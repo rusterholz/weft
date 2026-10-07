@@ -11,7 +11,7 @@ RSpec.describe Weft::Params::Assembly do
   # branches from when a callable has returned and no ancestor has rendered.
   # The delta reaches a component by riding this bag, which is the only way it
   # travels: there is no channel that hands one to a render from the side.
-  def delta_bag(delta) = Weft::Params.new({}) % delta
+  def delta_bag(delta, wire = {}) = described_class.empty(wire) % delta
 
   describe "receives behavior" do
     let(:order) { Struct.new(:id, :name).new(42, "Widget crate") }
@@ -973,8 +973,7 @@ RSpec.describe Weft::Params::Assembly do
         param :page, type: :integer
       end
 
-      component = weft_context({ "page" => "3" },
-                               branch_bag: delta_bag({ page: 5 })) do
+      component = weft_context(branch_bag: delta_bag({ page: 5 }, { "page" => "3" })) do
         insert_tag(klass)
       end.children.first
 
@@ -1014,8 +1013,7 @@ RSpec.describe Weft::Params::Assembly do
         param :status, type: :string, default: "fresh"
       end
 
-      component = weft_context({ "status" => "stale" },
-                               branch_bag: delta_bag({ status: nil })) do
+      component = weft_context(branch_bag: delta_bag({ status: nil }, { "status" => "stale" })) do
         insert_tag(klass)
       end.children.first
 
@@ -1033,10 +1031,13 @@ RSpec.describe Weft::Params::Assembly do
         def self.name = "ClearedToAncestor"
         param :status, type: :string
       end
-      ancestor = Weft::Params.new({ status: "from-ancestor" })
+      source = Class.new(Weft::Component) do
+        def self.name = "AncestorSource"
+        derives(:status) { |_p| "from-ancestor" }
+      end
+      ancestor = described_class.call(source, { "status" => "from-wire" })
 
-      bag = described_class.call(klass, { "status" => "from-wire" },
-                                 branched_from: ancestor % { status: nil })
+      bag = described_class.call(klass, branched_from: ancestor % { status: nil })
 
       expect(bag[:status]).to eq("from-ancestor")
     end
@@ -1056,10 +1057,9 @@ RSpec.describe Weft::Params::Assembly do
         def self.name = "DeclaringDescendant"
         param :status, type: :string
       end
-      handed = described_class.call(card, {}, handoffs: { status: "handed" })
+      handed = described_class.call(card, { "status" => "from-wire" }, handoffs: { status: "handed" })
 
-      bag = described_class.call(badge, { "status" => "from-wire" },
-                                 branched_from: handed % { unrelated: "delta" })
+      bag = described_class.call(badge, branched_from: handed % { unrelated: "delta" })
 
       expect(bag[:status]).to eq("handed")
     end
@@ -1071,8 +1071,7 @@ RSpec.describe Weft::Params::Assembly do
         derives(:tally) { |_p| 7 }
       end
 
-      component = weft_context({ "tally" => "3" },
-                               branch_bag: delta_bag({ tally: nil })) do
+      component = weft_context(branch_bag: delta_bag({ tally: nil }, { "tally" => "3" })) do
         insert_tag(klass)
       end.children.first
 
@@ -1128,16 +1127,14 @@ RSpec.describe Weft::Params::Assembly do
         def self.name = "TreeParent"
         param :label, type: :string
       end
-      child = Class.new(Weft::Component) do
-        def self.name = "TreeChild"
+      child = Class.new(Weft::Component) { def self.name = "TreeChild" }
+      source = Class.new(Weft::Component) do
+        def self.name = "BranchSource"
+        derives(:label) { |_p| "from-branch" }
       end
-
       child_component = nil
-      weft_context({ "label" => "from-tree" },
-                   branch_bag: Weft::Params.new({ label: "from-branch" })) do
-        insert_tag(parent) do
-          child_component = insert_tag(child)
-        end
+      weft_context(branch_bag: described_class.call(source, { "label" => "from-tree" })) do
+        insert_tag(parent) { child_component = insert_tag(child) }
       end
 
       expect(child_component.params[:label]).to eq("from-tree")

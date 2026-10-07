@@ -309,8 +309,7 @@ RSpec.describe Weft::Router do
       failing.pushes(every: 5, attempts: 1)
       failing.recovers(from: StandardError, with: stand_in)
       router = described_class.new!(downstream_app)
-      allow(router).to receive_messages(filtered_params: { "order_id" => "7" },
-                                        request: Sinatra::Request.new(Rack::MockRequest.env_for("/stream-test")))
+      allow(router).to receive_messages(request: Sinatra::Request.new(Rack::MockRequest.env_for("/stream-test?order_id=7")))
       allow(Weft.logger).to receive(:error)
 
       router.send(:run_push_loop, frame_sink, failing)
@@ -357,7 +356,7 @@ RSpec.describe Weft::Router do
       router = described_class.new!(downstream_app)
       router.request = Sinatra::Request.new(Rack::MockRequest.env_for("/x?order_id=7"))
       opener = router.send(:weft_request)
-      allow(router).to receive_messages(content_type: nil, headers: nil, filtered_params: { "order_id" => "7" })
+      allow(router).to receive_messages(content_type: nil, headers: nil)
       allow(router).to receive(:stream) { |*, &block| block.call(frame_sink) }
       sleeps = 0
       allow(router).to receive(:sleep) { raise IOError if (sleeps += 1) > 1 }
@@ -372,14 +371,13 @@ RSpec.describe Weft::Router do
       pushing = frame_probe("FramedPush", seen)
       pushing.pushes(every: 5)
       router = described_class.new!(downstream_app)
-      # A fresh hash per call, as Sinatra's params would be.
-      allow(router).to receive(:filtered_params).and_invoke(-> { { "order_id" => "7" } })
+      router.request = Sinatra::Request.new(Rack::MockRequest.env_for("/x?order_id=7"))
 
       2.times { router.send(:push_component_event, frame_sink, pushing) }
 
       first, second = seen.map(&:last)
       expect(first).not_to be(second)
-      expect(first.universe).to be(second.universe)
+      expect(first.request).to be(second.request)
       expect([first.slots, second.slots]).to all(eq(Set["framed-push-7"]))
     end
   end
@@ -1453,7 +1451,6 @@ RSpec.describe Weft::Router do
       order = []
       allow(router).to receive(:content_type)
       allow(router).to receive(:headers)
-      allow(router).to receive(:filtered_params).and_return({})
       allow(router).to receive(:stream).and_yield(frame_sink)
       allow(router).to receive(:sleep) { order << :sleep }
       allow(router).to receive(:push_component_event) do
@@ -1471,7 +1468,6 @@ RSpec.describe Weft::Router do
       order = []
       allow(router).to receive(:content_type)
       allow(router).to receive(:headers)
-      allow(router).to receive(:filtered_params).and_return({})
       allow(router).to receive(:stream).and_yield(frame_sink)
       allow(router).to receive(:sleep) { order << :sleep }
       allow(router).to receive(:push_component_event) do
@@ -1539,8 +1535,7 @@ RSpec.describe Weft::Router do
     before do
       allow(router).to receive(:content_type)
       allow(router).to receive(:headers)
-      allow(router).to receive_messages(filtered_params: {},
-                                        request: Sinatra::Request.new(Rack::MockRequest.env_for("/stream-test")))
+      allow(router).to receive_messages(request: Sinatra::Request.new(Rack::MockRequest.env_for("/stream-test")))
       allow(Weft.logger).to receive(:error)
       # Runaway guard: a regression back to log-and-continue-forever plus a
       # no-op sleep stub would spin the loop unboundedly — bail out via the
@@ -1571,7 +1566,7 @@ RSpec.describe Weft::Router do
       component_class = failing_class(attempts: 1)
       out = frame_sink
       allow(router).to receive(:stream).and_yield(out)
-      allow(router).to receive(:filtered_params).and_raise(Weft::UnreadableRequest, "invalid %-encoding")
+      allow(router).to receive(:request).and_return(Sinatra::Request.new(Rack::MockRequest.env_for("/stream-test?bad=%")))
 
       router.send(:stream_component, component_class)
 
@@ -1828,11 +1823,12 @@ RSpec.describe Weft::Router do
   end
 
   describe "build_root" do
-    let(:frame) { Weft::Request::EventFrame.new({ status: "shipped", value: 10 }, request: Weft::Request.wrap(nil)) }
+    let(:frame) { Weft::Request::EventFrame.new(Weft::Request.wrap(nil)) }
+    let(:root) { Weft::Params::Assembly.empty({ status: "shipped", value: 10 }) }
 
-    it "builds a component that resolves its params from the frame's universe" do
+    it "builds a component that resolves its params from the universe its bag carries" do
       router = described_class.new!(downstream_app)
-      component = router.send(:build_root, stat_card_class, frame)
+      component = router.send(:build_root, stat_card_class, frame, branch_bag: root)
 
       expect(component).to be_a(Weft::Component)
       expect(component.weft_dom_id).to eq("stat-card-shipped")
@@ -1842,7 +1838,7 @@ RSpec.describe Weft::Router do
 
     it "returns children-only HTML via content (for SSE innerHTML swap)" do
       router = described_class.new!(downstream_app)
-      component = router.send(:build_root, stat_card_class, frame)
+      component = router.send(:build_root, stat_card_class, frame, branch_bag: root)
 
       # content returns children only — no wrapper div
       expect(component.content).not_to include('id="stat-card-shipped"')
@@ -3995,6 +3991,24 @@ RSpec.describe Weft::Router do
       expect(last_response.body).to start_with("<!DOCTYPE html>")
       expect(last_response.body).to include("Not found")
       expect(last_response.body).to include("/nothing-here")
+    end
+
+    it "lets the not-found page read what the missed request sent" do
+      Weft.configuration.not_found_page = Class.new(Weft::Page) do
+        def self.name = "QueryAwareNotFound"
+        self.page_path = "/query-aware-not-found"
+        param :q
+
+        def build(attributes = {})
+          super
+          div { text_node "searched=#{params.q}" }
+        end
+      end
+
+      get "/nothing-here?q=widgets"
+
+      expect(last_response.status).to eq(404)
+      expect(last_response.body).to include("searched=widgets")
     end
 
     it "renders only the body fragment for htmx routing-miss requests" do

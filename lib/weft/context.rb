@@ -21,17 +21,17 @@ module Weft
     include Modifiers
     include Wiring
 
-    # The delivery this tree renders for: its wire universe, which every
-    # component projects through its own declarations at any depth, and the
+    # The delivery this tree renders for: the request it answers, and the
     # slot register roots claim their DOM ids from. Assigned before super
     # because Arbre's initialize instance_evals the construction block — the
     # tree builds during super.
     attr_reader :frame
 
     # A bag for ROOT components to branch from, standing in for the tree
-    # ancestor a root doesn't have — how an OOB companion inherits its
-    # primary's bag (rich values included) exactly like a child built in
-    # the primary's own build.
+    # ancestor a root doesn't have: the bag the delivery assembled from the
+    # request, carrying its universe, or one already composed, which is how an
+    # OOB companion inherits its primary's bag (rich values included) exactly
+    # like a child built in the primary's own build.
     attr_reader :branch_bag
 
     # The slot a root stands in for, when it renders as a recovery: the failed

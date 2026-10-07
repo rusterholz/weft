@@ -100,6 +100,7 @@ module Weft
     # component or page has been resolved — so the recovery is routed by path
     # alone. Exact-class key for the same reason as NotFound.
     error Sinatra::BadRequest do
+      weft_request.send(:unreadable!)
       content_type :html
       handle_unreadable_request(env["sinatra.error"])
     end
@@ -155,23 +156,13 @@ module Weft
       pass
     end
 
-    def filtered_params
-      params.except("splat", "captures")
-    end
+    # Everything the client sent, as the request sources it: computed once,
+    # and carried by every bag the exchange branches.
+    def request_universe = weft_request.send(:universe)
 
-    # Everything the client sent, computed once: every frame this request
-    # renders reads the one object, whether that is a single response or each
-    # push on a stream.
-    def request_universe
-      @request_universe ||= filtered_params.freeze
-    end
-
-    # A frame for one delivery, over the request's universe unless given
-    # another (a page's, which carries its route's path params). A recovery
-    # renders in the frame of the delivery it ships in.
-    def new_frame(universe = nil, request: weft_request)
-      Weft::Request::EventFrame.new(universe || request_universe, request: request)
-    end
+    # A frame for one delivery of the exchange's request. A recovery renders
+    # in the frame of the delivery it ships in.
+    def new_frame(request = weft_request) = Weft::Request::EventFrame.new(request)
 
     # Render a component as HTML. inner: true returns children only
     # (for SSE innerHTML swap where the wrapper element must persist).
@@ -181,34 +172,33 @@ module Weft
       component = build_root(component_class, frame, branch_bag: state)
       inner ? component.content : component.to_s
     rescue StandardError => e
-      render_error(component_class, state || Weft::Params.new({}), e, frame: frame)
+      render_error(component_class, state || Weft::Params::Assembly.empty(request_universe), e, frame: frame)
     end
 
-    # Build a component as the root of a fresh tree; it resolves its own
-    # declared params from the frame's universe at construction. Arbre's
-    # builder attributes stay pure chrome — params travel their own channel.
-    # `branch_bag` lets the root inherit a primary's bag (OOB companions),
-    # carrying any verb-block delta already applied to it. `fills` is the slot
-    # a recovery stands in for: the root wears and claims that id.
-    def build_root(component_class, frame, branch_bag: nil, fills: nil)
+    # Build a component as the root of a fresh tree, branching +branch_bag+:
+    # the bag the delivery assembled, or one a verb block or a primary has
+    # already composed (an OOB companion's). Arbre's builder attributes stay
+    # pure chrome — params travel their own channel. `fills` is the slot a
+    # recovery stands in for: the root wears and claims that id.
+    def build_root(component_class, frame, branch_bag:, fills: nil)
       klass = component_class
       Weft::Context.new(frame: frame, branch_bag: branch_bag, fills: fills) { insert_tag(klass) }.children.first
     end
 
-    # Render a Page as a full HTML document. Query/body params and
-    # path-extracted params are merged; path params override on key
-    # conflicts, matching Sinatra's precedence convention.
+    # Render a Page as a full HTML document. The route's path params join the
+    # request's universe, outranking a query value of the same name.
     # Page render failures walk the failing Page's recovers chain
     # (B1 / C1 page-context); the gem-default catches StandardError.
     def render_page(page_class, route_params)
-      universe = request_universe.merge(route_params).freeze
-      frame = new_frame(universe)
+      weft_request.send(:record_route_params, route_params)
+      root = Weft::Params::Assembly.for_request(page_class, request_universe)
+      frame = new_frame
       klass = page_class
-      Weft::Context.new(frame: frame) { insert_tag(klass) }.to_s
+      Weft::Context.new(frame: frame, branch_bag: root) { insert_tag(klass) }.to_s
     rescue StandardError => e
       handle_page_chain_failure(e,
                                 originating_page_class: page_class,
-                                originating_params: Weft::Params::Assembly.for_request(page_class, universe),
+                                originating_params: root || Weft::Params::Assembly.empty(request_universe),
                                 originating_frame: frame)
     end
 

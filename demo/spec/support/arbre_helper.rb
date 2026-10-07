@@ -20,10 +20,14 @@ module ArbreHelper
     weft_context(wire, assigns, &).to_s
   end
 
-  # A context over +wire+ in a frame of its own. Weft's internal constructor;
-  # this helper is the demo's one dependency on it.
-  def weft_context(wire = {}, assigns = {}, **, &)
-    Weft::Context.new(assigns, nil, frame: Weft::Request::EventFrame.new(wire, request: Weft::Request.wrap(nil)), **, &)
+  # A context over +wire+ in a frame of its own, or over a +branch_bag+ that
+  # carries its own. Weft's internal constructor; this helper is the demo's one
+  # dependency on it.
+  def weft_context(wire = {}, assigns = {}, branch_bag: nil, **, &)
+    raise ArgumentError, "a branch_bag carries its own universe; build it over the wire" if branch_bag && wire.any?
+
+    frame = Weft::Request::EventFrame.new(Weft::Request.wrap(nil))
+    Weft::Context.new(assigns, nil, frame: frame, branch_bag: branch_bag || Weft::Params::Assembly.empty(wire), **, &)
   end
 
   # Runs an action callable the way the Router does: against the state the

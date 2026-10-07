@@ -43,7 +43,8 @@ RSpec.describe ErrorComponent, type: :component do
 
     def render_push_error_for(card_class, order_id)
       state = Weft::Params::Assembly.for_request(card_class, { "order_id" => order_id })
-      weft_context({ attempts_remaining: 2, status_code: 500 }, branch_bag: state) { error_component }.to_s
+      recovery_values = { attempts_remaining: 2, status_code: 500 }
+      weft_context(branch_bag: state % recovery_values) { error_component }.to_s
     end
 
     it "uses the failed card's own title when the derivation still answers" do

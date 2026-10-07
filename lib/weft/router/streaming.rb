@@ -69,7 +69,7 @@ module Weft
         loop do
           sleep interval if after_first
           after_first = true
-          frame = new_frame(request: request)
+          frame = new_frame(request)
           push_component_event(out, klass, frame)
           failures = 0
         rescue Errno::EPIPE, IOError
@@ -83,7 +83,8 @@ module Weft
       def push_attempts(klass) = klass.push_config[:attempts] || Weft.configuration.push_attempts
 
       def push_component_event(out, component_class, frame = new_frame)
-        component = build_root(component_class, frame)
+        root = Weft::Params::Assembly.for_request(component_class, frame.request.send(:universe))
+        component = build_root(component_class, frame, branch_bag: root)
         html = component.content + render_push_companions(component_class, component.params, frame)
         out << format_sse_event(component.weft_dom_id, html)
       end
