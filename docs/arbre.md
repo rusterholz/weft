@@ -208,7 +208,7 @@ class EventCard < Weft::Component
 end
 ```
 
-The macro generates the underlying Arbre pattern: an `add_child` override that redirects to `@body` once it exists (during `build` it doesn't yet, so your own structural elements pass through normally). The `:@ivar` spelling is a deliberate reminder that *you* must assign that ivar in `build` — Weft raises a pointed error if you forget. Details in [the DSL reference](dsl.md#other-class-body-declarations).
+The macro generates the underlying Arbre pattern: an `add_child` override that redirects to `@body` once it exists (during `build` it doesn't yet, so your own structural elements pass through normally). The `:@ivar` spelling is a reminder that *you* must assign that ivar in `build` — Weft raises a pointed error if you forget. Details in [the DSL reference](dsl.md#other-class-body-declarations).
 
 Hand-roll the override only when one redirect target isn't enough — a multi-slot component with `header`/`body`/`footer` sections, say, where each section method fills a different internal element and `add_child` picks a default. The generated pattern above is the template to follow.
 
@@ -290,14 +290,21 @@ Weft components render to a string with one call — no server, no request:
 ```ruby
 RSpec.describe AttendeeList do
   it "lists each attendee with their answer" do
-    html = AttendeeList.render(event_id: "trivia-night")
+    html = AttendeeList.render({ event_id: "trivia-night" }, nil)
     expect(html).to include("Priya — yes")
-    expect(html).to include('id="attendee-list-trivia-night"')
+    expect(html).to include('id="attendee-list"')
   end
 end
 ```
 
-`Component.render` is the gem-provided entry point and covers most component testing — its keyword arguments are exactly the wire params a request would carry.
+`Component.render(wire, request)` is the gem-provided entry point and covers most component testing. Both arguments are required. `wire` is a hash of the values a request would send, and `request` is the request the component renders for: `nil` for an empty one, or a Rack env when the test cares about headers, the path, or htmx:
+
+```ruby
+env = Rack::MockRequest.env_for("/events/trivia-night", "HTTP_HX_REQUEST" => "true")
+html = AttendeeList.render({ event_id: "trivia-night" }, env)
+```
+
+The wire is layered over whatever the request sent, so a `let` can build one request and each example can vary a value. `Page.render` takes the same two arguments and reads its route's params from the request's path, so `OrderPage.render({}, Rack::MockRequest.env_for("/orders/42"))` renders order 42. [The Request](request.md) covers what a component can read from it.
 
 Two cases `render` doesn't reach yet: asserting on the element tree rather than the string (classes, structure, specific descendants), and a component whose values arrive by `receives` from a call site rather than over the wire. Both are getting a dedicated entry point in the next release, shaped like `render`. Until then, test a `receives`-driven component through the component that builds it.
 

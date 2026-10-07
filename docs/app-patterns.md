@@ -2,7 +2,7 @@
 
 The [tutorial](tutorial.md) gets an app running, and the reference docs cover each mechanism on its own. This page is about the application *around* the components — where things live as a Weft app grows, and how the rest of your stack plugs in.
 
-The theme throughout: Weft is deliberately small. It owns pages, components, and the wiring between user actions and renders. Everything else — your data, your background jobs, your authentication, your assets — is ordinary Ruby on ordinary Rack, and each has a well-defined seam.
+The theme throughout: Weft stays small. It owns pages, components, and the wiring between user actions and renders. Everything else — your data, your background jobs, your authentication, your assets — is ordinary Ruby on ordinary Rack, and each has a well-defined seam.
 
 ## Laying out a growing app
 
@@ -85,11 +85,11 @@ The [Progress Bar](examples/progress-bar.md) example is this exact lifecycle, ve
 
 ## Authentication and sessions
 
-Weft is deliberately session-agnostic: no cookie handling, no `current_user`, no login machinery. Identity is your app's concern, handled with standard Rack pieces in front of the Router. What Weft *does* define is the seam, and it's narrower than you might expect:
+Weft is session-agnostic: no session store, no `current_user`, no login machinery. Identity is your app's concern, handled with standard Rack pieces in front of the Router. What Weft *does* define is the seam, and it's narrower than you might expect:
 
 > Components and callables receive exactly their **resolved params** — values from request parameters, filtered through each component's declared schema. Session state and request headers are not part of that channel.
 
-So per-request identity needs its own channel. The pattern that fits — the same one Rails blesses as `Current` — is a [`CurrentAttributes`](https://api.rubyonrails.org/classes/ActiveSupport/CurrentAttributes.html) object set by middleware. Weft already depends on ActiveSupport, so it's available without adding anything:
+A component can read the request's headers and cookies through [`request`](request.md), but not its session, and verb blocks don't receive the request yet. So per-request identity needs its own channel. The pattern that fits — the same one Rails blesses as `Current` — is a [`CurrentAttributes`](https://api.rubyonrails.org/classes/ActiveSupport/CurrentAttributes.html) object set by middleware. Weft already depends on ActiveSupport, so it's available without adding anything:
 
 ```ruby
 # app/data/current.rb
@@ -217,7 +217,7 @@ Point your bundler's output at that directory and the integration is done. The [
 
 ## Testing the whole app
 
-[Component unit testing](arbre.md#testing-components) needs no server: `Component.render(**attrs)` returns the HTML string. For request-level coverage — routes, actions, status codes, wire payloads — use Rack::Test against the Router:
+[Component unit testing](arbre.md#testing-components) needs no server: `Component.render(wire, request)` returns the HTML string, with `nil` standing for an empty request. For request-level coverage — routes, actions, status codes, wire payloads — use Rack::Test against the Router:
 
 ```ruby
 # spec/spec_helper.rb

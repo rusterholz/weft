@@ -6,6 +6,12 @@ Weft learns to say what a thing *is*: components name their own identity instead
 
 ### New Features:
 
+- **The Request, Inside Every Build** (`request`) – Components and pages read the request they render for the way they read `params`: in `build` and the methods it calls, and never `nil`. Headers by their HTTP name (`request.header("Authorization")`), htmx's own headers (`request.htmx?`, `request.htmx.target`, `.trigger`, `.current_url`, `.prompt`), cookies, and the client's address with the proxy trust check beside it (`request.ip`, `request.trusted_proxy?`). So a component can answer an htmx request differently, or show who is asking, without a channel of your own to carry it. What a request sends still reaches you through `params`: raw params and the body stay off the request. [The Request](docs/request.md) has the whole surface.
+  - A component pushed over a stream reads the request that opened the stream
+  - Verb blocks (`performs`, `derives`, `recovers` and the rest) receive the request next
+
+- **Every Response Names Its Request** (`X-Request-Id`) – Each request gets an id: one already in the Rack env under `weft.request_id`, else the `X-Request-Id` your proxy sent, sanitized as Rails does it, else a fresh UUID. Every response Weft answers carries it back in `X-Request-Id` unless the response already set one, so the id in the browser's network tab is the one your code reads as `request.id`. Weft writes it to `env["weft.request_id"]` too, for middleware and any app sharing the request.
+
 - **Ask Weft Whether It Can Serve** (`Weft.registry.validate!`) – Runs every check Weft would otherwise run at the first request: route and DOM id collisions, identity declarations, and streams with nowhere to land. Call it at boot and a broken declaration fails on startup instead of on a visitor's first page; call it from a health endpoint and it answers whether this process can serve at all. Cheap to call repeatedly, and a process that is still broken keeps saying so rather than going quiet after the first check.
 
 - **Errors That Hand Back What You Typed** – When a wire value is refused, the error carries every violation from that request: the key, what the type wanted, and the raw value exactly as it arrived. So a `recovers` edge can redraw the form with `wombat` still sitting in the age field and a message beside it, instead of the zero a lenient conversion would have put there.
@@ -32,7 +38,7 @@ Weft learns to say what a thing *is*: components name their own identity instead
 
 - **A Component Can Decline A DOM Id** (`anonymous!`) – Chrome that nothing routes to, refreshes, or brings has no use for an id, and an id every instance shares isn't merely useless: ids must be unique in a document, so it's invalid HTML that breaks `getElementById` and every `#id` selector aimed near it. `anonymous!` renders no `id` attribute at all, and joins `identifies_by` and `unique!` as the third mutually exclusive answer — so a chrome base class can decline while the subclasses that *are* addressed declare identity and override it.
 
-- **Weft Tells You When Two Elements Share An Id** – Render the same id twice and Weft says so once per class, naming the class, the id, and the three declarations that answer it. It watches the render rather than the class body on purpose: what makes an id wrong is a second instance appearing, which no class body can predict — a component rendered once per page is right to wear its bare class id.
+- **Weft Tells You When Two Elements Share An Id** – Render the same id twice and Weft says so once per class, naming the class, the id, and the three declarations that answer it. It watches the render rather than the class body, because what makes an id wrong is a second instance appearing, which no class body can predict — a component rendered once per page is right to wear its bare class id.
 
 - **Booleans That Understand Forms** – `type: :boolean` now reads the words browsers and humans actually send — `true/false`, `1/0`, `on/off`, `yes/no`, `t/f`, `y/n`, in any case. A bare `<input type="checkbox">` submits `on` when checked, which previously read as **false**; it now reads as true, which is what it plainly meant.
 
@@ -68,6 +74,10 @@ Weft learns to say what a thing *is*: components name their own identity instead
   - `contextual` implies `override`, since a contextual derivation that deferred to an ancestor could never run; declaring `contextual: true, override: false` is refused rather than quietly ignored
 
 ### Bug Fixes:
+
+- **A Page That Declares Nothing Still Has `params`** – A page with no declarations of its own read `params` as `nil` in `build`. It now has a bag, like a component that declares nothing.
+
+- **Only `HX-Request: true` Counts As htmx** – A redirect treated any `HX-Request` header as htmx, `false` included, while every other path required `true`. They all read it the way htmx sends it now.
 
 - **A Pinned Value Can No Longer Leak Into The Next Request** – A `defines` value is one object shared by every instance of that class for the life of the process, so a `params.nav << "late"` in one render was still sitting there for every request afterwards. Weft now hands out its own frozen copy: the mutation raises `FrozenError` on the line that tried it, and the pin stays what you declared.
   - Weft copies *before* freezing, so the object you handed it is never frozen. A constant your application also holds and mutates elsewhere keeps working
@@ -129,7 +139,7 @@ Weft learns to say what a thing *is*: components name their own identity instead
 
 - **A Pinned Value Wins Against The Page Around It** (`defines`) – `defines label: "Drivers"` used to lose to any ancestor that happened to supply `label`, so a card pinning its own label rendered the page's `?label=` instead. A pin now claims its key for the component and everything it contains, which is the whole reason to reach for `defines` over a plain Ruby constant.
   - It still yields to the component's *own* wire param, so a routable component keeps answering for itself
-  - This is the one behavior `defines` no longer shares with the `derives` it is sugar for. A derivation yields on purpose, because it is the fallback for standing alone; a pin is the opposite claim
+  - This is the one behavior `defines` no longer shares with the `derives` it is sugar for. A derivation yields because it is the fallback for standing alone; a pin is the opposite claim
   - Nothing changes for a subclass pinning over its parent's `derives`, which already worked
 
 - **A Declared Type Is Now A Promise** – `type:` used to be a parsing hint that quietly did its best: `?page=wombat` on `param :page, type: :integer` rendered **page 0**, and `:float`, `:decimal` and `:boolean` invented `0.0`, `0.0` and `false` the same way. A value the type can't represent is now refused with a `Weft::BadRequest`, so a bad request fails at the request instead of surfacing three screens later as "this page is showing the wrong records."
@@ -141,7 +151,9 @@ Weft learns to say what a thing *is*: components name their own identity instead
   - This is the change that makes identity survive inheritance: a subclass can now replace its parent's identity outright, which a first-param convention could never express
   - `Weft::Registry::Eligibility` is now `Weft::Addressing`, and a trailing `Component` is stripped from a DOM id exactly as it already was from a route path
 
-- **Render Components With `Component.render`** – `Component.render` is how to render a component on its own, in a test or a console; its keyword arguments are the wire params a request would carry. `Weft::Context` is internal and no longer takes `wire_params:`, so move code that built one by hand to `Component.render`.
+- **Render With A Wire And A Request** (`Component.render(wire, request)`) – `Component.render` and `Page.render` render a component or page on its own, in a test or a console, and take two arguments, both required: the values a request would send, and the request itself. Pass `nil` for an empty request, or a Rack env, a Rack or Sinatra request, or a `Weft::Request` when the component cares what came with it. The wire is layered over what the request sent, and a page reads its route's params from the request's path, so `OrderPage.render({}, Rack::MockRequest.env_for("/orders/42"))` renders order 42. `Weft::Context` is internal and no longer takes `wire_params:`, so move code that built one by hand to `.render`.
+  - `StatCard.render(status: "shipped")` becomes `StatCard.render({ status: "shipped" }, nil)`; a call in the old shape raises `ArgumentError` rather than rendering something else
+  - Hand it a `Weft::Params` in place of the hash and the component branches from that bag, as a child branches its parent's
   - An entry point that renders to an element tree and accepts `receives` values arrives in this release
 
 - **Component URLs Say What They Are** – `weft_url` is now `weft_component_url`, naming the component's own GET URL rather than leaving "weft url" to be guessed at. `refresh_url` is gone; it existed only because `weft_url` didn't say what it was for.
@@ -296,5 +308,5 @@ First usable release. Weft is component-oriented hypermedia for Ruby: components
   - The built-in error components offer one-click retry through the `retry:` shorthand
 - **Configuration** – `Weft.configure` covers the operational surface: development reloading (`auto_reload`, `reload_paths`), logging (`Weft.logger`, stdout by default; `log_level`, `router_logging`), static asset bundles (`static_assets` with named bundles, path-containment checks, and `assets:` resolution on `register_stylesheet` / `register_script`), htmx delivery (`include_htmx`, `include_sse_ext`), and routing (`component_path`, `stream_suffix`)
 - **Secure Script Delivery** – The htmx core and SSE-extension scripts Weft serves are subresource-integrity pinned out of the box, and `register_script` forwards `integrity:` / `crossorigin:` (and any other attributes) to the tag for your own CDN scripts
-- **Documentation** – A complete set under `docs/`: a build-your-first-app tutorial; references for the DSL, routing, error handling, configuration, and the Arbre HTML layer; an application-patterns guide (service objects, databases, background jobs, authentication, CSRF, testing); and a twenty-one-page examples catalog with captured wire traffic that deliberately covers the ground of htmx's own examples
+- **Documentation** – A complete set under `docs/`: a build-your-first-app tutorial; references for the DSL, routing, error handling, configuration, and the Arbre HTML layer; an application-patterns guide (service objects, databases, background jobs, authentication, CSRF, testing); and a twenty-one-page examples catalog with captured wire traffic that covers the ground of htmx's own examples
 - **Demo Application** – A complete Sinatra + Weft application under `demo/`, exercising the feature surface end to end
