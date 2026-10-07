@@ -126,7 +126,7 @@ RSpec.describe Weft::DSL::Actions do
         end
       end
 
-      html = component_class.render(item_id: "7")
+      html = component_class.render({ item_id: "7" }, nil)
 
       expect(html).to include('hx-delete="/_components/dismiss_render/close"')
       expect(html).to include('hx-swap="delete"')

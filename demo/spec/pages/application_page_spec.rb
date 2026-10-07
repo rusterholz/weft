@@ -42,7 +42,7 @@ RSpec.describe ApplicationPage, type: :component do
       def self.name = "NavStubPage"
       def current_path = "/orders"
     end
-    html = page_class.render
+    html = page_class.render({}, nil)
     expect(html).to include('class="nav-link active" href="/orders"')
   end
 

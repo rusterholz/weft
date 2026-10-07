@@ -9,6 +9,6 @@ RSpec.describe Drills::BoomPage, type: :component do
   end
 
   it "raises on every build" do
-    expect { described_class.render }.to raise_error(RuntimeError, /drill/)
+    expect { described_class.render({}, nil) }.to raise_error(RuntimeError, /drill/)
   end
 end

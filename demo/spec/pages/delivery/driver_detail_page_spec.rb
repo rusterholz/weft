@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "rack/mock_request"
 require "spec_helper"
 
 RSpec.describe Delivery::DriverDetailPage, type: :component do
@@ -10,7 +11,7 @@ RSpec.describe Delivery::DriverDetailPage, type: :component do
     expect(described_class).to be_routable
   end
 
-  def rendered = described_class.render(driver_id: driver.id)
+  def rendered = described_class.render({}, Rack::MockRequest.env_for("/drivers/#{driver.id}"))
 
   it "renders the driver's three sections" do
     html = rendered
@@ -23,7 +24,7 @@ RSpec.describe Delivery::DriverDetailPage, type: :component do
   # reach the lookup at all: `type: :uuid` refuses a value that is not a uuid
   # before any query happens, which is the separate claim below.
   it "raises ActiveRecord::RecordNotFound for a well-formed id matching no driver" do
-    expect { described_class.render(driver_id: "00000000-0000-4000-8000-000000000000") }.
+    expect { described_class.render({}, Rack::MockRequest.env_for("/drivers/00000000-0000-4000-8000-000000000000")) }.
       to raise_error(ActiveRecord::RecordNotFound)
   end
 
@@ -31,6 +32,7 @@ RSpec.describe Delivery::DriverDetailPage, type: :component do
   # the database. "not a uuid" and "a uuid nobody has" are distinct answers,
   # and conflating them sends an unreadable request to the lookup to find out.
   it "refuses an id that is not a uuid at all, before any lookup" do
-    expect { described_class.render(driver_id: "wombat") }.to raise_error(Weft::InvalidParamValue, /wombat/)
+    expect { described_class.render({}, Rack::MockRequest.env_for("/drivers/wombat")) }.
+      to raise_error(Weft::InvalidParamValue, /wombat/)
   end
 end

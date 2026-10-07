@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "arbre"
+require "rack/mock_request"
 
 RSpec.describe Weft::Page do
   it "renders as an html element with DOCTYPE" do
@@ -34,7 +35,7 @@ RSpec.describe Weft::Page do
         title { |params| "Order ##{params.order_id}" }
       end
 
-      html = page_class.render(order_id: "42")
+      html = page_class.render({}, Rack::MockRequest.env_for("/orders/42"))
       expect(html).to include("<title>Order #42</title>")
     end
 
@@ -399,6 +400,50 @@ RSpec.describe Weft::Page do
       end
 
       expect(child.resolve_page_path(id: "7")).to eq("/parent/7")
+    end
+  end
+
+  describe ".render" do
+    let(:page_class) do
+      Class.new(described_class) do
+        def self.name = "RenderedOrderPage"
+        self.page_path = "/orders/:order_id"
+        param :order_id
+        param :tab
+
+        def build(attributes = {})
+          super
+          div { text_node "order=#{params.order_id} tab=#{params.tab} path=#{request.path}" }
+        end
+      end
+    end
+
+    def env_for(path) = Rack::MockRequest.env_for(path)
+
+    it "renders a full document" do
+      expect(page_class.render({}, nil)).to start_with("<!DOCTYPE html>")
+    end
+
+    it "takes its route's params from the request's path" do
+      html = page_class.render({}, env_for("/orders/42?tab=items"))
+
+      expect(html).to include("order=42 tab=items path=/orders/42")
+    end
+
+    it "lets the route's params outrank the request's query" do
+      expect(page_class.render({}, env_for("/orders/42?order_id=99"))).to include("order=42")
+    end
+
+    it "lets the wire hash outrank the request's own wire, route params included" do
+      expect(page_class.render({ order_id: "7" }, env_for("/orders/42"))).to include("order=7")
+    end
+
+    it "takes no route params, and raises nothing, from a path its pattern does not match" do
+      expect(page_class.render({ order_id: "7" }, env_for("/drivers/3"))).to include("order=7 tab= path=/drivers/3")
+    end
+
+    it "takes nothing from the path of an empty request" do
+      expect(page_class.render({}, nil)).to include("order= tab= path=/")
     end
   end
 

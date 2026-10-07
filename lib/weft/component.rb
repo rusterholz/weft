@@ -17,10 +17,8 @@ require "weft/dsl/recoveries"
 require "weft/dsl/announcements"
 require "weft/dsl/updates"
 require "weft/error"
-require "weft/params/assembly"
 require "weft/registry"
-require "weft/request"
-require "weft/request/event_frame"
+require "weft/rendering"
 require "weft/addressing"
 require "weft/router/streaming"
 
@@ -31,6 +29,7 @@ module Weft
   # - Auto-registration with the global Registry
   class Component < Arbre::Component
     extend Weft::Addressing
+    extend Weft::Rendering
 
     include Weft::DSL::Params
     include Weft::DSL::Recoveries
@@ -79,19 +78,6 @@ module Weft
       def inherited(subclass)
         super
         Weft.registry.register(subclass)
-      end
-
-      # Render this component as an HTML string, outside any Arbre DSL context.
-      # The kwargs are pseudo-wire: exactly what a request's query string
-      # would carry. For testing, REPL exploration, or any standalone
-      # rendering need.
-      #
-      #   StatCard.render(status: "shipped")  # => "<div id=\"...\">...</div>"
-      def render(**wire_params)
-        klass = self
-        frame = Weft::Request::EventFrame.new(Weft::Request.wrap(nil))
-        root = Weft::Params::Assembly.empty(wire_params)
-        Weft::Context.new(frame: frame, branch_bag: root) { insert_tag(klass) }.to_s
       end
 
       # @api private

@@ -1250,7 +1250,7 @@ RSpec.describe Weft::Context do
         end
       end
 
-      html = klass.render(order_id: 1)
+      html = klass.render({ order_id: 1 }, nil)
 
       expect(html).to include('hx-post="/_components/render_test/go"')
     end

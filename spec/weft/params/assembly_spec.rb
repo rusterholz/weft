@@ -129,7 +129,7 @@ RSpec.describe Weft::Params::Assembly do
       # render kwargs are a query string in disguise; a handoff is a
       # server-side value that can't ride the wire. Build under Weft::Context
       # with call-site kwargs to test receiving components.
-      expect { receiver_class.render(order: order) }.
+      expect { receiver_class.render({ order: order }, nil) }.
         to raise_error(Weft::NotReceived)
     end
   end
@@ -1138,6 +1138,70 @@ RSpec.describe Weft::Params::Assembly do
       end
 
       expect(child_component.params[:label]).to eq("from-tree")
+    end
+  end
+
+  # A bag handed to `.render` is the parent the root crosses from, so a bag
+  # already crossed into the root's own class gets crossed into it again. That
+  # second crossing must change nothing a reader can see.
+  describe "crossing into the same class twice" do
+    def cross(klass, bag) = described_class.call(klass, branched_from: bag)
+
+    let(:runs) { Hash.new(0) }
+    let(:klass) do
+      counts = runs
+      Class.new(Weft::Component) do
+        def self.name = "TwiceCrossed"
+        param :status, default: "fresh"
+        param :page, type: :integer
+        receives :note, default: "none"
+        derives(:total) { |_p| counts[:total] += 1 and 42 }
+      end
+    end
+    let(:base) { described_class.empty({ "status" => "shipped", "page" => "3" }) % { page: 5 } }
+
+    it "answers every key the same" do
+      once = cross(klass, base)
+      twice = cross(klass, once)
+
+      keys = once.keys | twice.keys
+      expect(keys.to_h { |key| [key, twice[key]] }).to eq(keys.to_h { |key| [key, once[key]] })
+    end
+
+    it "shares a derivation forced on the first with the second" do
+      once = cross(klass, base)
+      twice = cross(klass, once)
+
+      once[:total]
+      twice[:total]
+
+      expect(runs[:total]).to eq(1)
+    end
+
+    it "shares an overriding derivation the same way" do
+      pending "re-crossing redeclares an override: derivation, so the second bag runs it again (M6.5)"
+      counts = runs
+      klass.derives(:total, override: true) { |_p| counts[:total] += 1 and 42 }
+      once = cross(klass, base)
+      twice = cross(klass, once)
+
+      once[:total]
+      twice[:total]
+
+      expect(runs[:total]).to eq(1)
+    end
+
+    it "shares a contextual derivation the same way" do
+      pending "re-crossing copies a contextual derivation unforced, so the second bag runs it again (M6.5)"
+      counts = runs
+      klass.derives(:total, contextual: true) { |_p| counts[:total] += 1 and 42 }
+      once = cross(klass, base)
+      twice = cross(klass, once)
+
+      once[:total]
+      twice[:total]
+
+      expect(runs[:total]).to eq(1)
     end
   end
 end
