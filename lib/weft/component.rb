@@ -18,6 +18,7 @@ require "weft/dsl/announcements"
 require "weft/dsl/updates"
 require "weft/error"
 require "weft/registry"
+require "weft/request"
 require "weft/request/event_frame"
 require "weft/addressing"
 require "weft/router/streaming"
@@ -87,7 +88,8 @@ module Weft
       #   StatCard.render(status: "shipped")  # => "<div id=\"...\">...</div>"
       def render(**wire_params)
         klass = self
-        Weft::Context.new(frame: Weft::Request::EventFrame.new(wire_params)) { insert_tag(klass) }.to_s
+        frame = Weft::Request::EventFrame.new(wire_params, request: Weft::Request.wrap(nil))
+        Weft::Context.new(frame: frame) { insert_tag(klass) }.to_s
       end
 
       # @api private

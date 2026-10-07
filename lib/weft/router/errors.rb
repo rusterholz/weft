@@ -339,7 +339,7 @@ module Weft
                                             on_redirect: true, component_ctx: component_ctx)
         url = target.redirect_url(params_for_url)
 
-        if request.env["HTTP_HX_REQUEST"]
+        if htmx_request?
           headers["HX-Redirect"] = url
           status 204
           ""

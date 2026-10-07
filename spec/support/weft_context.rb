@@ -7,7 +7,7 @@ require "weft/request/event_frame"
 # which is what most specs rendering a tree by hand need.
 module WeftContextHelper
   def weft_context(wire = {}, **, &)
-    Weft::Context.new(frame: Weft::Request::EventFrame.new(wire || {}), **, &)
+    Weft::Context.new(frame: Weft::Request::EventFrame.new(wire || {}, request: Weft::Request.wrap(nil)), **, &)
   end
 end
 

@@ -7,6 +7,7 @@ require "weft/context"
 require "weft/error"
 require "weft/params"
 require "weft/params/assembly"
+require "weft/request"
 require "weft/request/event_frame"
 
 module Weft
@@ -42,6 +43,12 @@ module Weft
     # uncaught route exceptions feed the Page recovers chain.
     set :raise_errors, false
     set :dump_errors, false
+
+    # Every response weft answers carries its request's id, unless something
+    # already set one. A response passed downstream is that app's to label.
+    after do
+      headers["X-Request-Id"] ||= weft_request.id unless @weft_forwarded
+    end
 
     # GET: render a component, invoke a nameless GET action, or stream SSE
     get "/*" do
@@ -108,6 +115,14 @@ module Weft
 
     private
 
+    # This exchange's request, one object for every frame it renders.
+    def weft_request = @weft_request ||= Weft::Request.wrap(request)
+
+    def forward
+      @weft_forwarded = true
+      super
+    end
+
     # A GET targets a component's SSE stream endpoint when its path ends with
     # "/<stream_suffix>" (default "/_stream"). See Streaming slice.
     def stream_request?(path)
@@ -154,7 +169,9 @@ module Weft
     # A frame for one delivery, over the request's universe unless given
     # another (a page's, which carries its route's path params). A recovery
     # renders in the frame of the delivery it ships in.
-    def new_frame(universe = nil) = Weft::Request::EventFrame.new(universe || request_universe)
+    def new_frame(universe = nil, request: weft_request)
+      Weft::Request::EventFrame.new(universe || request_universe, request: request)
+    end
 
     # Render a component as HTML. inner: true returns children only
     # (for SSE innerHTML swap where the wrapper element must persist).
@@ -195,14 +212,12 @@ module Weft
                                 originating_frame: frame)
     end
 
-    def htmx_request?
-      request.env["HTTP_HX_REQUEST"] == "true"
-    end
+    def htmx_request? = weft_request.htmx?
 
     # Handle a Weft::Redirect return from a callable or recovers block.
     # htmx requests get HX-Redirect header; traditional requests get 302.
     def handle_redirect(redir)
-      if request.env["HTTP_HX_REQUEST"]
+      if htmx_request?
         headers["HX-Redirect"] = redir.url
         status 204
         ""

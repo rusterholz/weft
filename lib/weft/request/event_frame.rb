@@ -7,6 +7,9 @@ module Weft
     # stream. Everything that is one-per-delivery lives here, read directly by
     # every root the delivery renders rather than threaded to each of them.
     #
+    # The request is the one the delivery answers; every push on a stream
+    # answers the request that opened it.
+    #
     # The universe is everything the client sent, undeclared keys included; each
     # component projects it through its own declarations. It is frozen because
     # every root in the delivery shares the one object.
@@ -16,9 +19,10 @@ module Weft
     # on one element. A root whose build raises gives its slot back, and its
     # recovery, rendering in the same frame, fills that slot in its place.
     class EventFrame
-      attr_reader :universe, :slots
+      attr_reader :request, :universe, :slots
 
-      def initialize(universe)
+      def initialize(universe, request:)
+        @request = request
         @universe = universe.frozen? ? universe : universe.dup.freeze
         @slots = Set.new
       end

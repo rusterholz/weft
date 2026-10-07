@@ -19,7 +19,7 @@ RSpec.describe Weft::Context do
 
   describe "event frame" do
     it "carries the frame it was built in" do
-      frame = Weft::Request::EventFrame.new({ "status" => "x" })
+      frame = Weft::Request::EventFrame.new({ "status" => "x" }, request: Weft::Request.wrap(nil))
 
       expect(described_class.new(frame: frame).frame).to be(frame)
     end
@@ -38,7 +38,8 @@ RSpec.describe Weft::Context do
         end
       end
 
-      html = described_class.new({ order: "A-1" }, frame: Weft::Request::EventFrame.new({})) do
+      frame = Weft::Request::EventFrame.new({}, request: Weft::Request.wrap(nil))
+      html = described_class.new({ order: "A-1" }, frame: frame) do
         insert_tag(probe)
       end.to_s
 
@@ -47,7 +48,7 @@ RSpec.describe Weft::Context do
   end
 
   describe "slot claims" do
-    let(:frame) { Weft::Request::EventFrame.new({ "order_id" => "7" }) }
+    let(:frame) { Weft::Request::EventFrame.new({ "order_id" => "7" }, request: Weft::Request.wrap(nil)) }
 
     def slot_card(name, &body)
       Class.new(Weft::Component) do
@@ -110,7 +111,7 @@ RSpec.describe Weft::Context do
     end
 
     it "has its frame readable inside the construction block" do
-      frame = Weft::Request::EventFrame.new({ "status" => "x" })
+      frame = Weft::Request::EventFrame.new({ "status" => "x" }, request: Weft::Request.wrap(nil))
       seen = nil
       described_class.new(frame: frame) { seen = arbre_context.frame }
 
