@@ -1,6 +1,6 @@
 # The Request
 
-Every component and page can read the request it renders for. `params` holds the values the request sent, validated and coerced; `request` holds everything else about it: who sent it, what headers came with it, what htmx was doing at the time, and an id that names the request, which every response carries back.
+Every component and page can read the request it renders for. `params` holds the values the request sent, validated and coerced; `request` holds everything else about it: who sent it, what headers came with it, what htmx was doing at the time, and an id that names the request, which every response Weft answers carries back.
 
 ```ruby
 class OrderCard < Weft::Component

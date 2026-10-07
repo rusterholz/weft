@@ -10,11 +10,11 @@ require "weft/params/assembly"
 require "weft/request/htmx"
 
 module Weft
-  # One inbound HTTP request, as weft code sees it: a component's `build`, a
-  # page's, or a verb block. It wraps the Rack request rather than replacing
-  # it, and answers for the HTTP floor (method, location, headers, content
-  # type, negotiation, cookies, the client's address), htmx's request headers,
-  # and an id that ties every log line and response of one request together.
+  # One inbound HTTP request, as a component's or a page's `build` sees it.
+  # It wraps the Rack request rather than replacing it, and answers for the
+  # HTTP floor (method, location, headers, content type, negotiation, cookies,
+  # the client's address), htmx's request headers, and an id every response
+  # weft answers carries back.
   #
   # What it leaves out is the route around weft's params: raw params, the
   # body, the query string. Values a request sends reach your code through
