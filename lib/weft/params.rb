@@ -66,8 +66,9 @@ module Weft
 
       attr_reader :block
 
-      # Where the derivation was declared: two thunks with one site are one
-      # declaration, whichever class carried it into the crossing.
+      # The declaration entry this thunk was made from, compared by identity:
+      # two thunks with one site are one declaration, whichever class carried
+      # it into the crossing. A thunk with no site matches none.
       attr_reader :site
 
       # The bag this derivation belongs to — the one its declaring component

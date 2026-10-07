@@ -1230,11 +1230,11 @@ RSpec.describe Weft::Params::Assembly do
         expect(runs).to eq("K" => 1)
       end
 
-      it "counts a declaration a shared module makes in each class as one site" do
+      it "takes a declaration a shared module writes into each class as a site per class" do
         counts = runs
         shared = Module.new do
           define_singleton_method(:included) do |base|
-            base.derives(:total, override: true) { |_p| counts[:module] += 1 and "shared" }
+            base.derives(:total, override: true) { |_p| counts[base.name] += 1 and base.name }
           end
         end
         k = Class.new(Weft::Component) { def self.name = "ModuleK" }.tap { |c| c.include(shared) }
@@ -1243,8 +1243,31 @@ RSpec.describe Weft::Params::Assembly do
         once = cross(k, base)
         twice = cross(l, once)
 
-        expect(force_each(once, twice)).to eq(%w[shared shared])
-        expect(runs).to eq(module: 1)
+        expect(force_each(once, twice)).to eq(%w[ModuleK ModuleL])
+      end
+
+      it "takes declarations a loop writes on one line as a site per class" do
+        k, l = %w[LoopK LoopL].map do |name|
+          Class.new(Weft::Component) do
+            define_singleton_method(:name) { name }
+            derives(:total, override: true) { |_p| name }
+          end
+        end
+
+        expect(cross(l, cross(k, base))[:total]).to eq("LoopL")
+      end
+
+      it "tells apart declarations whose blocks have no source location" do
+        k = Class.new(Weft::Component) do
+          def self.name = "SymK"
+          derives :total, override: true, &:class
+        end
+        l = Class.new(Weft::Component) do
+          def self.name = "SymL"
+          derives :total, override: true, &:keys
+        end
+
+        expect(cross(l, cross(k, base))[:total]).to eq(cross(l, base)[:total])
       end
 
       it "takes a pin written on one line with another value as a new site" do
@@ -1255,6 +1278,27 @@ RSpec.describe Weft::Params::Assembly do
         l = Class.new(Weft::Component) { def self.name = "PinnedL" }.tap { |c| c.include(shared) }
 
         expect(cross(l, cross(k, base))[:label]).to eq("PinnedL")
+      end
+
+      it "takes two classes declaring with one shared block as two sites" do
+        counts = runs
+        block = proc { |_p| counts[:shared] += 1 and "shared" }
+        k, l = %w[BlockK BlockL].map do |name|
+          Class.new(Weft::Component) { define_singleton_method(:name) { name } }.
+            tap { |c| c.derives(:total, override: true, &block) }
+        end
+
+        once = cross(k, base)
+        force_each(once, cross(l, once))
+
+        expect(runs).to eq(shared: 2)
+      end
+
+      it "never keeps a thunk that names no declaration" do
+        k = overriding("K", runs)
+        lineage = Weft::Params.new({ total: Weft::Params::Thunk.new(proc { |_p| "stray" }) })
+
+        expect(cross(k, lineage)[:total]).to eq("K")
       end
 
       it "keeps a pinned value's thunk the same way" do

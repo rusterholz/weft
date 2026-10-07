@@ -252,7 +252,6 @@ module Weft
             pinned = pin_value(value)
             own_derived_params[name] = { block: proc { |_p| pinned },
                                          source_location: [site.path, site.lineno],
-                                         site: [site.path, site.lineno, pinned],
                                          override: true, pinned: true }
           end
         end

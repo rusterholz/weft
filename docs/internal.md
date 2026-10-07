@@ -279,13 +279,13 @@ that bag as the root's parent, and the request's wire plays no part.
 A crossing from a bag into the class that bag was crossed into already answers every key the same,
 and shares the outcome of every derivation but a contextual one. A plain derivation is shared because
 the inherited thunk outranks the class's own. An `override: true` one (`defines` included) is shared
-because an override belongs to its **declaration site**: an inherited thunk is kept when the class
-being crossed into carries the same declaration, whether its own, a superclass's, or one a shared
-module wrote into each class from a single line. A class that writes its own declaration is a new
-site, so with K and L each overriding a key, K → K → K holds one thunk and K → L → K builds three. A
-pin's site includes its value, since one line can pin a different value in each class it runs for. A
-`contextual: true` derivation crosses as an unforced copy and is computed afresh at every crossing,
-its own class's included.
+because an override belongs to its **declaration site**: the declaration entry itself, compared by
+identity. An inherited thunk is kept when the class being crossed into carries that very entry, its
+own or one inherited from a superclass. Every `derives`/`defines` call makes an entry of its own, so
+a class that declares, whether on its own line, in a loop, or from a shared module's hook, is a new
+site, and so with K and L each overriding a key, K → K → K holds one thunk and K → L → K builds three.
+A thunk naming no declaration matches none. A `contextual: true` derivation crosses as an unforced
+copy and is computed afresh at every crossing, its own class's included.
 
 ### The event frame
 

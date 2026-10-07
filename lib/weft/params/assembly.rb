@@ -174,22 +174,19 @@ module Weft
       end
 
       # An override belongs to its declaration, not to each crossing: one
-      # inherited from the very declaration this class carries (its own, a
-      # superclass's, a shared module's) is kept, outcome and all. A class that
-      # writes its own declaration is a new site. A contextual derivation
-      # arrives here as the unforced copy the branch made, so it still computes
-      # afresh at every crossing.
+      # inherited from the very declaration entry this class carries (its own,
+      # or a superclass's it inherits) is kept, outcome and all. Every
+      # `derives`/`defines` call makes an entry of its own, so a class that
+      # declares, by its own line, a loop or a module hook, is a new site. A
+      # contextual derivation arrives here as the unforced copy the branch
+      # made, so it still computes afresh at every crossing.
       def overriding_thunk(key)
         inherited = @inherited[key]
-        site = declaration_site(@component_class.derived_params[key])
-        return inherited if inherited.is_a?(Weft::Params::Thunk) && inherited.site == site
+        declaration = @component_class.derived_params[key]
+        return inherited if inherited.is_a?(Weft::Params::Thunk) && declaration.equal?(inherited.site)
 
         derived_thunk(key)
       end
-
-      # Where a derivation was written; a pin's site includes its value, since
-      # one line can pin a different value in each class it runs for.
-      def declaration_site(meta) = meta[:site] || meta[:source_location]
 
       def overriding?(key) = @component_class.derived_params[key]&.[](:override) || false
 
@@ -205,7 +202,7 @@ module Weft
 
       def derived_thunk(key)
         meta = @component_class.derived_params[key]
-        Weft::Params::Thunk.new(meta[:block], contextual: meta[:contextual], site: declaration_site(meta)) if meta
+        Weft::Params::Thunk.new(meta[:block], contextual: meta[:contextual], site: meta) if meta
       end
 
       # The wire door's default wins for dual keys — its meta always carries
