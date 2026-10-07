@@ -7,7 +7,6 @@ require "weft/context"
 require "weft/dsl/sandbox"
 require "weft/error"
 require "weft/page"
-require "weft/params"
 require "weft/resolver"
 
 module Weft

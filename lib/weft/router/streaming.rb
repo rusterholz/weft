@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "weft/params/assembly"
-
 module Weft
   class Router
     # SSE streaming slice of the Router. Handles `/component_path/<stream_suffix>`

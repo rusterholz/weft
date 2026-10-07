@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
 require "weft/dsl/sandbox"
-require "weft/params"
-require "weft/params/assembly"
 require "weft/redirect"
 
 module Weft

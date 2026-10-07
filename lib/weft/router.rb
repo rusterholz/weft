@@ -5,7 +5,6 @@ require "uri"
 
 require "weft/context"
 require "weft/error"
-require "weft/params"
 require "weft/params/assembly"
 require "weft/request"
 require "weft/request/event_frame"

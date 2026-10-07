@@ -4,7 +4,6 @@ require "arbre"
 
 require "weft/dsl/sandbox"
 require "weft/error"
-require "weft/params"
 
 module Weft
   class Page < Arbre::Component
