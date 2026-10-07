@@ -184,7 +184,7 @@ module Weft
       component = build_root(component_class, frame, branch_bag: state)
       inner ? component.content : component.to_s
     rescue StandardError => e
-      render_error(component_class, state || request_earth, e, frame: frame)
+      render_error(component_class, state, e, frame: frame)
     end
 
     # Build a component as the root of a fresh tree, branching +branch_bag+:
