@@ -216,7 +216,7 @@ RSpec.describe Weft::Request do
     end
 
     it "is empty once the request is known to be unreadable" do
-      request = request_for("/?bad=%", method: "GET")
+      request = request_for("/", "QUERY_STRING" => "bad=%")
       request.send(:unreadable!)
 
       expect(universe_of(request)).to eq({})
@@ -248,7 +248,7 @@ RSpec.describe Weft::Request do
     end
 
     it "stands over nothing for an unreadable request" do
-      request = request_for("/?bad=%")
+      request = request_for("/", "QUERY_STRING" => "bad=%")
       request.send(:unreadable!)
 
       expect(earth_of(request).send(:universe)).to eq({})

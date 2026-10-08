@@ -1648,7 +1648,8 @@ RSpec.describe Weft::Router do
       component_class = failing_class(attempts: 1)
       out = frame_sink
       allow(router).to receive(:stream).and_yield(out)
-      allow(router).to receive(:request).and_return(Sinatra::Request.new(Rack::MockRequest.env_for("/stream-test?bad=%")))
+      unreadable = Rack::MockRequest.env_for("/stream-test", "QUERY_STRING" => "bad=%")
+      allow(router).to receive(:request).and_return(Sinatra::Request.new(unreadable))
 
       router.send(:stream_component, component_class)
 
