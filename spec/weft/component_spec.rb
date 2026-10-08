@@ -260,6 +260,33 @@ RSpec.describe Weft::Component do
       expect(Weft.logger).to have_received(:warn).twice.with(/title/)
     end
 
+    context "when the kwarg comes through a builder method" do
+      before do
+        stub_const("BuilderSiteCard", Class.new(Weft::Component) { param :title })
+        BuilderSiteCard.builder_method :builder_site_card
+      end
+
+      after { Arbre::Element::BuilderMethods.send(:remove_method, :builder_site_card) }
+
+      it "warns for each line that calls the builder, not once for the builder" do
+        allow(Weft.logger).to receive(:warn)
+        host = Class.new(Weft::Component) do
+          def self.name = "BuilderSiteHost"
+          anonymous!
+
+          def build(attributes = {})
+            super
+            builder_site_card title: "a"
+            builder_site_card title: "b"
+          end
+        end
+
+        host.render({}, nil)
+
+        expect(Weft.logger).to have_received(:warn).twice.with(/title/)
+      end
+    end
+
     # `derives` and `defines` are the same mistake one door over: the value is
     # computed, so a call site cannot supply it either, and the kwarg silently
     # became chrome with nothing said about it.
