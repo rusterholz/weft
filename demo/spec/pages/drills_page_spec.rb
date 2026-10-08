@@ -3,7 +3,7 @@
 require "spec_helper"
 
 RSpec.describe DrillsPage, type: :component do
-  def rendered = described_class.render
+  def rendered = described_class.render({}, nil)
 
   it "auto-routes at /drills" do
     expect(described_class.page_path).to eq("/drills")

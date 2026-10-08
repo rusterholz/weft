@@ -7,7 +7,6 @@ require "weft/context"
 require "weft/dsl/sandbox"
 require "weft/error"
 require "weft/page"
-require "weft/params"
 require "weft/resolver"
 
 module Weft
@@ -54,14 +53,13 @@ module Weft
       # walks that component's own chain and answers with a fragment, exactly
       # as a failed render of it would; a page path walks that page's; a path
       # weft doesn't know falls to the gem-default Page chain, as a routing
-      # miss does. The state is an empty bag, since there is no request to
-      # read one from — a recovery here redraws nothing, because nothing
-      # arrived to redraw.
+      # miss does. The state is the request's earth, which stands over nothing
+      # — a recovery here redraws nothing, because nothing arrived to redraw.
       def handle_unreadable_request(sinatra_error)
         error = unreadable_request(sinatra_error)
         path = request.path_info
         component_class, = find_component_and_action(path)
-        return render_error(component_class, Weft::Params.new({}), error) if component_class&.routable?
+        return render_error(component_class, request_earth, error) if component_class&.routable?
 
         page_class, = Weft.registry.match_page(path)
         handle_page_chain_failure(error, originating_page_class: page_class)
@@ -92,9 +90,10 @@ module Weft
         # One lineage for both halves: the block reads this bag, and the render
         # below inherits it with the block's return riding over it as an
         # overlay. An empty delta leaves the two identical; a non-empty one is
-        # what the block is for. An absent originating bag is an empty one
-        # rather than nil, so the inheritance is unconditional.
-        state = originating_params || Weft::Params.new({})
+        # what the block is for. With no originating bag (a routing miss, say)
+        # the request's earth stands in, so the inheritance is unconditional
+        # and the recovery still sees the wire.
+        state = originating_params || request_earth
         block_delta = invoke_recovery_block(entry, state, error)
 
         dispatch_page_target(target, block_delta, error, entry,
@@ -123,10 +122,9 @@ module Weft
       # Render or redirect for a Page recovery target. htmx requests get the
       # Page's body content as a fragment; traditional requests get the full
       # document. Status comes from the exception, or the entry's override.
-      # The page renders in the failing page's frame when there is one (its
-      # universe carries the route's path params), else a fresh one over the
-      # request's; the recovery values ride as overlays (one universe per
-      # request).
+      # The page renders in the failing page's frame when there is one, else a
+      # fresh one; the recovery values ride as overlays on the lineage, which
+      # carries the request's universe (one universe per request).
       def dispatch_page_recovery(page_class, block_delta, error, entry = nil, frame: nil, branch_bag: nil)
         wire_status = recovery_status(error, entry)
         delta = block_delta.merge(auto_param_overlay(error, { status: wire_status }))
@@ -138,9 +136,11 @@ module Weft
 
       # The bag a recovery render inherits: whatever the request had composed,
       # with the recovery's own values layered on as an overlay so they outrank
-      # the target's wire at any depth. An absent originating bag is an empty
-      # one rather than nil, so the lineage is unconditional.
-      def recovery_lineage(branch_bag, delta) = (branch_bag || Weft::Params.new({})) % delta
+      # the target's wire at any depth. An absent originating bag is the
+      # request's earth rather than nil, so the lineage is unconditional.
+      def recovery_lineage(branch_bag, delta)
+        (branch_bag || request_earth) % delta
+      end
 
       def render_full_page(page_class, frame, branch_bag = nil)
         klass = page_class
@@ -339,7 +339,7 @@ module Weft
                                             on_redirect: true, component_ctx: component_ctx)
         url = target.redirect_url(params_for_url)
 
-        if request.env["HTTP_HX_REQUEST"]
+        if htmx_request?
           headers["HX-Redirect"] = url
           status 204
           ""

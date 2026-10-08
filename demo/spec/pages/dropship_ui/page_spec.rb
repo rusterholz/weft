@@ -10,7 +10,7 @@ class TestPage < DropshipUI::Page; end
 RSpec.describe DropshipUI::Page, type: :component do
   let(:concrete_page) { TestPage }
 
-  def render_concrete = concrete_page.render
+  def render_concrete = concrete_page.render({}, nil)
 
   it "renders as an html element with DOCTYPE" do
     html = render_concrete
@@ -28,7 +28,7 @@ RSpec.describe DropshipUI::Page, type: :component do
       title "Specific Page"
     end
 
-    html = subclass.render
+    html = subclass.render({}, nil)
     expect(html).to include("<title>Specific Page</title>")
   end
 

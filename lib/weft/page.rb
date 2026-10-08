@@ -14,7 +14,7 @@ require "weft/error"
 require "weft/page/assets"
 require "weft/page/head"
 require "weft/registry"
-require "weft/request/event_frame"
+require "weft/rendering"
 
 module Weft
   # Document shell component. Renders the full HTML skeleton (doctype,
@@ -37,6 +37,7 @@ module Weft
   # shared assets and helpers but isn't itself a destination.
   class Page < Arbre::Component
     extend Weft::Addressing
+    extend Weft::Rendering
 
     include Weft::Context::Interception
     include Weft::DSL::Params
@@ -125,15 +126,30 @@ module Weft
         Weft.registry.register_page(subclass)
       end
 
-      # Render this page as a full HTML document outside any Arbre DSL context.
-      # The kwargs are pseudo-wire: exactly what a request's query/path params
-      # would carry. For testing or standalone rendering.
-      def render(**wire_params)
-        klass = self
-        Weft::Context.new(frame: Weft::Request::EventFrame.new(wire_params)) { insert_tag(klass) }.to_s
+      private
+
+      # This page's path params as +path+ carries them, or none when its
+      # pattern does not match. A page with no route of its own has none.
+      def route_params_in(path)
+        pattern = page_path || (default_page_path if routable?)
+        (pattern && match_path(pattern, path)) || {}
       end
 
-      private
+      # Match a Sinatra-style pattern against a path: the extracted params, or
+      # nil if it does not match.
+      def match_path(pattern, path)
+        pattern_parts = pattern.split("/")
+        path_parts = path.split("/")
+        return nil unless pattern_parts.length == path_parts.length
+
+        pattern_parts.zip(path_parts).each_with_object({}) do |(pat, val), params|
+          if pat.start_with?(":")
+            params[pat[1..].to_sym] = val
+          elsif pat != val
+            return nil
+          end
+        end
+      end
 
       def default_page_path
         raise_paramful_page_path! if params.any?
@@ -167,11 +183,17 @@ module Weft
 
     # Params resolve at construction (see Weft::Component#initialize) so
     # user build bodies can read them before super — e.g. computing body
-    # chrome from a record looked up by param.
+    # chrome from a record looked up by param. A page that declares nothing
+    # still has a bag, branched from the request's like any other.
     def initialize(*)
       super
-      @params = assembled_params if self.class.declared_keys.any?
+      @request = arbre_context.frame.request
+      @params = assembled_params
     end
+
+    # The request this page renders for, a Weft::Request; see
+    # Weft::Component#request.
+    attr_reader :request
 
     def build(attributes = {})
       warn_declared_chrome_collisions(attributes)

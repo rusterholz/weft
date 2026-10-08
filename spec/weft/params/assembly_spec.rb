@@ -11,7 +11,7 @@ RSpec.describe Weft::Params::Assembly do
   # branches from when a callable has returned and no ancestor has rendered.
   # The delta reaches a component by riding this bag, which is the only way it
   # travels: there is no channel that hands one to a render from the side.
-  def delta_bag(delta) = Weft::Params.new({}) % delta
+  def delta_bag(delta, wire = {}) = described_class.empty(wire) % delta
 
   describe "receives behavior" do
     let(:order) { Struct.new(:id, :name).new(42, "Widget crate") }
@@ -129,7 +129,7 @@ RSpec.describe Weft::Params::Assembly do
       # render kwargs are a query string in disguise; a handoff is a
       # server-side value that can't ride the wire. Build under Weft::Context
       # with call-site kwargs to test receiving components.
-      expect { receiver_class.render(order: order) }.
+      expect { receiver_class.render({ order: order }, nil) }.
         to raise_error(Weft::NotReceived)
     end
   end
@@ -973,8 +973,7 @@ RSpec.describe Weft::Params::Assembly do
         param :page, type: :integer
       end
 
-      component = weft_context({ "page" => "3" },
-                               branch_bag: delta_bag({ page: 5 })) do
+      component = weft_context(branch_bag: delta_bag({ page: 5 }, { "page" => "3" })) do
         insert_tag(klass)
       end.children.first
 
@@ -1014,8 +1013,7 @@ RSpec.describe Weft::Params::Assembly do
         param :status, type: :string, default: "fresh"
       end
 
-      component = weft_context({ "status" => "stale" },
-                               branch_bag: delta_bag({ status: nil })) do
+      component = weft_context(branch_bag: delta_bag({ status: nil }, { "status" => "stale" })) do
         insert_tag(klass)
       end.children.first
 
@@ -1033,10 +1031,13 @@ RSpec.describe Weft::Params::Assembly do
         def self.name = "ClearedToAncestor"
         param :status, type: :string
       end
-      ancestor = Weft::Params.new({ status: "from-ancestor" })
+      source = Class.new(Weft::Component) do
+        def self.name = "AncestorSource"
+        derives(:status) { |_p| "from-ancestor" }
+      end
+      ancestor = described_class.call(source, { "status" => "from-wire" })
 
-      bag = described_class.call(klass, { "status" => "from-wire" },
-                                 branched_from: ancestor % { status: nil })
+      bag = described_class.call(klass, branched_from: ancestor % { status: nil })
 
       expect(bag[:status]).to eq("from-ancestor")
     end
@@ -1056,10 +1057,9 @@ RSpec.describe Weft::Params::Assembly do
         def self.name = "DeclaringDescendant"
         param :status, type: :string
       end
-      handed = described_class.call(card, {}, handoffs: { status: "handed" })
+      handed = described_class.call(card, { "status" => "from-wire" }, handoffs: { status: "handed" })
 
-      bag = described_class.call(badge, { "status" => "from-wire" },
-                                 branched_from: handed % { unrelated: "delta" })
+      bag = described_class.call(badge, branched_from: handed % { unrelated: "delta" })
 
       expect(bag[:status]).to eq("handed")
     end
@@ -1071,8 +1071,7 @@ RSpec.describe Weft::Params::Assembly do
         derives(:tally) { |_p| 7 }
       end
 
-      component = weft_context({ "tally" => "3" },
-                               branch_bag: delta_bag({ tally: nil })) do
+      component = weft_context(branch_bag: delta_bag({ tally: nil }, { "tally" => "3" })) do
         insert_tag(klass)
       end.children.first
 
@@ -1128,19 +1127,201 @@ RSpec.describe Weft::Params::Assembly do
         def self.name = "TreeParent"
         param :label, type: :string
       end
-      child = Class.new(Weft::Component) do
-        def self.name = "TreeChild"
+      child = Class.new(Weft::Component) { def self.name = "TreeChild" }
+      source = Class.new(Weft::Component) do
+        def self.name = "BranchSource"
+        derives(:label) { |_p| "from-branch" }
       end
-
       child_component = nil
-      weft_context({ "label" => "from-tree" },
-                   branch_bag: Weft::Params.new({ label: "from-branch" })) do
-        insert_tag(parent) do
-          child_component = insert_tag(child)
-        end
+      weft_context(branch_bag: described_class.call(source, { "label" => "from-tree" })) do
+        insert_tag(parent) { child_component = insert_tag(child) }
       end
 
       expect(child_component.params[:label]).to eq("from-tree")
+    end
+  end
+
+  # A bag handed to `.render` is the parent the root crosses from, so a bag
+  # already crossed into the root's own class gets crossed into it again. That
+  # second crossing must change nothing a reader can see.
+  describe "crossing into the same class twice" do
+    def cross(klass, bag) = described_class.call(klass, branched_from: bag)
+
+    let(:runs) { Hash.new(0) }
+    let(:klass) do
+      counts = runs
+      Class.new(Weft::Component) do
+        def self.name = "TwiceCrossed"
+        param :status, default: "fresh"
+        param :page, type: :integer
+        receives :note, default: "none"
+        derives(:total) { |_p| counts[:total] += 1 and 42 }
+      end
+    end
+    let(:base) { described_class.empty({ "status" => "shipped", "page" => "3" }) % { page: 5 } }
+
+    it "answers every key the same" do
+      once = cross(klass, base)
+      twice = cross(klass, once)
+
+      keys = once.keys | twice.keys
+      expect(keys.to_h { |key| [key, twice[key]] }).to eq(keys.to_h { |key| [key, once[key]] })
+    end
+
+    it "shares a derivation forced on the first with the second" do
+      once = cross(klass, base)
+      twice = cross(klass, once)
+
+      once[:total]
+      twice[:total]
+
+      expect(runs[:total]).to eq(1)
+    end
+
+    # An override belongs to the declaration that wrote it: crossing back into
+    # the same declaration keeps the thunk, and a class that writes its own
+    # declaration is a new site that computes its own.
+    describe "an overriding derivation" do
+      def overriding(name, counts)
+        Class.new(Weft::Component) do
+          define_singleton_method(:name) { name }
+          derives(:total, override: true) { |_p| counts[name] += 1 and name }
+        end
+      end
+
+      def force_each(*bags) = bags.map { |bag| bag[:total] }
+
+      it "keeps one thunk across crossings into the same declaration" do
+        k = overriding("K", runs)
+
+        once = cross(k, base)
+        twice = cross(k, once)
+        thrice = cross(k, twice)
+
+        expect(force_each(once, twice, thrice)).to eq(%w[K K K])
+        expect(runs).to eq("K" => 1)
+      end
+
+      it "computes afresh at every crossing into a different declaration" do
+        counts = runs
+        k = overriding("K", runs)
+        l = Class.new(Weft::Component) do
+          def self.name = "L"
+          derives(:total, override: true) { |_p| counts["L"] += 1 and "L" }
+        end
+
+        once = cross(k, base)
+        twice = cross(l, once)
+        thrice = cross(k, twice)
+
+        expect(force_each(once, twice, thrice)).to eq(%w[K L K])
+        expect(runs).to eq("K" => 2, "L" => 1)
+      end
+
+      it "counts a subclass that inherits the declaration as the same site" do
+        k = overriding("K", runs)
+        sub = Class.new(k) { def self.name = "SubK" }
+
+        once = cross(k, base)
+        twice = cross(sub, once)
+        thrice = cross(k, twice)
+
+        expect(force_each(once, twice, thrice)).to eq(%w[K K K])
+        expect(runs).to eq("K" => 1)
+      end
+
+      it "takes a declaration a shared module writes into each class as a site per class" do
+        counts = runs
+        shared = Module.new do
+          define_singleton_method(:included) do |base|
+            base.derives(:total, override: true) { |_p| counts[base.name] += 1 and base.name }
+          end
+        end
+        k = Class.new(Weft::Component) { def self.name = "ModuleK" }.tap { |c| c.include(shared) }
+        l = Class.new(Weft::Component) { def self.name = "ModuleL" }.tap { |c| c.include(shared) }
+
+        once = cross(k, base)
+        twice = cross(l, once)
+
+        expect(force_each(once, twice)).to eq(%w[ModuleK ModuleL])
+      end
+
+      it "takes declarations a loop writes on one line as a site per class" do
+        k, l = %w[LoopK LoopL].map do |name|
+          Class.new(Weft::Component) do
+            define_singleton_method(:name) { name }
+            derives(:total, override: true) { |_p| name }
+          end
+        end
+
+        expect(cross(l, cross(k, base))[:total]).to eq("LoopL")
+      end
+
+      it "tells apart declarations whose blocks have no source location" do
+        k = Class.new(Weft::Component) do
+          def self.name = "SymK"
+          derives :total, override: true, &:class
+        end
+        l = Class.new(Weft::Component) do
+          def self.name = "SymL"
+          derives :total, override: true, &:keys
+        end
+
+        expect(cross(l, cross(k, base))[:total]).to eq(cross(l, base)[:total])
+      end
+
+      it "takes a pin written on one line with another value as a new site" do
+        shared = Module.new do
+          def self.included(base) = base.defines(label: base.name)
+        end
+        k = Class.new(Weft::Component) { def self.name = "PinnedK" }.tap { |c| c.include(shared) }
+        l = Class.new(Weft::Component) { def self.name = "PinnedL" }.tap { |c| c.include(shared) }
+
+        expect(cross(l, cross(k, base))[:label]).to eq("PinnedL")
+      end
+
+      it "takes two classes declaring with one shared block as two sites" do
+        counts = runs
+        block = proc { |_p| counts[:shared] += 1 and "shared" }
+        k, l = %w[BlockK BlockL].map do |name|
+          Class.new(Weft::Component) { define_singleton_method(:name) { name } }.
+            tap { |c| c.derives(:total, override: true, &block) }
+        end
+
+        once = cross(k, base)
+        force_each(once, cross(l, once))
+
+        expect(runs).to eq(shared: 2)
+      end
+
+      it "never keeps a thunk that names no declaration" do
+        k = overriding("K", runs)
+        lineage = Weft::Params.new({ total: Weft::Params::Thunk.new(proc { |_p| "stray" }) })
+
+        expect(cross(k, lineage)[:total]).to eq("K")
+      end
+
+      it "keeps a pinned value's thunk the same way" do
+        k = Class.new(Weft::Component) do
+          def self.name = "PinK"
+          defines label: "pinned"
+        end
+
+        once = cross(k, base)
+        twice = cross(k, once)
+
+        expect(twice.send(:branch_data)[:label]).to be(once.send(:branch_data)[:label])
+      end
+    end
+
+    it "computes a contextual derivation afresh at every crossing, its own included" do
+      counts = runs
+      klass.derives(:total, contextual: true) { |_p| counts[:total] += 1 and 42 }
+      bags = [klass, klass, klass].each_with_object([base]) { |k, acc| acc << cross(k, acc.last) }.drop(1)
+
+      bags.each { |bag| bag[:total] }
+
+      expect(runs[:total]).to eq(3)
     end
   end
 end

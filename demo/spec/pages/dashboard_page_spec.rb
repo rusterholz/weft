@@ -12,7 +12,7 @@ RSpec.describe DashboardPage, type: :component do
     expect(described_class.superclass).to eq(ApplicationPage)
   end
 
-  def rendered = described_class.render
+  def rendered = described_class.render({}, nil)
 
   it "renders the dashboard heading" do
     expect(rendered).to include("Dashboard")

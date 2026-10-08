@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "rack/mock_request"
 require "rack/test"
 
 RSpec.describe Weft::Router do
@@ -256,6 +257,19 @@ RSpec.describe Weft::Router do
       expect(frames.first.slots).to eq(Set["framed-primary-7", "framed-companion-7"])
     end
 
+    it "answers every frame of an exchange with its one request" do
+      seen = []
+      primary = frame_probe("IdPrimary", seen)
+      primary.performs(:touch) { nil }
+      primary.brings(frame_probe("IdCompanion", seen))
+
+      post "/_components/id_primary/touch", order_id: "7"
+
+      requests = seen.map { |_, frame| frame.request }.uniq
+      expect(requests.size).to eq(1)
+      expect(requests.first.id).to eq(last_response.headers["X-Request-Id"])
+    end
+
     it "renders a companion's recovery in the response's frame, in the failed companion's slot" do
       seen = []
       stand_in = frame_probe("FrameStandIn", seen)
@@ -295,8 +309,7 @@ RSpec.describe Weft::Router do
       failing.pushes(every: 5, attempts: 1)
       failing.recovers(from: StandardError, with: stand_in)
       router = described_class.new!(downstream_app)
-      allow(router).to receive_messages(filtered_params: { "order_id" => "7" },
-                                        request: Struct.new(:path).new("/stream-test"))
+      allow(router).to receive_messages(request: Sinatra::Request.new(Rack::MockRequest.env_for("/stream-test?order_id=7")))
       allow(Weft.logger).to receive(:error)
 
       router.send(:run_push_loop, frame_sink, failing)
@@ -336,20 +349,171 @@ RSpec.describe Weft::Router do
       expect(Weft.logger).to have_received(:warn).with(/shared-slot/)
     end
 
+    it "answers every push on a stream with the request that opened it" do
+      seen = []
+      pushing = frame_probe("RequestPush", seen)
+      pushing.pushes(every: 5)
+      router = described_class.new!(downstream_app)
+      router.request = Sinatra::Request.new(Rack::MockRequest.env_for("/x?order_id=7"))
+      opener = router.send(:weft_request)
+      allow(router).to receive_messages(content_type: nil, headers: nil)
+      allow(router).to receive(:stream) { |*, &block| block.call(frame_sink) }
+      sleeps = 0
+      allow(router).to receive(:sleep) { raise IOError if (sleeps += 1) > 1 }
+
+      router.send(:stream_component, pushing)
+
+      expect(seen.map { |_, frame| frame.request }).to eq([opener, opener])
+    end
+
     it "gives each push on a stream a frame of its own" do
       seen = []
       pushing = frame_probe("FramedPush", seen)
       pushing.pushes(every: 5)
       router = described_class.new!(downstream_app)
-      # A fresh hash per call, as Sinatra's params would be.
-      allow(router).to receive(:filtered_params).and_invoke(-> { { "order_id" => "7" } })
+      router.request = Sinatra::Request.new(Rack::MockRequest.env_for("/x?order_id=7"))
 
       2.times { router.send(:push_component_event, frame_sink, pushing) }
 
       first, second = seen.map(&:last)
       expect(first).not_to be(second)
-      expect(first.universe).to be(second.universe)
+      expect(first.request).to be(second.request)
       expect([first.slots, second.slots]).to all(eq(Set["framed-push-7"]))
+    end
+  end
+
+  describe "the request id" do
+    it "answers with a fresh id when none came in" do
+      get "/_components/stat_card"
+
+      expect(last_response.headers["X-Request-Id"]).to match(/\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/)
+    end
+
+    it "answers with the id that came in" do
+      get "/_components/stat_card", {}, "HTTP_X_REQUEST_ID" => "edge-42"
+
+      expect(last_response.headers["X-Request-Id"]).to eq("edge-42")
+    end
+
+    it "answers with the id on actions, pages and recoveries too" do
+      Class.new(Weft::Page) do
+        def self.name = "IdPage"
+        self.page_path = "/id-page"
+      end
+      stat_card_class.performs(:touch) { nil }
+      stat_card_class.performs(:fail) { raise "boom" }
+      allow(Weft.logger).to receive(:error)
+
+      ids = { action: [:post, "/_components/stat_card/touch"], page: [:get, "/id-page"],
+              recovery: [:post, "/_components/stat_card/fail"] }.to_h do |kind, (verb, path)|
+        send(verb, path, {}, "HTTP_X_REQUEST_ID" => "edge-#{kind}")
+        [kind, last_response.headers["X-Request-Id"]]
+      end
+
+      expect(ids).to eq(action: "edge-action", page: "edge-page", recovery: "edge-recovery")
+    end
+
+    it "answers a routing miss with the id when it serves as the whole app" do
+      response = Rack::MockRequest.new(described_class.new).get("/no-such-page", "HTTP_X_REQUEST_ID" => "solo-1")
+
+      expect(response.status).to eq(404)
+      expect(response.headers["X-Request-Id"]).to eq("solo-1")
+    end
+
+    it "leaves a response it passes downstream alone" do
+      get "/not-weft", {}, "HTTP_X_REQUEST_ID" => "edge-1"
+
+      expect(last_response.body).to eq("downstream")
+      expect(last_response.headers).not_to have_key("X-Request-Id")
+    end
+
+    it "hands a request it passes downstream its id in the env, without labeling the response" do
+      echo = ->(env) { [200, { "content-type" => "text/plain" }, [env["weft.request_id"].to_s]] }
+      response = Rack::MockRequest.new(described_class.new(echo)).get("/not-weft", "HTTP_X_REQUEST_ID" => "edge-9")
+
+      expect(response.body).to eq("edge-9")
+      expect(response.headers).not_to have_key("X-Request-Id")
+    end
+
+    it "gives a request it passes downstream a fresh id when none came in" do
+      echo = ->(env) { [200, { "content-type" => "text/plain" }, [env["weft.request_id"].to_s]] }
+      response = Rack::MockRequest.new(described_class.new(echo)).get("/not-weft")
+
+      expect(response.body).to match(/\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/)
+    end
+
+    it "keeps an X-Request-Id the response already carries" do
+      stamped = Class.new(described_class) { before { headers["X-Request-Id"] = "set-by-app" } }
+      response = Rack::MockRequest.new(stamped.new(downstream_app)).get("/_components/stat_card")
+
+      expect(response.headers["X-Request-Id"]).to eq("set-by-app")
+    end
+  end
+
+  describe "the request a build reads" do
+    def request_card(name, &body)
+      Class.new(Weft::Component) do
+        define_singleton_method(:name) { name }
+        param :order_id
+        identifies_by :order_id
+        define_method(:build) do |attributes = {}|
+          super(attributes, &nil)
+          instance_exec(&body)
+        end
+      end
+    end
+
+    it "is the exchange's request, in build, in a private helper, and inside a nested element" do
+      card = request_card("RequestCard") { div { text_node "#{request.id} #{via_helper} #{request.htmx?}" } }
+      card.define_method(:via_helper) { request.header("X-Note") }
+      card.send(:private, :via_helper)
+
+      get "/_components/request_card", { order_id: "7" }, "HTTP_X_NOTE" => "noted", "HTTP_HX_REQUEST" => "true"
+
+      expect(last_response.body).to include("#{last_response.headers['X-Request-Id']} noted true")
+    end
+
+    it "is the same request on a page and the components inside it" do
+      card = request_card("InPageCard") { text_node "card=#{request.id}" }
+      Class.new(Weft::Page) do
+        def self.name = "RequestPage"
+        self.page_path = "/request-page"
+        define_method(:build) do |attributes = {}|
+          super(attributes, &nil)
+          text_node "page=#{request.id} path=#{request.path}"
+          insert_tag(card)
+        end
+      end
+
+      get "/request-page", {}, "HTTP_X_REQUEST_ID" => "page-1"
+
+      expect(last_response.body).to include("page=page-1 path=/request-page", "card=page-1")
+    end
+
+    it "leaves weft's internals out of build: frame is no name it can call" do
+      request_card("NoInternalsCard") { text_node frame.inspect }
+      allow(Weft.logger).to receive(:error)
+
+      get "/_components/no_internals_card", order_id: "7"
+
+      expect(last_response.body).to include("NameError")
+    end
+
+    it "is the request that opened the stream, on every push" do
+      card = request_card("PushIdCard") { text_node "id=#{request.id}" }
+      card.pushes(every: 5)
+      router = described_class.new!(downstream_app)
+      router.request = Sinatra::Request.new(Rack::MockRequest.env_for("/x?order_id=7", "HTTP_X_REQUEST_ID" => "opener"))
+      out = frame_sink
+      allow(router).to receive_messages(content_type: nil, headers: nil)
+      allow(router).to receive(:stream) { |*, &block| block.call(out) }
+      sleeps = 0
+      allow(router).to receive(:sleep) { raise IOError if (sleeps += 1) > 1 }
+
+      router.send(:stream_component, card)
+
+      expect(out.grep(/id=/).size).to eq(2)
+      expect(out.grep(/id=/)).to all(include("id=opener"))
     end
   end
 
@@ -1369,7 +1533,6 @@ RSpec.describe Weft::Router do
       order = []
       allow(router).to receive(:content_type)
       allow(router).to receive(:headers)
-      allow(router).to receive(:filtered_params).and_return({})
       allow(router).to receive(:stream).and_yield(frame_sink)
       allow(router).to receive(:sleep) { order << :sleep }
       allow(router).to receive(:push_component_event) do
@@ -1387,7 +1550,6 @@ RSpec.describe Weft::Router do
       order = []
       allow(router).to receive(:content_type)
       allow(router).to receive(:headers)
-      allow(router).to receive(:filtered_params).and_return({})
       allow(router).to receive(:stream).and_yield(frame_sink)
       allow(router).to receive(:sleep) { order << :sleep }
       allow(router).to receive(:push_component_event) do
@@ -1455,8 +1617,7 @@ RSpec.describe Weft::Router do
     before do
       allow(router).to receive(:content_type)
       allow(router).to receive(:headers)
-      allow(router).to receive_messages(filtered_params: {},
-                                        request: Struct.new(:path).new("/stream-test"))
+      allow(router).to receive_messages(request: Sinatra::Request.new(Rack::MockRequest.env_for("/stream-test")))
       allow(Weft.logger).to receive(:error)
       # Runaway guard: a regression back to log-and-continue-forever plus a
       # no-op sleep stub would spin the loop unboundedly — bail out via the
@@ -1487,7 +1648,8 @@ RSpec.describe Weft::Router do
       component_class = failing_class(attempts: 1)
       out = frame_sink
       allow(router).to receive(:stream).and_yield(out)
-      allow(router).to receive(:filtered_params).and_raise(Weft::UnreadableRequest, "invalid %-encoding")
+      unreadable = Rack::MockRequest.env_for("/stream-test", "QUERY_STRING" => "bad=%")
+      allow(router).to receive(:request).and_return(Sinatra::Request.new(unreadable))
 
       router.send(:stream_component, component_class)
 
@@ -1744,11 +1906,12 @@ RSpec.describe Weft::Router do
   end
 
   describe "build_root" do
-    let(:frame) { Weft::Request::EventFrame.new({ status: "shipped", value: 10 }) }
+    let(:frame) { Weft::Request::EventFrame.new(Weft::Request.wrap(nil)) }
+    let(:root) { Weft::Params::Assembly.empty({ status: "shipped", value: 10 }) }
 
-    it "builds a component that resolves its params from the frame's universe" do
+    it "builds a component that resolves its params from the universe its bag carries" do
       router = described_class.new!(downstream_app)
-      component = router.send(:build_root, stat_card_class, frame)
+      component = router.send(:build_root, stat_card_class, frame, branch_bag: root)
 
       expect(component).to be_a(Weft::Component)
       expect(component.weft_dom_id).to eq("stat-card-shipped")
@@ -1758,7 +1921,7 @@ RSpec.describe Weft::Router do
 
     it "returns children-only HTML via content (for SSE innerHTML swap)" do
       router = described_class.new!(downstream_app)
-      component = router.send(:build_root, stat_card_class, frame)
+      component = router.send(:build_root, stat_card_class, frame, branch_bag: root)
 
       # content returns children only — no wrapper div
       expect(component.content).not_to include('id="stat-card-shipped"')
@@ -2850,6 +3013,13 @@ RSpec.describe Weft::Router do
       expect(last_response.headers["Location"]).to end_with("/success/42")
     end
 
+    it "takes only HX-Request: true for htmx, as htmx sends it" do
+      post "/_components/redirect_comp/submit", { id: "1" }, "HTTP_HX_REQUEST" => "false"
+
+      expect(last_response.status).to eq(302)
+      expect(last_response.headers).not_to have_key("HX-Redirect")
+    end
+
     it "still re-renders when callable returns nil" do
       post "/_components/redirect_comp/noop", id: "7"
 
@@ -3904,6 +4074,24 @@ RSpec.describe Weft::Router do
       expect(last_response.body).to start_with("<!DOCTYPE html>")
       expect(last_response.body).to include("Not found")
       expect(last_response.body).to include("/nothing-here")
+    end
+
+    it "lets the not-found page read what the missed request sent" do
+      Weft.configuration.not_found_page = Class.new(Weft::Page) do
+        def self.name = "QueryAwareNotFound"
+        self.page_path = "/query-aware-not-found"
+        param :q
+
+        def build(attributes = {})
+          super
+          div { text_node "searched=#{params.q}" }
+        end
+      end
+
+      get "/nothing-here?q=widgets"
+
+      expect(last_response.status).to eq(404)
+      expect(last_response.body).to include("searched=widgets")
     end
 
     it "renders only the body fragment for htmx routing-miss requests" do

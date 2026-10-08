@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "weft/params/assembly"
-
 module Weft
   class Router
     # SSE streaming slice of the Router. Handles `/component_path/<stream_suffix>`
@@ -15,8 +13,8 @@ module Weft
     # attempts budget; when it runs out, the CLOSE_EVENT frame tells the
     # client to stop reconnecting and the connection closes.
     #
-    # Depends on Router internals: `build_root`, `request_universe`,
-    # `new_frame`, `render_push_companions`, `render_push_recovery`,
+    # Depends on Router internals: `build_root`, `root_bag`,
+    # `weft_request`, `new_frame`, `render_push_companions`, `render_push_recovery`,
     # `pass`, `content_type`, `headers`, `stream`.
     module Streaming
       # SSE event name that tells htmx-ext-sse to close the EventSource and
@@ -41,9 +39,12 @@ module Weft
         content_type "text/event-stream"
         headers "Cache-Control" => "no-cache"
         klass = component_class
+        # The block outlives the route, so it holds the request that opened
+        # the stream rather than asking for one later.
+        opener = weft_request
 
         stream :keep_open do |out|
-          run_push_loop(out, klass)
+          run_push_loop(out, klass, request: opener)
           # Both exits — dead client and exhausted attempts — are final, so
           # close explicitly: under :keep_open, merely returning from this
           # block does not end the response (observed on Puma as the block
@@ -58,7 +59,7 @@ module Weft
       # The flag flips before the push (not after a *successful* one) so a
       # persistently failing push still throttles on the interval instead of
       # busy-looping.
-      def run_push_loop(out, klass)
+      def run_push_loop(out, klass, request: weft_request)
         interval = klass.push_config[:every]
         attempts = push_attempts(klass)
         after_first = !klass.push_config.fetch(:immediate, true)
@@ -66,7 +67,7 @@ module Weft
         loop do
           sleep interval if after_first
           after_first = true
-          frame = new_frame
+          frame = new_frame(request)
           push_component_event(out, klass, frame)
           failures = 0
         rescue Errno::EPIPE, IOError
@@ -80,7 +81,8 @@ module Weft
       def push_attempts(klass) = klass.push_config[:attempts] || Weft.configuration.push_attempts
 
       def push_component_event(out, component_class, frame = new_frame)
-        component = build_root(component_class, frame)
+        root = root_bag(component_class, frame.request)
+        component = build_root(component_class, frame, branch_bag: root)
         html = component.content + render_push_companions(component_class, component.params, frame)
         out << format_sse_event(component.weft_dom_id, html)
       end
@@ -110,7 +112,7 @@ module Weft
       # render-path StandardError is logged and swallowed: the failure already
       # counts against the budget, and the close logic must still run.
       def push_recovery_frame(out, component_class, error, attempts_remaining, frame)
-        state = Weft::Params::Assembly.for_request(component_class, request_universe)
+        state = root_bag(component_class, frame&.request || weft_request)
         slot = component_class.weft_dom_id_for(state)
         html = render_push_recovery(component_class, state, error,
                                     attempts_remaining: attempts_remaining, frame: frame || new_frame, fills: slot)

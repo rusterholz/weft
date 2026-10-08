@@ -13,7 +13,7 @@ RSpec.describe Oms::OrdersPage, type: :component do
     expect(described_class).to be_routable
   end
 
-  def rendered(**wire) = described_class.render(**wire)
+  def rendered(**wire) = described_class.render(wire, nil)
 
   it "renders the Orders heading and a New Order link" do
     html = rendered

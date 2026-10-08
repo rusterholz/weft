@@ -9,7 +9,7 @@ RSpec.describe Oms::NewOrderPage, type: :component do
   end
 
   it "renders the page chrome and embeds Oms::OrderForm" do
-    html = described_class.render
+    html = described_class.render({}, nil)
     expect(html).to include("New Order")
     expect(html).to include("Create Order")
     expect(html).to include('action="/_components/oms/order_form/create"')

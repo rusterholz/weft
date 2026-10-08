@@ -35,7 +35,7 @@ end
 RSpec.describe DropshipUI::Pager, type: :component do
   def render(**pager_attrs)
     PagerSpecFixtures::Panel.pager_attrs = pager_attrs
-    PagerSpecFixtures::Panel.render
+    PagerSpecFixtures::Panel.render({}, nil)
   end
 
   it "renders nothing visible when total is 0" do

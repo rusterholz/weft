@@ -3,16 +3,19 @@
 Notes for people working **on** Weft rather than with it. Nothing here is public API; everything here
 is something you have to know before changing how params reach a component.
 
-This file is written per-area as areas are worked on, so it is deliberately incomplete. What is here
+This file is written per-area as areas are worked on, so it is incomplete. What is here
 is true; what is missing is missing, not implied.
 
 ## Two words, used precisely
 
 Bags are made in two different ways, and the distinction carries most of this document.
 
-**Assembling** is making a bag from nothing — no parent. It happens at the handful of places a request
-first needs one: the top of a component render, an action, a stream frame, a page failure, and the
-public class-level entry that has to accept a plain hash. Five sites, and that is the whole list.
+**Assembling** is making a bag from nothing — no parent. A request assembles exactly one, its **earth**:
+an empty bag over the request's universe (below), where every lineage of the request starts. The
+rest of the list is short. `.render` assembles an earth of its own over the request it is handed and
+the wire layered on it; `weft_dom_id_for` assembles a bag from the plain hash a caller may hand that
+public class method; and a component built where no bag exists at all (a `Weft::Context` given no
+branch bag) branches an empty one with an empty universe.
 
 **Branching** is making a bag from another bag, and it is by far the common case. It comes in two kinds:
 
@@ -62,12 +65,12 @@ the test is key-presence, not nil-ness:
 
 So an overlay carrying `{status: nil}` does *not* blank the key and does *not* fall back to the wire —
 it discards the wire value and resolution continues at level 4. Observable, where `%` applies a delta
-to a bag:
+to a bag whose universe carries `status: "from-wire"` and whose data holds `"from-ancestor"`:
 
 ```ruby
-Assembly.call(klass, {status: "from-wire"}, branched_from: ancestor)[:status]
+Assembly.call(klass, branched_from: ancestor)[:status]
 # => "from-wire"
-Assembly.call(klass, {status: "from-wire"}, branched_from: ancestor % {status: nil})[:status]
+Assembly.call(klass, branched_from: ancestor % {status: nil})[:status]
 # => "from-ancestor"
 ```
 
@@ -83,9 +86,9 @@ data = @inherited.dup
 keys.each { |key| data[key] = stack_value(key) }
 ```
 
-A component that declares nothing therefore still reads its ancestors' keys. This is deliberate and
-worth understanding rather than tidying: the classes obliged to declare are exactly the ones that can
-be addressed independently, because a component declaring nothing is not routable. A convenience class
+A component that declares nothing therefore still reads its ancestors' keys. The classes obliged to
+declare are exactly the ones that can be addressed independently, because a component declaring
+nothing is not routable. A convenience class
 that only ever renders inside its parent pays nothing.
 
 It has three costs a maintainer should be able to name: the class stops documenting its own inputs; it
@@ -111,8 +114,9 @@ one table and are indistinguishable in it.
 
 ### The transmitted slots, and why a bag holds them
 
-A bag is `(data, overlay, handoff, defaults, owner)`. The overlay is the accumulated verb-block delta
-and the handoff is the accumulated `receives` values; both are held apart from the data because they
+A bag is `(data, overlay, handoff, defaults, owner, universe)`. The universe is carried, never
+answered with; [Render-time scopes](#render-time-scopes) has it. The overlay is the accumulated
+verb-block delta and the handoff is the accumulated `receives` values; both are held apart from the data because they
 travel differently from it. Data demotes to "inherited" when a branch crosses into another component's
 declarations, while these two persist at their own rungs all the way down. A bag holding only the merged
 result could not express that difference — and for a long time weft's could not, which is where the
@@ -182,11 +186,12 @@ component below it; what varies is the level it speaks at when it gets there.
 
 An overlay's authority is **subtree-scoped**: it reaches the bag it was applied to and everything below
 it, and nothing else. Two companions of one primary hold *different* overlays for the same key while
-sharing one request. There is no request-wide params override, deliberately — a branch cannot modify
-its siblings, which is what keeps universes consistent.
+sharing one request. There is no request-wide params override: a branch cannot modify its siblings,
+which is what keeps universes consistent.
 
 The one genuinely request-scoped params concept is the **wire universe** (below), and it never occupies
-a rung at all.
+a rung at all. Every bag carries it, a crossing hands it to the child, and nothing reads it from
+anywhere else.
 
 ### Handoffs keep their rank
 
@@ -232,22 +237,55 @@ slot is what carries it onward from there.
 
 ## Render-time scopes
 
-Three lifetimes, and conflating them is the most common way to break this area.
+Four lifetimes, and conflating them is the most common way to break this area.
 
 | scope | lives for | holds |
 |-------|-----------|-------|
-| **per-delivery** | one delivered swap-set | the wire universe, the slot register (the event frame) |
+| **per-request** | one inbound request, a whole stream included | the `Weft::Request`: its id, its wire universe, its earth |
+| **per-delivery** | one delivered swap-set | the request it answers, and the slot register (the event frame) |
 | **per-root** | one root element tree | the branch bag, and the overlay riding on it |
 | **per-tree** | one element tree | the DOM ids already emitted |
 
-**The wire universe is everything the client sent** — the request's params minus routing internals,
-undeclared keys included. A component's `@wire` is the *projection* of that universe through its own
+**The wire universe is everything the client sent** — the request's query and form params,
+undeclared keys included, plus the path params of the page route it matched, which outrank a query
+value of the same name. A component's `@wire` is the *projection* of that universe through its own
 declarations: wide source, narrow projection, narrowed per component. That is why an undeclared key
 never reaches a bag through the wire door.
 
-The universe never occupies a rung, because inheritance moves values and a source is not a value. It is
-handed to each branch as an argument from the render environment, so a root with no lineage whatever
-still has the whole of it.
+The request is the universe's source. `Weft::Request#universe` computes it once, frozen, and the Router
+records a page's path params on the request exactly once, at the page match, before anything reads
+it; recording them later raises. A request whose query or body could not be parsed has an empty
+universe, so a recovery from it reads nothing rather than raising the parse error again.
+
+The universe never occupies a rung, because inheritance moves values and a source is not a value. The
+bags carry it instead: each bag holds the universe it came from, frozen and shared by reference, with
+no public reader. A crossing branch takes its universe from the bag it branches, so the whole lineage
+holds one object, and nothing reads the universe off a frame or a context. Only an assembly, which has
+no parent, is handed one.
+
+### The earth
+
+Each request assembles one root bag, its **earth**: an empty bag over the universe, built on first
+read (`Weft::Request#earth`, private). A component GET, a page, an action's composed state and each
+push on a stream cross from it directly, with no hand-off door, since no call site exists to hand
+anything over; companions and recoveries branch bags that descend from it. A recovery whose failure came before any bag existed (a routing miss, an
+action whose state could not be composed) starts from the earth as well, so the lineage is
+unconditional and the recovery still sees the wire. An unreadable request's earth stands over nothing.
+
+`.render` builds an earth of its own: the request's universe, the rendered page's route params read
+from the request's path, and the wire hash merged over both. Handed a `Weft::Params` instead, it uses
+that bag as the root's parent, and the request's wire plays no part.
+
+A crossing from a bag into the class that bag was crossed into already answers every key the same,
+and shares the outcome of every derivation but a contextual one. A plain derivation is shared because
+the inherited thunk outranks the class's own. An `override: true` one (`defines` included) is shared
+because an override belongs to its **declaration site**: the declaration entry itself, compared by
+identity. An inherited thunk is kept when the class being crossed into carries that very entry, its
+own or one inherited from a superclass. Every `derives`/`defines` call makes an entry of its own, so
+a class that declares, whether on its own line, in a loop, or from a shared module's hook, is a new
+site, and so with K and L each overriding a key, K → K → K holds one thunk and K → L → K builds three.
+A thunk naming no declaration matches none. A `contextual: true` derivation crosses as an unforced
+copy and is computed afresh at every crossing, its own class's included.
 
 ### The event frame
 
@@ -256,10 +294,12 @@ from its context rather than having them passed down. A `Weft::Context` carries 
 **frame** (per-delivery) and the **branch bag** (per-root). The per-tree registers, the one-shot
 handoff staging and the emitted DOM ids, stay on the context itself, because the tree is their scope.
 
-A frame holds the universe and the slot register, where each root records the DOM id it claims. Every
-delivery gets a frame of its own, so a fresh register: a plain GET render, an action response with its
-companions, each push on a stream. Only roots claim, so a register matters only where one delivery
-renders several roots side by side.
+A frame holds the request it answers and the slot register, where each root records the DOM id it
+claims. Every delivery gets a frame of its own, so a fresh register: a plain GET render, an action
+response with its companions, each push on a stream. Only roots claim, so a register matters only
+where one delivery renders several roots side by side. Every push on a stream answers the request that
+opened it: the stream's block outlives the route that started it, so it holds that request from the
+start.
 
 A recovery renders in the frame of the delivery it ships in, and **fills** the failed root's slot: it
 wears that root's DOM id from the start of its build and claims it, rather than claiming an id of its
@@ -268,14 +308,41 @@ before the build body runs, so a body that raises would otherwise leave it held 
 never ships). A companion that failed before reaching its claim never held the slot, so its recovery
 contests it like any other companion, and stands down if an earlier one already took it.
 
-The Router computes the universe once per request, in `request_universe`, and every frame built during
-that request shares the same frozen object. In practice the universe does not vary between the frames
-of one request: a stream's pushes all answer one request, and a page adds its path params once. It is
-frozen because it is shared: a write from one root would otherwise reach its siblings.
-
 "Cross-branch" names nothing in this system. Siblings share an ancestor and have no channel between
 them; the only way one value reaches two siblings is by sitting in their common ancestor's bag or
 overlay.
+
+## The request
+
+`Weft::Request` wraps a `Sinatra::Request` rather than replacing it. What weft adds to a request (its
+id, its universe, htmx's headers) has to be reachable where Sinatra's request is not: inside `build`.
+The response gets no such object; Sinatra's serves.
+
+There is one per request. The Router memoizes it (`weft_request`), every frame of the exchange carries
+it, and components and pages read it as `request`, set at construction from their context's frame.
+
+**The surface is curated, not delegated.** Exposed: the method predicates, location, content type,
+negotiation, `safe?`/`idempotent?`/`secure?`/`xhr?`, cookies, the client's address beside
+`trusted_proxy?`, `env`, and `header(name)`/`header?(name)`, which hide Rack's `HTTP_` prefix.
+Refused, by not delegating: `params`, `GET`, `POST`, `form_pairs`, `parseable_data?`, `form_data?`,
+`body` and `query_string`, the raw routes around `Weft::Params`; and `each_header`, which would leak the
+prefix. The refusal is discouragement rather than a seal, since `env` holds the body and the query
+string too. Deferred: the mutators (`set_header`, `update_param`, `path_info=` and the rest) and
+`session`, which answers `{}` when no session middleware is installed, so its failure looks exactly
+like its success.
+
+**The id** is the first of: `env["weft.request_id"]`, the `X-Request-Id` header with everything but
+word characters, `-` and `@` stripped and capped at 255, and a fresh UUID. It is written back to
+`env["weft.request_id"]` when the request is wrapped. An `after` filter sets `X-Request-Id` on every
+response weft answers, unless the response already has one. A request forwarded to the app downstream
+(the Router's `forward` marks it) has its id settled and written to the env first, and its response
+is left alone. Weft writes no `rack.` env key, and `request.logger`
+is `Weft.logger`.
+
+**`Weft::Request.wrap` is the one conversion.** A `Weft::Request` is used as is; anything carrying a
+Rack `env` (a Rack or Sinatra request, or another framework's) is wrapped over that env; a Hash is
+taken as a Rack env when it has a `REQUEST_METHOD`; `nil` is a hand-built empty GET for `/`; anything
+else raises `ArgumentError`. A connector gem with a request class of its own extends this method.
 
 ## The sandbox
 
@@ -286,7 +353,7 @@ component-specific, so a block cannot reach local state and is portable to any p
 def self.run(...) = new.instance_exec(...)
 ```
 
-Freshness rather than freezing is what isolates them: an instance is deliberately unfrozen, so a block
+Freshness rather than freezing is what isolates them: an instance is left unfrozen, so a block
 may use scratch ivars freely, but the instance is dropped once the return value is captured and the
 scratch never leaks past its own execution.
 
@@ -298,7 +365,7 @@ the wrong picture:
 
 | site | block | handed |
 |------|-------|--------|
-| `page/head.rb` | a page `title` block | the page's bag, or an empty one |
+| `page/head.rb` | a page `title` block | the page's bag |
 | `params.rb` | a `derives` / `defines` thunk | the bag doing the reading |
 | `dsl/identity.rb` | `identifies_by` | a bag restricted to the identifying params |
 | `router/companions.rb` | `brings` | the companion's view of its lineage |
@@ -311,9 +378,9 @@ companion's view falls back to some default, its lineage has to fall back the sa
 one picture while its component inherits another is precisely how re-derivation creeps in.
 
 > **Stated intention, not current structure:** these blocks are intended to receive the request
-> alongside their params, supplied by the bag rather than reachable from it — with `identifies_by`
-> deliberately excluded, since a DOM id that varies with request state is an unstable swap target. The
-> object that would be supplied does not exist yet.
+> alongside their params, supplied by the bag rather than reachable from it, with `identifies_by`
+> excluded, since a DOM id that varies with request state is an unstable swap target. The request
+> object exists; handing it to the blocks does not yet.
 
 ## The standing rule
 

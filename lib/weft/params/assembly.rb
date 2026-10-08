@@ -46,9 +46,19 @@ module Weft
         # not to the door, and writing it a second time as a `defines` would
         # only invite the two copies to drift. A key that declared none has
         # nowhere to come from: reading it raises {Weft::UnreachableHandoff}.
-        def for_request(component_class, wire_source)
-          call(component_class, wire_source, handoffs: nil)
+        def for_request(component_class, universe)
+          call(component_class, universe, handoffs: nil)
         end
+
+        # A root with nothing in it yet but the request: no class has declared
+        # anything, so there is nothing to resolve, only a universe for the
+        # bags that branch from it to carry. Where a render's root class is
+        # not known, or assembling for it is what failed.
+        def empty(universe) = Weft::Params.new({}, universe: shareable(universe))
+
+        # @api private
+        # Frozen, because every bag of a lineage holds the one object.
+        def shareable(universe) = universe.frozen? ? universe : universe.dup.freeze
 
         # One-time shadowing warnings, keyed [kind, class, key]. Set#add? races
         # just double-warn; harmless.
@@ -56,21 +66,24 @@ module Weft
       end
 
       # +branched_from+ is the bag this one inherits: a tree ancestor's during
-      # a render, the state already composed at the top of a request. Passing
-      # +handoffs: nil+ says the door does not exist (see .for_request);
-      # an empty hash says it exists and nobody staged anything.
+      # a render, the state already composed at the top of a request. A branch
+      # takes its universe from that bag; only a root, branching from nothing,
+      # is handed one. Passing +handoffs: nil+ says the door does not exist
+      # (see .for_request); an empty hash says it exists and nobody staged
+      # anything.
       # +violations+ is reported, never raised on: assembling is reading, and
       # the error path assembles too. Construction is where a component commits
       # to the values, so construction is where the refusal belongs — which is
       # also what leaves a *populated* bag for recovery to redraw from.
       attr_reader :violations
 
-      def initialize(component_class, wire_source, handoffs: {}, branched_from: nil)
+      def initialize(component_class, universe = nil, handoffs: {}, branched_from: nil)
         @component_class = component_class
+        @universe = source_universe(universe, branched_from)
         @handoffs = !handoffs.nil?
         @received = inherited_handoffs(branched_from).merge(handoffs || {})
         @overlays = branched_from ? branched_from.send(:overlay_slot) : {}
-        resolution = Weft::Resolver.resolution(component_class, wire_source)
+        resolution = Weft::Resolver.resolution(component_class, @universe)
         @wire = resolution.coerced
         @violations = resolution.violations
         @inherited = branched_from ? branch_copies(branched_from.send(:branch_data)) : {}
@@ -87,10 +100,18 @@ module Weft
         report_shadowed_derivations(data)
         adopt_thunks(data, Weft::Params.new(data, defaults: declared_defaults,
                                                   owner: @component_class, overlay: @overlays,
-                                                  handoff: @received))
+                                                  handoff: @received, universe: @universe))
       end
 
       private
+
+      def source_universe(universe, branched_from)
+        unless branched_from.nil? == !universe.nil?
+          raise ArgumentError, "a root is handed a universe and a branch takes its parent's: pass one or the other"
+        end
+
+        branched_from ? branched_from.send(:universe) : self.class.shareable(universe)
+      end
 
       # The handoffs already in force for the subtree this branch lands in.
       # A nearer call site's staging merges over these, so the innermost
@@ -147,8 +168,24 @@ module Weft
         return @received[key] unless @received[key].nil?
 
         wire_level = @overlays.key?(key) ? @overlays[key] : @wire[key]
-        levels = overriding?(key) ? [wire_level, derived_thunk(key)] : [wire_level, @inherited[key], derived_thunk(key)]
+        below = overriding?(key) ? [overriding_thunk(key)] : [@inherited[key], derived_thunk(key)]
+        levels = [wire_level, *below]
         levels.find { |v| !v.nil? }
+      end
+
+      # An override belongs to its declaration, not to each crossing: one
+      # inherited from the very declaration entry this class carries (its own,
+      # or a superclass's it inherits) is kept, outcome and all. Every
+      # `derives`/`defines` call makes an entry of its own, so a class that
+      # declares, by its own line, a loop or a module hook, is a new site. A
+      # contextual derivation arrives here as the unforced copy the branch
+      # made, so it still computes afresh at every crossing.
+      def overriding_thunk(key)
+        inherited = @inherited[key]
+        declaration = @component_class.derived_params[key]
+        return inherited if inherited.is_a?(Weft::Params::Thunk) && declaration.equal?(inherited.site)
+
+        derived_thunk(key)
       end
 
       def overriding?(key) = @component_class.derived_params[key]&.[](:override) || false
@@ -165,7 +202,7 @@ module Weft
 
       def derived_thunk(key)
         meta = @component_class.derived_params[key]
-        Weft::Params::Thunk.new(meta[:block], contextual: meta[:contextual]) if meta
+        Weft::Params::Thunk.new(meta[:block], contextual: meta[:contextual], site: meta) if meta
       end
 
       # The wire door's default wins for dual keys — its meta always carries

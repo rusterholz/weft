@@ -424,11 +424,11 @@ module Weft
 
       # Uses the Assembly object rather than `.call` because construction needs
       # both halves of what it produced: the bag, and what the wire sent that
-      # no declared type could accept.
+      # no declared type could accept. The universe rides in on the bag this
+      # one branches from; a component with no lineage at all has none.
       def resolve_bag(received:)
-        assembly = Weft::Params::Assembly.new(self.class, wire_source,
-                                              handoffs: received,
-                                              branched_from: inherited_bag)
+        lineage = inherited_bag || Weft::Params::Assembly.empty({})
+        assembly = Weft::Params::Assembly.new(self.class, handoffs: received, branched_from: lineage)
         bag = assembly.bag
         refuse_violations!(assembly.violations)
         validate_required!(bag)
@@ -474,9 +474,9 @@ module Weft
         end
       end
 
-      def wire_source
-        arbre_context.frame.universe
-      end
+      # The universe this component's bag came from: what its own wire was
+      # projected from.
+      def wire_source = params.send(:universe)
 
       # Branch a copy of the nearest tree-ancestor's bag — the in-page
       # parent-child axis: a component sees everything above it, nothing

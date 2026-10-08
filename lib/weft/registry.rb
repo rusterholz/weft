@@ -113,7 +113,7 @@ module Weft
       @pages.each do |page_class|
         next unless page_class.routable?
 
-        params = match_pattern(resolved_page_pattern(page_class), path)
+        params = page_class.send(:match_path, resolved_page_pattern(page_class), path)
         return [page_class, params] if params
       end
       nil
@@ -158,24 +158,6 @@ module Weft
 
     def resolved_page_pattern(page_class)
       page_class.page_path || page_class.send(:default_page_path)
-    end
-
-    # Match a Sinatra-style pattern against a path.
-    # Returns a hash of extracted params, or nil if no match.
-    def match_pattern(pattern, path)
-      pattern_parts = pattern.split("/")
-      path_parts = path.split("/")
-      return nil unless pattern_parts.length == path_parts.length
-
-      params = {}
-      pattern_parts.zip(path_parts).each do |pat, val|
-        if pat.start_with?(":")
-          params[pat[1..].to_sym] = val
-        elsif pat != val
-          return nil
-        end
-      end
-      params
     end
   end
 end

@@ -18,7 +18,7 @@ require "weft/dsl/announcements"
 require "weft/dsl/updates"
 require "weft/error"
 require "weft/registry"
-require "weft/request/event_frame"
+require "weft/rendering"
 require "weft/addressing"
 require "weft/router/streaming"
 
@@ -29,6 +29,7 @@ module Weft
   # - Auto-registration with the global Registry
   class Component < Arbre::Component
     extend Weft::Addressing
+    extend Weft::Rendering
 
     include Weft::DSL::Params
     include Weft::DSL::Recoveries
@@ -79,17 +80,6 @@ module Weft
         Weft.registry.register(subclass)
       end
 
-      # Render this component as an HTML string, outside any Arbre DSL context.
-      # The kwargs are pseudo-wire: exactly what a request's query string
-      # would carry. For testing, REPL exploration, or any standalone
-      # rendering need.
-      #
-      #   StatCard.render(status: "shipped")  # => "<div id=\"...\">...</div>"
-      def render(**wire_params)
-        klass = self
-        Weft::Context.new(frame: Weft::Request::EventFrame.new(wire_params)) { insert_tag(klass) }.to_s
-      end
-
       # @api private
       # This class's name as its addresses are built from it — the route path
       # and the DOM id read the same stem, so the two can no longer drift.
@@ -129,15 +119,21 @@ module Weft
     recovers from: StandardError, with: :error_component
 
     # Params resolve at construction, not build: the context (which carries
-    # the wire source and any staged handoff) is the constructor's one
+    # the bag to branch and any staged handoff) is the constructor's one
     # argument, and resolving here makes `params` available even before
     # `super` in user build bodies — the "compute chrome from params, then
     # super" pattern needs that.
     def initialize(*)
       super
+      @request = arbre_context.frame.request
       @params = assembled_params
       @weft_ticket = resolve_weft_ticket if self.class.unique?
     end
+
+    # The request this component renders for, a Weft::Request: its id, its
+    # headers, htmx's headers. Readable wherever `params` is, never nil; a
+    # push on a stream reads the request that opened the stream.
+    attr_reader :request
 
     # This instance's ticket, or nil unless the class is `unique!`.
     #
@@ -214,9 +210,7 @@ module Weft
 
     # This element's DOM id. A `unique!` component hands over the ticket it is
     # holding; every other kind composes its id from params alone.
-    def weft_dom_id
-      self.class.weft_dom_id_for(params, weft_ticket)
-    end
+    def weft_dom_id = self.class.weft_dom_id_for(params, weft_ticket)
 
     # What has to ride a request for that request to come back to *this*
     # element: its wire params, plus its ticket when it has one.

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "arbre"
+require "rack/mock_request"
 
 RSpec.describe Weft::Context do
   let(:component_class) do
@@ -19,7 +20,7 @@ RSpec.describe Weft::Context do
 
   describe "event frame" do
     it "carries the frame it was built in" do
-      frame = Weft::Request::EventFrame.new({ "status" => "x" })
+      frame = Weft::Request::EventFrame.new(Weft::Request.wrap(nil))
 
       expect(described_class.new(frame: frame).frame).to be(frame)
     end
@@ -38,7 +39,8 @@ RSpec.describe Weft::Context do
         end
       end
 
-      html = described_class.new({ order: "A-1" }, frame: Weft::Request::EventFrame.new({})) do
+      frame = Weft::Request::EventFrame.new(Weft::Request.wrap(nil))
+      html = described_class.new({ order: "A-1" }, frame: frame) do
         insert_tag(probe)
       end.to_s
 
@@ -47,7 +49,8 @@ RSpec.describe Weft::Context do
   end
 
   describe "slot claims" do
-    let(:frame) { Weft::Request::EventFrame.new({ "order_id" => "7" }) }
+    let(:frame) { Weft::Request::EventFrame.new(Weft::Request.wrap(nil)) }
+    let(:root) { Weft::Params::Assembly.empty({ "order_id" => "7" }) }
 
     def slot_card(name, &body)
       Class.new(Weft::Component) do
@@ -64,7 +67,7 @@ RSpec.describe Weft::Context do
 
     it "keeps the slot a root claimed when its build completes" do
       card = slot_card("KeptSlotCard")
-      described_class.new(frame: frame) { insert_tag(card) }
+      described_class.new(frame: frame, branch_bag: root) { insert_tag(card) }
 
       expect(frame.slots).to eq(Set["kept-slot-card-7"])
     end
@@ -72,13 +75,13 @@ RSpec.describe Weft::Context do
     it "gives the slot back when the root's build raises after claiming it" do
       card = slot_card("ReleasedSlotCard") { raise "boom" }
 
-      expect { described_class.new(frame: frame) { insert_tag(card) } }.to raise_error("boom")
+      expect { described_class.new(frame: frame, branch_bag: root) { insert_tag(card) } }.to raise_error("boom")
       expect(frame.slots).to be_empty
     end
 
     it "has a root that fills a slot wear and claim that id instead of its own" do
       card = slot_card("StandInCard")
-      html = described_class.new(frame: frame, fills: "failed-card-7") { insert_tag(card) }.to_s
+      html = described_class.new(frame: frame, branch_bag: root, fills: "failed-card-7") { insert_tag(card) }.to_s
 
       expect(html).to include('id="failed-card-7"')
       expect(html).not_to include("stand-in-card-7")
@@ -90,7 +93,7 @@ RSpec.describe Weft::Context do
         def self.name = "AnonymousStandIn"
         anonymous!
       end
-      html = described_class.new(frame: frame, fills: "failed-card-7") { insert_tag(card) }.to_s
+      html = described_class.new(frame: frame, branch_bag: root, fills: "failed-card-7") { insert_tag(card) }.to_s
 
       expect(html).to include('id="failed-card-7"')
       expect(frame.slots).to eq(Set["failed-card-7"])
@@ -106,11 +109,26 @@ RSpec.describe Weft::Context do
     end
 
     it "defaults to nil" do
-      expect(weft_context.branch_bag).to be_nil
+      frame = Weft::Request::EventFrame.new(Weft::Request.wrap(nil))
+
+      expect(described_class.new(frame: frame).branch_bag).to be_nil
+    end
+
+    it "is the only source of a root's universe: a root with no bag to branch has none" do
+      card = Class.new(Weft::Component) do
+        def self.name = "OrphanCard"
+        param :status, default: "none"
+        def build(*) = super.tap { text_node params.status }
+      end
+      request = Weft::Request.wrap(Rack::MockRequest.env_for("/?status=shipped"))
+
+      html = described_class.new(frame: Weft::Request::EventFrame.new(request)) { insert_tag(card) }.to_s
+
+      expect(html).to include("none")
     end
 
     it "has its frame readable inside the construction block" do
-      frame = Weft::Request::EventFrame.new({ "status" => "x" })
+      frame = Weft::Request::EventFrame.new(Weft::Request.wrap(nil))
       seen = nil
       described_class.new(frame: frame) { seen = arbre_context.frame }
 
@@ -1232,7 +1250,7 @@ RSpec.describe Weft::Context do
         end
       end
 
-      html = klass.render(order_id: 1)
+      html = klass.render({ order_id: 1 }, nil)
 
       expect(html).to include('hx-post="/_components/render_test/go"')
     end

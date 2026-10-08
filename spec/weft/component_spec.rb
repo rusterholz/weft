@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "arbre"
+require "rack/mock_request"
 
 RSpec.describe Weft::Component do
   describe "inherited hook and registry" do
@@ -44,7 +45,7 @@ RSpec.describe Weft::Component do
         end
       end
 
-      html = component_class.render(status: "shipped")
+      html = component_class.render({ status: "shipped" }, nil)
 
       expect(html).to include("status=shipped")
       expect(html).to include("<div")
@@ -55,10 +56,83 @@ RSpec.describe Weft::Component do
         def self.name = "SimpleRenderable"
       end
 
-      html = component_class.render
+      html = component_class.render({}, nil)
 
       expect(html).not_to include("<!DOCTYPE")
       expect(html).not_to include("<html")
+    end
+
+    context "with a request" do
+      let(:card) do
+        Class.new(Weft::Component) do
+          def self.name = "RequestAwareCard"
+          param :status
+          param :value
+
+          def build(attributes = {})
+            super
+            text_node "status=#{params.status} value=#{params.value} path=#{request.path} id=#{request.id}"
+          end
+        end
+      end
+
+      def env_for(path, **headers) = Rack::MockRequest.env_for(path, headers)
+
+      it "takes both the wire and the request, every time" do
+        expect { card.render }.to raise_error(ArgumentError)
+        expect { card.render({}) }.to raise_error(ArgumentError)
+      end
+
+      it "renders for an empty request when handed nil" do
+        expect(card.render({}, nil)).to include("path=/ id=")
+      end
+
+      it "renders for a Rack env, a Rack request or a Weft::Request, as the same request" do
+        env = env_for("/orders", "HTTP_X_REQUEST_ID" => "req-1")
+
+        [env, Rack::Request.new(env), Weft::Request.wrap(env)].each do |request|
+          expect(card.render({}, request)).to include("path=/orders id=req-1")
+        end
+      end
+
+      it "hands build the very Weft::Request it was given" do
+        seen = nil
+        probe = Class.new(Weft::Component) do
+          def self.name = "RequestIdentityProbe"
+          define_method(:build) { |*| seen = request }
+        end
+        request = Weft::Request.wrap(nil)
+
+        probe.render({}, request)
+
+        expect(seen).to be(request)
+      end
+
+      it "refuses what it can't make a request of" do
+        expect { card.render({}, Object.new) }.to raise_error(ArgumentError, /Weft::Request/)
+      end
+
+      it "reads the request's own wire, with the wire hash layered over it" do
+        html = card.render({ status: "from-render" }, env_for("/?status=from-request&value=9"))
+
+        expect(html).to include("status=from-render value=9")
+      end
+
+      it "takes a params bag as the parent to branch, ignoring the request's wire" do
+        source = Class.new(Weft::Component) do
+          def self.name = "BagSource"
+          param :status
+        end
+        bag = Weft::Params::Assembly.call(source, { "status" => "from-bag", "value" => "5" })
+
+        html = card.render(bag, env_for("/somewhere?status=from-request&value=9"))
+
+        expect(html).to include("status=from-bag value=5 path=/somewhere")
+      end
+
+      it "refuses a wire that is neither a hash nor a bag" do
+        expect { card.render("status=x", nil) }.to raise_error(ArgumentError, /wire/)
+      end
     end
   end
 

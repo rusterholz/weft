@@ -11,7 +11,7 @@ RSpec.describe Weft::DSL::Updates do
         refreshes every: 10
       end
 
-      html = component_class.render(status: "shipped")
+      html = component_class.render({ status: "shipped" }, nil)
 
       expect(html).to include('hx-get="/_components/polling_card?status=shipped"')
       expect(html).to include('hx-trigger="every 10s"')
@@ -25,7 +25,7 @@ RSpec.describe Weft::DSL::Updates do
         refreshes every: 5.seconds
       end
 
-      html = component_class.render(status: "shipped")
+      html = component_class.render({ status: "shipped" }, nil)
 
       expect(html).to include('hx-trigger="every 5s"')
     end
@@ -37,7 +37,7 @@ RSpec.describe Weft::DSL::Updates do
         refreshes every: 0.6
       end
 
-      html = component_class.render(status: "shipped")
+      html = component_class.render({ status: "shipped" }, nil)
 
       expect(html).to include('hx-trigger="every 600ms"')
     end
@@ -49,7 +49,7 @@ RSpec.describe Weft::DSL::Updates do
         refreshes every: 2.5
       end
 
-      html = component_class.render(status: "shipped")
+      html = component_class.render({ status: "shipped" }, nil)
 
       expect(html).to include('hx-trigger="every 2500ms"')
     end
@@ -63,7 +63,7 @@ RSpec.describe Weft::DSL::Updates do
         refreshes every: 0.0000001
       end
 
-      html = component_class.render(status: "shipped")
+      html = component_class.render({ status: "shipped" }, nil)
 
       expect(html).to include('hx-trigger="every 1ms"')
       expect(Weft.logger).to have_received(:warn).with(/below the 1ms floor/)
@@ -76,7 +76,7 @@ RSpec.describe Weft::DSL::Updates do
         refreshes on: "delivery-completed"
       end
 
-      html = component_class.render(driver_id: "42")
+      html = component_class.render({ driver_id: "42" }, nil)
 
       expect(html).to include('hx-get="/_components/event_card?driver_id=42"')
       expect(html).to include('hx-trigger="delivery-completed from:body"')
@@ -91,7 +91,7 @@ RSpec.describe Weft::DSL::Updates do
         refreshes on: "item-updated"
       end
 
-      html = component_class.render(id: "1")
+      html = component_class.render({ id: "1" }, nil)
 
       expect(html).to include('hx-trigger="every 30s, item-updated from:body"')
     end
@@ -102,7 +102,7 @@ RSpec.describe Weft::DSL::Updates do
         param :label
       end
 
-      html = component_class.render(label: "test")
+      html = component_class.render({ label: "test" }, nil)
 
       expect(html).not_to include("hx-get")
       expect(html).not_to include("hx-trigger")
@@ -119,7 +119,7 @@ RSpec.describe Weft::DSL::Updates do
         refreshes on: "updated"
       end
 
-      html = child.render(id: "1")
+      html = child.render({ id: "1" }, nil)
 
       expect(html).to include("every 15s")
       expect(html).to include("updated from:body")
@@ -133,7 +133,7 @@ RSpec.describe Weft::DSL::Updates do
         refreshes every: 5
       end
 
-      html = component_class.render(label: "hello")
+      html = component_class.render({ label: "hello" }, nil)
 
       expect(html).to include('hx-get="/_components/nil_attr_card?label=hello"')
       expect(html).not_to include("status=")
@@ -156,7 +156,7 @@ RSpec.describe Weft::DSL::Updates do
     end
 
     it "generates SSE htmx attributes with every:" do
-      html = push_card.render(order_id: "42")
+      html = push_card.render({ order_id: "42" }, nil)
 
       expect(html).to include('hx-ext="sse"')
       expect(html).to include('sse-connect="/_components/push_card/_stream?order_id=42"')
@@ -174,7 +174,7 @@ RSpec.describe Weft::DSL::Updates do
         pushes every: 5
       end
 
-      html = component_class.render(order_id: "42")
+      html = component_class.render({ order_id: "42" }, nil)
 
       expect(html).to include('sse-connect="/_components/suffix_push_card/sse?order_id=42"')
     ensure
@@ -187,7 +187,7 @@ RSpec.describe Weft::DSL::Updates do
         param :label
       end
 
-      html = component_class.render(label: "test")
+      html = component_class.render({ label: "test" }, nil)
 
       expect(html).not_to include("hx-ext")
       expect(html).not_to include("sse-connect")
@@ -210,7 +210,7 @@ RSpec.describe Weft::DSL::Updates do
         end
       end
 
-      html = child.render(id: "7")
+      html = child.render({ id: "7" }, nil)
 
       expect(html).to include('hx-ext="sse"')
       expect(html).to include('sse-connect="/_components/push_child/_stream?id=7"')
@@ -327,7 +327,7 @@ RSpec.describe Weft::DSL::Updates do
         pushes every: 5
       end
 
-      html = component_class.render(order_id: "99")
+      html = component_class.render({ order_id: "99" }, nil)
 
       expect(html).to include('sse-swap="oms-shipment-card-99"')
     end
@@ -340,7 +340,7 @@ RSpec.describe Weft::DSL::Updates do
         pushes every: 5
       end
 
-      html = component_class.render(label: "hello")
+      html = component_class.render({ label: "hello" }, nil)
 
       expect(html).to include('sse-connect="/_components/nil_push/_stream?label=hello"')
       expect(html).not_to include("status=")

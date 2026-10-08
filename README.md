@@ -153,9 +153,10 @@ Each of the usual alternatives shares some of that ground:
 ## Documentation
 
 - **[Build your first Weft app](docs/tutorial.md)** -- the tutorial: empty directory to a working app with pages, components, a validated form action, and live updates.
-- **[Examples](docs/examples/README.md)** -- twenty-one worked patterns with captured wire traffic. Coming from htmx? This catalog deliberately covers the ground of htmx's own examples.
+- **[Examples](docs/examples/README.md)** -- twenty-one worked patterns with captured wire traffic. Coming from htmx? This catalog covers the ground of htmx's own examples.
 - **[The Weft DSL](docs/dsl.md)** -- every verb, element kwarg, and interaction preset.
 - **[How Params Flow](docs/params.md)** -- the data lifecycle: a request comes in, each component pulls what it needs through `param`/`receives`/`derives`/`defines`, and renders with enough of its own wire state to refresh or act on its own.
+- **[The Request](docs/request.md)** -- what a component can read about the request it renders for: headers, htmx's headers, cookies, the client's address, and an id every response Weft answers carries back.
 - **[Application Patterns](docs/app-patterns.md)** -- the app around the components: service objects, databases, background jobs, authentication, CSRF, assets, and testing.
 - **[Arbre: the HTML layer](docs/arbre.md)** -- the HTML builder inside every `build` method, in depth.
 - **[Routing](docs/routing.md)** -- how classes become URLs, what's routable, and collision detection.

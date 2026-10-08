@@ -4,7 +4,7 @@ require "spec_helper"
 
 RSpec.describe Drills::RedirectBoomComponent, type: :component do
   it "raises its own Failure on every build" do
-    expect { described_class.render }.to raise_error(described_class::Failure)
+    expect { described_class.render({}, nil) }.to raise_error(described_class::Failure)
   end
 
   it "recovers from Failure by transferring to the dashboard page" do

@@ -14,7 +14,7 @@ RSpec.describe "Weft::Defaults" do
     it "renders verbose info when verbose_error_pages is true" do
       Weft.configuration.verbose_error_pages = true
       error = ArgumentError.new("bad arg")
-      html = described_class.render(exception: error, request_path: "/x", status_code: 500)
+      html = described_class.render({ exception: error, request_path: "/x", status_code: 500 }, nil)
 
       expect(html).to include("ArgumentError")
       expect(html).to include("bad arg")
@@ -23,7 +23,7 @@ RSpec.describe "Weft::Defaults" do
     it "renders generic copy when verbose_error_pages is false" do
       Weft.configuration.verbose_error_pages = false
       error = ArgumentError.new("bad arg")
-      html = described_class.render(exception: error, request_path: "/x", status_code: 500)
+      html = described_class.render({ exception: error, request_path: "/x", status_code: 500 }, nil)
 
       expect(html).not_to include("ArgumentError")
       expect(html).not_to include("bad arg")
@@ -32,7 +32,7 @@ RSpec.describe "Weft::Defaults" do
 
     it "is safe to render without an exception (e.g. redirect path)" do
       Weft.configuration.verbose_error_pages = true
-      html = described_class.render(exception: nil, request_path: "/x", status_code: 500)
+      html = described_class.render({ exception: nil, request_path: "/x", status_code: 500 }, nil)
       expect(html).to match(/something went wrong/i)
     end
 
@@ -43,7 +43,7 @@ RSpec.describe "Weft::Defaults" do
     it "renders the retrying push state while attempts remain" do
       Weft.configuration.verbose_error_pages = true
       error = ArgumentError.new("bad arg")
-      html = described_class.render(exception: error, attempts_remaining: 2, retry_url: "/x")
+      html = described_class.render({ exception: error, attempts_remaining: 2, retry_url: "/x" }, nil)
 
       expect(html).to match(/live updates interrupted/i)
       expect(html).to include("ArgumentError")
@@ -53,7 +53,7 @@ RSpec.describe "Weft::Defaults" do
     it "renders the stopped push state with a reopen button at zero attempts remaining" do
       Weft.configuration.verbose_error_pages = true
       error = ArgumentError.new("bad arg")
-      html = described_class.render(exception: error, attempts_remaining: 0, retry_url: "/orders/live")
+      html = described_class.render({ exception: error, attempts_remaining: 0, retry_url: "/orders/live" }, nil)
 
       expect(html).to match(/live updates stopped/i)
       expect(html).to include("Resume live updates")
@@ -72,14 +72,14 @@ RSpec.describe "Weft::Defaults" do
     end
 
     it "adopts the failing component's tag via :component_tag" do
-      html = described_class.render(exception: nil, component_tag: "tr")
+      html = described_class.render({ exception: nil, component_tag: "tr" }, nil)
 
       expect(html).to match(/\A<tr\b/)
       expect(html).to include("</tr>")
     end
 
     it "renders as a div when :component_tag is absent" do
-      html = described_class.render(exception: nil)
+      html = described_class.render({ exception: nil }, nil)
 
       expect(html).to match(/\A<div\b/)
     end
@@ -103,7 +103,7 @@ RSpec.describe "Weft::Defaults" do
     it "renders as a full HTML document containing the ErrorComponent" do
       Weft.configuration.verbose_error_pages = true
       error = ArgumentError.new("bad arg")
-      html = described_class.render(exception: error, request_path: "/x", status_code: 500)
+      html = described_class.render({ exception: error, request_path: "/x", status_code: 500 }, nil)
 
       expect(html).to start_with("<!DOCTYPE html>")
       expect(html).to include("ArgumentError")
@@ -111,7 +111,7 @@ RSpec.describe "Weft::Defaults" do
     end
 
     it "declares its title" do
-      html = described_class.render(exception: nil, request_path: "/x", status_code: 500)
+      html = described_class.render({ exception: nil, request_path: "/x", status_code: 500 }, nil)
       expect(html).to include("<title>Error</title>")
     end
 
@@ -130,7 +130,8 @@ RSpec.describe "Weft::Defaults" do
       end
       Weft.configuration.error_component = branded
 
-      html = described_class.render(exception: ArgumentError.new("bad arg"), request_path: "/x", status_code: 500)
+      wire = { exception: ArgumentError.new("bad arg"), request_path: "/x", status_code: 500 }
+      html = described_class.render(wire, nil)
 
       expect(html).to include("our apologies")
     ensure
@@ -152,19 +153,19 @@ RSpec.describe "Weft::Defaults" do
 
     it "renders the request_path when verbose" do
       Weft.configuration.verbose_error_pages = true
-      html = described_class.render(request_path: "/no-such-thing", status_code: 404)
+      html = described_class.render({ request_path: "/no-such-thing", status_code: 404 }, nil)
       expect(html).to include("/no-such-thing")
     end
 
     it "adopts the failing component's tag via :component_tag" do
-      html = described_class.render(request_path: "/gone", component_tag: "tr")
+      html = described_class.render({ request_path: "/gone", component_tag: "tr" }, nil)
 
       expect(html).to match(/\A<tr\b/)
     end
 
     it "renders generic copy when non-verbose" do
       Weft.configuration.verbose_error_pages = false
-      html = described_class.render(request_path: "/no-such-thing", status_code: 404)
+      html = described_class.render({ request_path: "/no-such-thing", status_code: 404 }, nil)
       expect(html).not_to include("/no-such-thing")
       expect(html).to match(/not found/i)
     end
@@ -182,14 +183,14 @@ RSpec.describe "Weft::Defaults" do
 
     it "renders as a full HTML document" do
       Weft.configuration.verbose_error_pages = true
-      html = described_class.render(request_path: "/missing", status_code: 404)
+      html = described_class.render({ request_path: "/missing", status_code: 404 }, nil)
 
       expect(html).to start_with("<!DOCTYPE html>")
       expect(html).to include("/missing")
     end
 
     it "declares its title" do
-      html = described_class.render(request_path: "/missing", status_code: 404)
+      html = described_class.render({ request_path: "/missing", status_code: 404 }, nil)
       expect(html).to include("<title>Not found</title>")
     end
   end

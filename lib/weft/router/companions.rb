@@ -10,7 +10,7 @@ module Weft
     # component declares via `brings`, riding alongside its response with the
     # `hx-swap-oob` attribute set so htmx swaps each into its own DOM slot.
     #
-    # Depends on Router internals: `request_universe`, `build_root`, and the
+    # Depends on Router internals: `build_root`, and the
     # Errors slice's identity and
     # recovery helpers (`unbuilt_instance`, `resolved_dom_id`,
     # `invoke_recovery_block`, `auto_param_overlay`, `component_tag_for`,
@@ -95,10 +95,10 @@ module Weft
         nil
       end
 
-      # Each companion is an OOB-delivered child: it renders against the
-      # same request universe, branches the primary's bag (rich values
-      # included) exactly like a child built in the primary's own build,
-      # and layers its own block delta — blockless is an empty delta.
+      # Each companion is an OOB-delivered child: it branches the primary's bag
+      # (rich values and the request's universe included) exactly like a child
+      # built in the primary's own build, and layers its own block delta —
+      # blockless is an empty delta.
       #
       # `%` is what keeps siblings apart: each companion gets a bag of its own
       # carrying only its own delta, so two of them holding different values for
@@ -153,8 +153,8 @@ module Weft
       end
 
       # The state the failed build was given — its own wire schema over the
-      # request universe, branching the lineage the block left behind (the
-      # companion's delta included, since that bag carries it). Rebuilt rather
+      # universe the lineage carries, branching the lineage the block left
+      # behind (the companion's delta included, since that bag carries it). Rebuilt rather
       # than read off the instance because a build that raised leaves none.
       #
       # Keys the class doesn't declare need no special handling: resolution
@@ -162,7 +162,7 @@ module Weft
       # in it, so a companion block's ad-hoc delta stays readable in the recovery
       # block exactly as it was readable in the block that produced it.
       def companion_state(klass, lineage)
-        Weft::Params::Assembly.call(klass, request_universe, branched_from: lineage)
+        Weft::Params::Assembly.call(klass, branched_from: lineage)
       end
 
       # The lineage the recovery target branches: the failed companion's own

@@ -17,6 +17,20 @@ module RequestHelper
   def weft_get(path, params: {}, headers: {}) = weft_request(:get, path, params, headers)
   def weft_post(path, params: {}, headers: {}) = weft_request(:post, path, params, headers)
 
+  # The first +count+ events a component's live stream sends, read the way an
+  # EventSource reads them, then the connection is dropped. A stream sends its
+  # first event at once, so reading one never waits out the push interval.
+  def weft_stream_events(path, params: {}, count: 1)
+    env = Rack::MockRequest.env_for("#{path}?#{URI.encode_www_form(params)}")
+    _status, _headers, body = Weft::Router.new(PASS_THROUGH).call(env)
+    events = []
+    body.each do |chunk|
+      events << chunk
+      break if events.size >= count
+    end
+    events
+  end
+
   # SELECTs against one table during a block — the cheap way to pin that a
   # rich value rode an overlay instead of being fetched again downstream.
   #
