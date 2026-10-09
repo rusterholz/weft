@@ -7,9 +7,7 @@ require "spec_helper"
 # content-card but renders the retry control through the gem's :retry preset,
 # so it never hand-writes htmx.
 RSpec.describe ErrorComponent, type: :component do
-  def render_error(**attrs)
-    render_weft_html(wire: attrs) { error_component }
-  end
+  def render_error(**wire) = described_class.render(wire, nil)
 
   it "renders the retry button via the :retry preset" do
     html = render_error(retry_url: "/_components/oms/order_row?order_id=5", status_code: 500)

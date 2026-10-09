@@ -38,8 +38,9 @@ bundle exec rspec
 ```
 
 Demo specs come in two kinds. Most are `type: :component` and render one class in isolation
-through the `render_weft` / `render_weft_html` helpers. Specs under `spec/requests/` are
-`type: :request` and drive `Weft::Router` end to end with `Rack::MockRequest` (bundled with
+through the gem's own `Component.render` / `Component.render_element`, as an app's specs would.
+Specs under `spec/requests/` are `type: :request` and drive `Weft::Router` end to end with
+`Rack::MockRequest` (bundled with
 Rack — no extra gem), which is the only way to assert a whole response: the primary render, the
 out-of-band companions riding with it, the status, and the `HX-*` headers together. `weft_get` /
 `weft_post` and a `count_selects` query counter live in `spec/support/request_helper.rb`.

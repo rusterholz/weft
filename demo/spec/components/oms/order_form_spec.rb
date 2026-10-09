@@ -3,9 +3,7 @@
 require "spec_helper"
 
 RSpec.describe Oms::OrderForm, type: :component do
-  def rendered(attrs = {})
-    render_weft_html(wire: attrs) { order_form }
-  end
+  def rendered(wire = {}) = described_class.render(wire, nil)
 
   it "renders a form with the magical action: :create expansion" do
     html = rendered
