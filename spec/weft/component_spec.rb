@@ -330,9 +330,7 @@ RSpec.describe Weft::Component do
         end
       end
 
-      html = weft_context({ "status" => "active", "count" => "5" }) do
-        insert_tag(component_class)
-      end.to_s
+      html = component_class.render({ "status" => "active", "count" => "5" }, nil)
 
       expect(html).to include("status=active, count=5")
     end
@@ -348,7 +346,7 @@ RSpec.describe Weft::Component do
         end
       end
 
-      html = weft_context { insert_tag(component_class) }.to_s
+      html = component_class.render({}, nil)
 
       expect(html).to include("status=pending")
     end
@@ -369,7 +367,7 @@ RSpec.describe Weft::Component do
         insert_tag(child)
       end
 
-      html = weft_context({ "status" => "shipped" }) { insert_tag(parent) }.to_s
+      html = parent.render({ "status" => "shipped" }, nil)
 
       expect(html).to include("child sees shipped")
     end
@@ -385,9 +383,9 @@ RSpec.describe Weft::Component do
         end
       end
 
-      ctx = weft_context({ "status" => "hot" }) { insert_tag(component_class) }
+      component = component_class.render_element({ "status" => "hot" }, nil)
 
-      expect(ctx.children.first.class_list).to include("pre-hot")
+      expect(component.class_list).to include("pre-hot")
     end
 
     it "routes a param-named builder kwarg to chrome, not the bag" do
@@ -397,8 +395,7 @@ RSpec.describe Weft::Component do
         param :status, default: "pending"
       end
 
-      ctx = weft_context { insert_tag(component_class, status: "shipped") }
-      component = ctx.children.first
+      component = component_class.render_element({}, nil, status: "shipped")
 
       expect(component.params.status).to eq("pending")
       expect(component.get_attribute(:status)).to eq("shipped")
@@ -416,9 +413,7 @@ RSpec.describe Weft::Component do
       end
 
       2.times do
-        weft_context do
-          insert_tag(component_class, title: "a")
-        end.to_s
+        component_class.render({}, nil, title: "a")
       end
 
       expect(Weft.logger).to have_received(:warn).once.with(/title/)
@@ -431,12 +426,15 @@ RSpec.describe Weft::Component do
         param :title
       end
 
-      weft_context do
-        div do
-          insert_tag(component_class, title: "a")
-          insert_tag(component_class, title: "b")
-        end
-      end.to_s
+      host = Class.new(Weft::Component) do
+        def self.name = "TwoSiteHost"
+        anonymous!
+      end
+
+      host.render({}, nil) do
+        insert_tag(component_class, title: "a")
+        insert_tag(component_class, title: "b")
+      end
 
       expect(Weft.logger).to have_received(:warn).twice.with(/title/)
     end
@@ -478,7 +476,7 @@ RSpec.describe Weft::Component do
         derives(:tally) { |_p| 7 }
       end
 
-      weft_context { insert_tag(component_class, tally: 3) }.to_s
+      component_class.render({}, nil, tally: 3)
 
       expect(Weft.logger).to have_received(:warn).once.with(/tally/)
     end
@@ -490,7 +488,7 @@ RSpec.describe Weft::Component do
         param :status
       end
 
-      weft_context { insert_tag(component_class, status: "shipped") }.to_s
+      component_class.render({}, nil, status: "shipped")
 
       expect(Weft.logger).to have_received(:warn).with(/receives :status/)
     end
@@ -502,10 +500,7 @@ RSpec.describe Weft::Component do
         identifies_by :status
       end
 
-      ctx = weft_context({ "status" => "shipped" }) do
-        insert_tag(component_class)
-      end
-      component = ctx.children.first
+      component = component_class.render_element({ "status" => "shipped" }, nil)
 
       expect(component.id).to eq("stat-card-shipped")
     end
@@ -518,7 +513,7 @@ RSpec.describe Weft::Component do
       end
 
       shared = { status: "shipped", class: "big" }
-      weft_context { insert_tag(component_class, **shared) }.to_s
+      component_class.render({}, nil, **shared)
 
       expect(shared).to eq(status: "shipped", class: "big")
     end
@@ -533,7 +528,7 @@ RSpec.describe Weft::Component do
         end
       end
 
-      html = weft_context { insert_tag(component_class) }.to_s
+      html = component_class.render({}, nil)
 
       expect(html).to include("<div")
       expect(html).to include("<span>hello</span>")
@@ -541,7 +536,7 @@ RSpec.describe Weft::Component do
   end
 
   describe "#despite_derivation_errors" do
-    def render(klass) = weft_context { insert_tag(klass) }.to_s
+    def render(klass) = klass.render({}, nil)
 
     it "runs the block once and yields an empty hash when nothing has failed" do
       runs = 0

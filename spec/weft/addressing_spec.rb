@@ -178,11 +178,9 @@ RSpec.describe Weft::Addressing do
         identifies_by :status
       end
 
-      ctx = weft_context({ "status" => "shipped" }) do
-        insert_tag(component_class)
-      end
+      component = component_class.render_element({ "status" => "shipped" }, nil)
 
-      expect(ctx.children.first.weft_dom_id).to eq("stat-card-shipped")
+      expect(component.weft_dom_id).to eq("stat-card-shipped")
     end
 
     describe "A-prime composition" do
@@ -228,7 +226,7 @@ RSpec.describe Weft::Addressing do
       # reading one has nothing to read. Which is also why these assert on a
       # built instance — the shape the demo's rows actually take.
       def id_of(klass, **handed)
-        weft_context { insert_tag(klass, **handed) }.children.first.weft_dom_id
+        klass.render_element({}, nil, **handed).weft_dom_id
       end
 
       it "keeps the dashes of a uuid-typed value reached through derives" do
@@ -802,10 +800,7 @@ RSpec.describe Weft::Addressing do
         param :page, default: 1
       end
 
-      ctx = weft_context({ "status" => "shipped", "page" => 2 }) do
-        insert_tag(component_class)
-      end
-      component = ctx.children.first
+      component = component_class.render_element({ "status" => "shipped", "page" => 2 }, nil)
 
       expect(component.weft_component_url).to eq("/_components/panel?status=shipped&page=2")
     end
@@ -817,10 +812,7 @@ RSpec.describe Weft::Addressing do
         param :page, default: 1
       end
 
-      ctx = weft_context({ "status" => "shipped", "page" => 2 }) do
-        insert_tag(component_class)
-      end
-      component = ctx.children.first
+      component = component_class.render_element({ "status" => "shipped", "page" => 2 }, nil)
 
       expect(component.weft_component_url(page: 3)).to eq("/_components/panel?status=shipped&page=3")
     end
@@ -832,10 +824,7 @@ RSpec.describe Weft::Addressing do
         param :page, default: 1
       end
 
-      ctx = weft_context({ "page" => 1 }) do
-        insert_tag(component_class)
-      end
-      component = ctx.children.first
+      component = component_class.render_element({ "page" => 1 }, nil)
 
       expect(component.weft_component_url).to eq("/_components/panel?page=1")
     end

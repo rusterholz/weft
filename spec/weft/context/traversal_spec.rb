@@ -42,7 +42,7 @@ end
 RSpec.describe Weft::Context::Traversal do
   let(:nodes) do
     M7Fixtures::NODES.clear
-    weft_context { insert_tag M7Fixtures::Outer }
+    M7Fixtures::Outer.render_element({}, nil)
     M7Fixtures::NODES
   end
   let(:leaf) { nodes[:leaf] }
