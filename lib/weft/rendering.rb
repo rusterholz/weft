@@ -52,7 +52,11 @@ module Weft
       root = render_root(wire, weft_request)
       frame = Weft::Request::EventFrame.new(weft_request)
       Weft::Context.new({}, block&.binding&.receiver, frame: frame, branch_bag: root) do
-        content = block&.arity&.positive? ? block : block && proc { instance_exec(&block) }
+        # Arbre hands a block with parameters to +build+, which passes it the
+        # element, and yields any other on its writer's +self+; a spec's +self+
+        # has no builders, so only a yielded block moves onto the context.
+        content = block
+        content = proc { instance_exec(&block) } if block && !block.arity.positive?
         insert_tag(klass, **kwargs, &content)
       end
     end
