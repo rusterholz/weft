@@ -546,8 +546,11 @@ module Weft
       end
 
       # Frames that only relay a call site's kwargs to `insert_tag`: the method
-      # `builder_method` generates, whose line every builder call shares.
-      KWARG_RELAYS = ["arbre/element/builder_methods.rb"].freeze
+      # `builder_method` generates, whose line every builder call shares, and
+      # `.render` with the context it builds, whose lines every render shares.
+      KWARG_RELAYS = %w[
+        arbre/element/builder_methods.rb weft/rendering.rb arbre/context.rb weft/context.rb
+      ].freeze
       private_constant :KWARG_RELAYS
 
       # The adopter's line, for the dedup key. `insert_tag` is the seam between

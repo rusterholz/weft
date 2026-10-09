@@ -133,6 +133,187 @@ RSpec.describe Weft::Component do
       it "refuses a wire that is neither a hash nor a bag" do
         expect { card.render("status=x", nil) }.to raise_error(ArgumentError, /wire/)
       end
+
+      it "takes a blank wire as an empty one" do
+        [nil, ""].each do |wire|
+          expect(card.render(wire, env_for("/?status=from-request"))).to include("status=from-request")
+        end
+      end
+
+      it "takes anything else that converts to a hash as the wire hash" do
+        wire = Struct.new(:status).new("from-struct")
+
+        expect(card.render(wire, env_for("/?status=from-request"))).to include("status=from-struct")
+      end
+
+      it "never forces a bag it is handed to convert it" do
+        runs = 0
+        source = Class.new(Weft::Component) do
+          def self.name = "LazyBagSource"
+          derives(:costly) { |_p| runs += 1 }
+        end
+        bag = Weft::Params::Assembly.call(source, { "status" => "from-bag" })
+
+        card.render(bag, nil)
+
+        expect(runs).to eq(0)
+      end
+    end
+
+    context "with the rest of a builder call" do
+      let(:card) do
+        Class.new(Weft::Component) do
+          def self.name = "HandedCard"
+          adds_children_to :@body
+          param :status
+          receives :status
+          receives :label, default: nil
+
+          def build(attributes = {})
+            super
+            text_node "status=#{params.status} label=#{params.label}"
+            @body = div(class: "body")
+          end
+        end
+      end
+
+      it "hands a kwarg to the key the component receives" do
+        expect(card.render({}, nil, label: "Late")).to include("label=Late")
+      end
+
+      it "lets a handed value outrank the wire, as a call site's does" do
+        expect(card.render({ status: "from-wire" }, nil, status: "handed")).to include("status=handed")
+      end
+
+      it "hands kwargs over a bag it is given too" do
+        bag = Weft::Params::Assembly.call(card, { "status" => "from-bag" })
+
+        expect(card.render(bag, nil, label: "Late")).to include("status=from-bag label=Late")
+      end
+
+      it "puts a kwarg the component doesn't receive on its wrapper" do
+        expect(card.render({}, nil, class: "wide")).to match(/<div[^>]*class="wide"/)
+      end
+
+      it "expands weft's own kwargs on the wrapper" do
+        expect(card.render({}, nil, confirm: "Sure?")).to include('hx-confirm="Sure?"')
+      end
+
+      it "runs a content block where Arbre's builders answer, into the component" do
+        word = "42 orders"
+
+        html = card.render({}, nil) { para word }
+
+        expect(html).to match(%r{<div class="body">\s*<p>42 orders</p>})
+      end
+
+      it "takes a content block's return value as the text of a component with no children" do
+        bare = Class.new(Weft::Component) { def self.name = "BareCard" }
+
+        expect(bare.render({}, nil) { "plain" }).to include('id="bare-card">plain</div>')
+      end
+
+      it "hands a block that takes arguments to build, as Arbre does" do
+        seen = nil
+        yielding = Class.new(Weft::Component) do
+          def self.name = "YieldingCard"
+
+          define_method(:build) do |attributes = {}, &content|
+            super(attributes, &nil)
+            content&.call(:from_build)
+          end
+        end
+
+        caller_self = nil
+
+        yielding.render({}, nil) do |arg|
+          seen = arg
+          caller_self = self
+        end
+
+        expect(seen).to eq(:from_build)
+        expect(caller_self).to be(self)
+      end
+
+      context "with the caller's methods" do
+        let(:word) { "42 orders" }
+        let(:badge) do
+          Class.new(Weft::Component) do
+            def self.name = "LetBadge"
+            receives :label
+
+            def build(attributes = {})
+              super
+              text_node "badge=#{params.label}"
+            end
+          end
+        end
+        let(:stray_name) { "from the spec" }
+
+        it "reaches a let inside a content block" do
+          expect(card.render({}, nil) { para word }).to include("<p>42 orders</p>")
+        end
+
+        it "hands a let to a component built in the block" do
+          expect(card.render({}, nil) { insert_tag(badge, label: word) }).to include("badge=42 orders")
+        end
+
+        it "leaves a name nothing in the render answers unresolved when there is no block" do
+          straying = Class.new(Weft::Component) do
+            def self.name = "StrayingCard"
+
+            def build(attributes = {})
+              super
+              text_node stray_name
+            end
+          end
+
+          expect { straying.render({}, nil) }.to raise_error(NameError, /stray_name/)
+        end
+      end
+
+      it "warns once per line that renders a colliding kwarg" do
+        allow(Weft.logger).to receive(:warn)
+        colliding = Class.new(Weft::Component) do
+          def self.name = "RenderSiteCard"
+          param :title
+        end
+
+        colliding.render({}, nil, title: "a")
+        colliding.render({}, nil, title: "b")
+
+        expect(Weft.logger).to have_received(:warn).twice.with(/title/)
+      end
+    end
+  end
+
+  describe ".render_element" do
+    let(:card) do
+      Class.new(Weft::Component) do
+        def self.name = "ElementCard"
+        receives :accent, default: nil
+
+        def build(attributes = {})
+          super
+          add_class "border-#{params.accent}"
+        end
+      end
+    end
+
+    it "returns the component it rendered, to assert on as a tree" do
+      element = card.render_element({}, nil, accent: "shipped")
+
+      expect(element).to be_a(card)
+      expect(element.class_list).to include("border-shipped")
+      expect(element.params.accent).to eq("shipped")
+    end
+
+    it "renders the same HTML as render" do
+      expect(card.render_element({}, nil, accent: "a").to_s).to eq(card.render({}, nil, accent: "a"))
+    end
+
+    it "takes both the wire and the request, every time" do
+      expect { card.render_element({}) }.to raise_error(ArgumentError)
     end
   end
 
