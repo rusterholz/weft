@@ -103,4 +103,4 @@ OrderCard.render({ order_id: "42" }, nil)
 OrderPage.render({ tab: "items" }, Rack::MockRequest.env_for("/orders/42"))
 ```
 
-The request can be a Rack env, a Rack or Sinatra request, a `Weft::Request`, or `nil` for an empty one: a GET for `/` that sent nothing. The wire is layered over whatever the request sent, so a spec can set up a request once and vary one value per example. A page takes its route's params from the request's path, by matching its own `page_path`. [Testing components](arbre.md#testing-components) has the rest.
+The request can be a Rack env, a Rack or Sinatra request, a `Weft::Request`, or `nil` for an empty one: a GET for `/` that sent nothing. The wire is layered over whatever the request sent, so a spec can set up a request once and vary one value per example. A page takes its route's params from the request's path, by matching its own `page_path`. [Testing components](arbre.md#testing-components) has the rest, including the kwargs and content block a builder call would pass, and `render_element` for the element tree.

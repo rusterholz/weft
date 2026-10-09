@@ -274,7 +274,10 @@ unconditional and the recovery still sees the wire. An unreadable request's eart
 
 `.render` builds an earth of its own: the request's universe, the rendered page's route params read
 from the request's path, and the wire hash merged over both. Handed a `Weft::Params` instead, it uses
-that bag as the root's parent, and the request's wire plays no part.
+that bag as the root's parent, and the request's wire plays no part. Either way the root is built by
+an ordinary `insert_tag` with `.render`'s kwargs and block, so unlike the request's own roots it has
+a hand-off door: a `.render` is a builder call with no parent. A block's own `self` becomes the
+context's Arbre helpers, the last stop of `Element#method_missing`.
 
 A crossing from a bag into the class that bag was crossed into already answers every key the same,
 and shares the outcome of every derivation but a contextual one. A plain derivation is shared because
