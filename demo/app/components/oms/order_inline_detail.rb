@@ -36,7 +36,7 @@ module Oms
       div(class: "d-flex justify-content-between align-items-start mb-2") do
         div do
           strong "#{params.order.customer_name} "
-          status_badge params.order.status
+          status_badge status: params.order.status
         end
         button "×", class: "btn btn-sm btn-outline-secondary py-0",
                     action: :close
@@ -61,7 +61,7 @@ module Oms
           text_node ", " if i.positive?
           a(s.id[..7], href: "/shipments/#{s.id}", class: "mono")
           text_node " "
-          status_badge s.status
+          status_badge status: s.status
         end
       end
     end

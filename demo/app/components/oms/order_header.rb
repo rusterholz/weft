@@ -50,7 +50,7 @@ module Oms
         text_node " — "
         span params.order.customer_name
         text_node " "
-        status_badge params.order.status
+        status_badge status: params.order.status
       end
 
       div(class: "d-flex gap-2") do

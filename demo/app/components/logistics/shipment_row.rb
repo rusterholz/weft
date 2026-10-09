@@ -23,7 +23,7 @@ module Logistics
         end
       end
       td { driver ? a(driver.name, href: "/drivers/#{driver.id}") : span("—", class: "text-muted") }
-      td { status_badge params.shipment.status }
+      td { status_badge status: params.shipment.status }
     end
 
     def tag_name

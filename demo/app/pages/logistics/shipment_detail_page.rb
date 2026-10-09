@@ -29,7 +29,7 @@ module Logistics
           text_node "Shipment "
           span(shipment.id[..7], class: "mono")
           text_node " "
-          status_badge shipment.status
+          status_badge status: shipment.status
         end
       end
     end

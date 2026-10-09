@@ -4,15 +4,17 @@ module DropshipUI
   class StatusBadge < Weft::Component
     builder_method :status_badge
 
-    # The status arrives as a build argument, not a param, so there is nothing
-    # here to identify by — and a page lists many badges. `unique!` hands each
-    # one its own slot instead of letting them all wear the class id.
+    receives :status
+
+    # A table lists many badges, and many of them share a status, so the
+    # status can't tell instances apart. `unique!` hands each one its own
+    # slot instead of letting them all wear the class id.
     unique!
 
-    def build(status, attributes = {})
-      super(attributes)
-      add_class "badge badge-status badge-#{status.to_s.tr('_', '-')}"
-      text_node status.to_s.tr("_", " ")
+    def build(attributes = {})
+      super
+      add_class "badge badge-status badge-#{params.status.to_s.tr('_', '-')}"
+      text_node params.status.to_s.tr("_", " ")
     end
 
     def tag_name
