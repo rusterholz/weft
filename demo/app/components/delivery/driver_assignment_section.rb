@@ -34,7 +34,7 @@ module Delivery
             dd(class: "col-sm-9") do
               a shipment.id[..7], href: "/shipments/#{shipment.id}", class: "mono"
               text_node " "
-              status_badge shipment.status
+              status_badge status: shipment.status
             end
             dt("Order", class: "col-sm-3 text-muted")
             dd(class: "col-sm-9") do

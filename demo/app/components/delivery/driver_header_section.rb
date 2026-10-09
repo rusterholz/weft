@@ -18,9 +18,9 @@ module Delivery
       h1 do
         text_node "#{params.driver.name} "
         if params.driver.current_shipment_id
-          status_badge "busy"
+          status_badge status: "busy"
         else
-          status_badge "available"
+          status_badge status: "available"
         end
       end
       div(class: "mono", style: "font-size:0.875rem; color:#64748b") do

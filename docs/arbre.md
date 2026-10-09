@@ -306,7 +306,35 @@ html = AttendeeList.render({ event_id: "trivia-night" }, env)
 
 The wire is layered over whatever the request sent, so a `let` can build one request and each example can vary a value. `Page.render` takes the same two arguments and reads its route's params from the request's path, so `OrderPage.render({}, Rack::MockRequest.env_for("/orders/42"))` renders order 42. [The Request](request.md) covers what a component can read from it.
 
-Two cases `render` doesn't reach yet: asserting on the element tree rather than the string (classes, structure, specific descendants), and a component whose values arrive by `receives` from a call site rather than over the wire. Both are getting a dedicated entry point in the next release, shaped like `render`. Until then, test a `receives`-driven component through the component that builds it.
+Everything after the request is a builder call's, so a spec renders a component the way the `build` around it would. Values for the keys it [`receives`](dsl.md#receives--caller-handoffs) go in as keyword arguments, along with any HTML attributes for its wrapper, and a block supplies its content:
+
+```ruby
+AttendeeRow.render({}, nil, attendee: priya)
+EventCard.render({ event_id: "trivia-night" }, nil) { para "Bring a dish to share!" }
+```
+
+The block builds inside the component, as it would at a call site. A name that nothing in the render answers resolves on the spec itself, so a `let` reads naturally there, unless it shares a tag's name ([name collisions](#blocks-and-method-lookup): a `let` named `summary` builds a `<summary>`):
+
+```ruby
+let(:reminder) { "Bring a dish to share!" }
+
+it "puts caller content in the card's body" do
+  html = EventCard.render({ event_id: "trivia-night" }, nil) { para reminder }
+  expect(html).to include("<p>Bring a dish to share!</p>")
+end
+```
+
+Instance variables don't carry into the block, so a `@reminder` set in a `before` reads as `nil` there; use a `let` or a local. Likewise, read `params` or `request` in the spec and pass the value in as a local, rather than reaching for them inside the block.
+
+To assert on the element tree rather than the string, `render_element` takes the same arguments and returns the rendered component itself: its tag, its classes, what it built inside, and the params it resolved.
+
+```ruby
+row = AttendeeRow.render_element({}, nil, attendee: priya)
+expect(row.tag_name).to eq("tr")
+expect(row.params.attendee).to be(priya)
+```
+
+A spec that renders one shape over and over can wrap the call in a method of its own, such as `def render_row = AttendeeRow.render({}, nil, attendee: priya)`.
 
 One Arbre-specific note for test code: **give test component classes real names.** `builder_method` resolves its class by name at call time, so an anonymous class (`Class.new(Weft::Component)`) with a stubbed `name` raises `NameError` the first time its builder is invoked — and under Arbre 1.x, even `insert_tag` with a truly anonymous class crashes. Define named classes (a `TestCard = Class.new(...)` constant works) rather than fighting it.
 

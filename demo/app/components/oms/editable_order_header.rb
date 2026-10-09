@@ -43,7 +43,7 @@ module Oms
         # so the region doesn't lose the order's state mid-rename. It reads the
         # region's shared derivation — the same order the save callable loads,
         # and the same one still in hand when a rejected save re-renders here.
-        status_badge params.order.status
+        status_badge status: params.order.status
         label "Customer", for: "customer_name", class: "text-muted", style: "font-size:0.875rem"
         input type: "text", name: "customer_name", id: "customer_name", class: "form-control form-control-sm",
               style: "max-width:18rem", value: current_name

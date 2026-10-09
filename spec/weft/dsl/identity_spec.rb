@@ -4,7 +4,7 @@ require "arbre"
 
 RSpec.describe Weft::DSL::Identity do
   def render_in_context(klass, wire_params: {})
-    weft_context(wire_params) { insert_tag(klass) }.children.first
+    klass.render_element(wire_params, nil)
   end
 
   describe ".identifies_by" do
@@ -150,9 +150,8 @@ RSpec.describe Weft::DSL::Identity do
         anonymous!
       end
 
-      html = weft_context do
-        3.times { insert_tag(klass) }
-      end.to_s
+      frame = Weft::Request::EventFrame.new(Weft::Request.wrap(nil))
+      html = Weft::Context.new(frame: frame) { 3.times { insert_tag(klass) } }.to_s
 
       expect(html).not_to include("id=")
     end
@@ -213,7 +212,7 @@ RSpec.describe Weft::DSL::Identity do
   describe "the blank-identifier warning's remedy" do
     def render_blank(klass)
       allow(Weft.logger).to receive(:warn)
-      weft_context { insert_tag(klass) }.to_s
+      klass.render({}, nil)
     end
 
     it "names the wire door for a param" do
@@ -281,8 +280,15 @@ RSpec.describe Weft::DSL::Identity do
       end
     end
 
+    let(:host) do
+      Class.new(Weft::Component) do
+        def self.name = "DuplicateIdHost"
+        anonymous!
+      end
+    end
+
     def render_nested(klass, count)
-      weft_context { div { count.times { insert_tag(klass) } } }.to_s
+      host.render({}, nil) { count.times { insert_tag(klass) } }
     end
 
     it "warns when one render emits an id twice" do
@@ -301,16 +307,13 @@ RSpec.describe Weft::DSL::Identity do
       expect(Weft.logger).to have_received(:warn).once.with(/identifies_by.*unique!.*anonymous!/m)
     end
 
-    # Nested rather than top-level on purpose: claim_dom_slot! is gated on
-    # `parent.equal?(arbre_context)`, so chrome inside a wrapper collided
-    # silently — which is exactly where the demo's ten cards were hiding.
+    # Only roots claim slots in the frame, so chrome nested inside a wrapper
+    # is where a collision would otherwise go unseen.
     it "sees a collision at any depth, not only among top-level components" do
       klass = repeated
       allow(Weft.logger).to receive(:warn)
 
-      weft_context do
-        div { div { div { 3.times { insert_tag(klass) } } } }
-      end.to_s
+      host.render({}, nil) { div { div { 3.times { insert_tag(klass) } } } }
 
       expect(Weft.logger).to have_received(:warn).once
     end
@@ -340,9 +343,7 @@ RSpec.describe Weft::DSL::Identity do
 
       allow(Weft.logger).to receive(:warn)
 
-      weft_context do
-        div { %w[a b c].each { |id| insert_tag(distinct, row_id: id) } }
-      end.to_s
+      host.render({}, nil) { %w[a b c].each { |id| insert_tag(distinct, row_id: id) } }
 
       expect(Weft.logger).not_to have_received(:warn)
     end

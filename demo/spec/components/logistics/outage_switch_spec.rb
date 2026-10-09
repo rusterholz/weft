@@ -5,9 +5,7 @@ require "spec_helper"
 RSpec.describe Logistics::OutageSwitch, type: :component do
   after { Logistics::ShipmentFeedOutage.toggle! if Logistics::ShipmentFeedOutage.active? }
 
-  def render_switch
-    render_weft_html { outage_switch }
-  end
+  def render_switch = described_class.render({}, nil)
 
   it "offers to simulate an outage while the feed is healthy" do
     html = render_switch

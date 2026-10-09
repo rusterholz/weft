@@ -319,9 +319,9 @@ module Weft
         end
 
         # What a facet keyword's value would have to look like for the reader
-        # to have plausibly meant it. `default:` is absent on purpose: every
-        # value is a plausible default, so there is nothing to discriminate on
-        # and the check would fire on every key honestly named `default`.
+        # to have plausibly meant it. `default:` has no shape: every value is a
+        # plausible default, so a check would fire on every key honestly named
+        # `default`.
         BOOLEAN_FACET = ->(v) { [true, false].include?(v) }
         FACET_SHAPES = {
           type: ->(v) { !Weft::Types.lookup(v).nil? },
@@ -520,9 +520,9 @@ module Weft
       # param names legitimately collide with attribute names (title, size,
       # value, ...). Set#add? races just double-warn; harmless.
       #
-      # Deliberately not suppressed for known HTML attribute names: the kwarg
-      # does reach the DOM as that attribute, so nobody is stuck, and this is
-      # the migration signal for call sites that used to pass params inline.
+      # Known HTML attribute names warn too: the kwarg still reaches the DOM as
+      # that attribute, and the warning is the migration signal for call sites
+      # that used to pass params inline.
       def warn_declared_chrome_collisions(attributes)
         attributes.each_key do |key|
           door = collision_door(key) or next
@@ -545,9 +545,17 @@ module Weft
         "derivation, which is computed rather than passed" if self.class.derived_params.key?(key)
       end
 
+      # Frames that only relay a call site's kwargs to `insert_tag`: the method
+      # `builder_method` generates, whose line every builder call shares, and
+      # `.render` with the context it builds, whose lines every render shares.
+      KWARG_RELAYS = %w[
+        arbre/element/builder_methods.rb weft/rendering.rb arbre/context.rb weft/context.rb
+      ].freeze
+      private_constant :KWARG_RELAYS
+
       # The adopter's line, for the dedup key. `insert_tag` is the seam between
-      # adopter code and Arbre's build machinery, so the frame just past weft's
-      # own interception is the one that wrote the kwarg.
+      # adopter code and Arbre's build machinery, so the first frame past weft's
+      # own interception that isn't a relay is the one that wrote the kwarg.
       #
       # Nil when there is no seam, which degrades the key to (class, key). No
       # path in the suite reaches that: every construction goes through weft's
@@ -555,8 +563,9 @@ module Weft
       # a diagnostic that raises is worse than one that dedupes coarsely.
       def kwarg_call_site
         frames = caller_locations
-        seam = frames.index { |l| l.path.end_with?("weft/context/interception.rb") }
-        frames[seam + 1]&.then { |f| "#{f.path}:#{f.lineno}" } if seam
+        seam = frames.index { |l| l.path.end_with?("weft/context/interception.rb") } or return
+        site = frames.drop(seam + 1).find { |f| !f.path.end_with?(*KWARG_RELAYS) }
+        site&.then { |f| "#{f.path}:#{f.lineno}" }
       end
     end
   end

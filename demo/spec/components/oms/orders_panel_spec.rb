@@ -9,7 +9,7 @@ RSpec.describe Oms::OrdersPanel, type: :component do
   end
 
   it "renders filter buttons as navigate re-fetches of the panel" do
-    html = render_weft_html { orders_panel }
+    html = described_class.render({}, nil)
     expect(html).to include("All")
     expect(html).to include("Submitted")
     expect(html).to include('hx-get="/_components/oms/orders_panel?status=submitted&amp;page=1"')
@@ -18,35 +18,35 @@ RSpec.describe Oms::OrdersPanel, type: :component do
   end
 
   it "marks the active filter" do
-    html = render_weft_html(wire: { "status" => "shipped" }) { orders_panel }
+    html = described_class.render({ status: "shipped" }, nil)
     expect(html).to include("Shipped Orders")
     # The "Shipped" button should be btn-primary (active)
     expect(html).to match(/btn-primary[^>]*>Shipped/)
   end
 
   it "renders all orders when no status filter" do
-    html = render_weft_html { orders_panel }
+    html = described_class.render({}, nil)
     expect(html).to include("Alice")
     expect(html).to include("Bob")
     expect(html).to include("All Orders (2)")
   end
 
   it "filters orders by status" do
-    html = render_weft_html(wire: { "status" => "submitted" }) { orders_panel }
+    html = described_class.render({ status: "submitted" }, nil)
     expect(html).to include("Alice")
     expect(html).not_to include("Bob")
     expect(html).to include("Submitted Orders (1)")
   end
 
   it "includes hx-push-url on filter buttons for user-friendly URLs" do
-    html = render_weft_html { orders_panel }
+    html = described_class.render({}, nil)
     expect(html).to include('hx-push-url="/orders?status=submitted"')
     expect(html).to include('hx-push-url="/orders"')
   end
 
   it "renders pagination for large result sets" do
     28.times { |i| Oms::Order.create!(customer_name: "Order#{i}", lat: 0.0, lon: 0.0, status: "submitted") }
-    html = render_weft_html(wire: { "status" => "submitted" }) { orders_panel }
+    html = described_class.render({ status: "submitted" }, nil)
     expect(html).to include("Page 1 of 2")
     expect(html).to include("Next")
   end

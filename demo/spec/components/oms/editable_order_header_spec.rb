@@ -5,16 +5,14 @@ require "spec_helper"
 RSpec.describe Oms::EditableOrderHeader, type: :component do
   let(:order) { Oms::Order.create!(customer_name: "Acme Corp", lat: 0.0, lon: 0.0, status: "submitted") }
 
-  def render_editor(wire: { "order_id" => order.id }, assigns: { order: order })
-    render_weft_html(assigns, wire: wire) { editable_order_header }
-  end
+  def render_editor(**wire) = described_class.render({ order_id: order.id, **wire }, nil)
 
   it "prefills the customer name from the order" do
     expect(render_editor).to include('value="Acme Corp"')
   end
 
   it "echoes what the user typed back instead of the stored name" do
-    html = render_editor(wire: { "order_id" => order.id, "customer_name" => "Typed Co" })
+    html = render_editor(customer_name: "Typed Co")
     expect(html).to include('value="Typed Co"')
   end
 
@@ -50,7 +48,7 @@ RSpec.describe Oms::EditableOrderHeader, type: :component do
   end
 
   it "shows the error message when a recovery hands one back" do
-    html = render_editor(wire: { "order_id" => order.id, "error_message" => "Customer name can't be blank" })
+    html = render_editor(error_message: "Customer name can't be blank")
     expect(html).to include("Customer name can&#39;t be blank")
   end
 end

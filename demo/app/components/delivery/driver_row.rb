@@ -18,9 +18,9 @@ module Delivery
       td { a params.driver.name, href: "/drivers/#{params.driver.id}" }
       td do
         if params.driver.current_shipment_id
-          status_badge "busy"
+          status_badge status: "busy"
         else
-          status_badge "available"
+          status_badge status: "available"
         end
       end
       td(class: "mono") do

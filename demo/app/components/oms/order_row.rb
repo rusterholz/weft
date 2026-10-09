@@ -31,7 +31,7 @@ module Oms
       td params.order.customer_name
       td(class: "mono") { text_node params.order.line_items.size.to_s }
       td(class: "mono") { text_node shipment_count.to_s }
-      td { status_badge params.order.status }
+      td { status_badge status: params.order.status }
       td(class: "mono") { text_node params.order.created_at&.strftime("%H:%M:%S") }
       td(style: "width:2rem") do
         button "✕", class: "btn btn-sm btn-link p-0 text-danger", action: :cancel,

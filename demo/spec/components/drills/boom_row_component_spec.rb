@@ -17,7 +17,7 @@ RSpec.describe Drills::BoomRowComponent, type: :component do
   end
 
   it "renders as a table row with a confirmed delete trigger" do
-    html = render_weft_html { boom_row label: "Doomed row" }
+    html = described_class.render({}, nil, label: "Doomed row")
 
     expect(html).to match(/\A<tr\b/)
     expect(html).to include("Doomed row")

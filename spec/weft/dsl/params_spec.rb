@@ -654,9 +654,7 @@ RSpec.describe Weft::DSL::Params do
         end
       end
 
-      html = weft_context({ "page" => "2" }) do
-        insert_tag(component_class)
-      end.to_s
+      html = component_class.render({ "page" => "2" }, nil)
 
       expect(html).to include("Integer")
     end
@@ -695,7 +693,7 @@ RSpec.describe Weft::DSL::Params do
         def self.name = "WidePager"
         param :per_page, default: 100
       end
-      component = weft_context { insert_tag(child) }.children.first
+      component = child.render_element({}, nil)
 
       expect(component.params.per_page).to eq(100)
       expect(component.weft_component_url).to eq("/_components/wide_pager?per_page=100")
@@ -766,8 +764,7 @@ RSpec.describe Weft::DSL::Params do
     end
 
     def nested_in(card, badge, wire: {}, **parent_kwargs)
-      ctx = weft_context(wire) { insert_tag(card, **parent_kwargs) }
-      ctx.children.first.children.find { |el| el.is_a?(badge) }
+      card.render_element(wire, nil, **parent_kwargs).children.find { |el| el.is_a?(badge) }
     end
 
     it "outranks the descendant's own wire value" do
@@ -840,8 +837,7 @@ RSpec.describe Weft::DSL::Params do
       end
 
       def badges_under(row, badge, wire)
-        ctx = weft_context(wire) { insert_tag(row) }
-        ctx.children.first.children.map { |card| card.children.find { |el| el.is_a?(badge) } }
+        row.render_element(wire, nil).children.map { |card| card.children.find { |el| el.is_a?(badge) } }
       end
 
       it "keeps each badge on its own card's value while the page carries a filter" do
@@ -876,9 +872,7 @@ RSpec.describe Weft::DSL::Params do
         receives :order
       end
       handed = order
-      component = weft_context({ "status" => "hot" }) do
-        insert_tag(klass, order: handed)
-      end.children.first
+      component = klass.render_element({ "status" => "hot" }, nil, order: handed)
 
       expect(component.weft_component_url).to eq("/_components/manifest_card?status=hot")
     end
@@ -897,8 +891,7 @@ RSpec.describe Weft::DSL::Params do
         insert_tag(child_class)
       end
 
-      ctx = weft_context { insert_tag(parent_class) }
-      child = ctx.children.first.children.find { |el| el.is_a?(child_class) }
+      child = parent_class.render_element({}, nil).children.find { |el| el.is_a?(child_class) }
 
       # region is readable (inheritance axis) but not part of the refresh contract
       expect(child.weft_component_url).to eq("/_components/url_child?status=open")
@@ -910,7 +903,7 @@ RSpec.describe Weft::DSL::Params do
         param :status
         receives :status
       end
-      component = weft_context { insert_tag(klass, status: "fresh") }.children.first
+      component = klass.render_element({}, nil, status: "fresh")
 
       expect(component.weft_component_url).to eq("/_components/dual_card?status=fresh")
     end
@@ -921,7 +914,7 @@ RSpec.describe Weft::DSL::Params do
         receives :order
       end
       handed = order
-      component = weft_context { insert_tag(klass, order: handed) }.children.first
+      component = klass.render_element({}, nil, order: handed)
 
       expect(component.weft_dom_id).to eq("slip-card")
     end
@@ -933,9 +926,7 @@ RSpec.describe Weft::DSL::Params do
         receives :feed
         pushes every: 5
       end
-      component = weft_context({ "symbol" => "WEFT" }) do
-        insert_tag(klass, feed: Object.new)
-      end.children.first
+      component = klass.render_element({ "symbol" => "WEFT" }, nil, feed: Object.new)
 
       expect(component.get_attribute("sse-connect")).to eq("/_components/ticker_card/_stream?symbol=WEFT")
     end
@@ -947,7 +938,7 @@ RSpec.describe Weft::DSL::Params do
   # the failure, instead of raising a second time on top of it.
   describe "refusing wire values a declaration cannot accept" do
     def build(klass, wire)
-      weft_context(wire) { insert_tag(klass) }.children.first
+      klass.render_element(wire, nil)
     end
 
     it "refuses a value the declared type cannot represent" do

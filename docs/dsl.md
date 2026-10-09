@@ -107,7 +107,7 @@ param :page, type: :integer, strict: false   # coerce leniently instead
 
 With strictness off, coercion is exactly [`ActiveModel::Type`](https://api.rubyonrails.org/classes/ActiveModel/Type.html)'s — the behavior a Rails application already has, warts and all. Note one consequence worth knowing before you reach for it: ActiveModel's boolean has a closed *false* list and treats everything else as true, so `?flag=wombat` is `true` there where strict mode refuses it, and `?flag=no` is `true` there where strict mode reads `false`.
 
-**Coercion and strictness belong to `param` alone, and that is deliberate.** Both are facets of *wire safety*. A value arriving from a query string was written by a stranger; a value arriving through `receives`, `derives` or `defines` was written by your own code, which is answerable for the types it passes. So on those three doors `type:` describes rather than converts, and `strict:` and `required:` aren't accepted there at all. The footgun to know about is a key with two doors. Give a `Pager` that declares `builder_method :pager` both `param :page, type: :integer` and `receives :page`, and it reads `3` from `?page=3` but `"3"` from `pager(page: "3")`, because the second value never went near the wire. Pass `3`.
+**Coercion and strictness belong to `param` alone.** Both are facets of *wire safety*. A value arriving from a query string was written by a stranger; a value arriving through `receives`, `derives` or `defines` was written by your own code, which is answerable for the types it passes. So on those three doors `type:` describes rather than converts, and `strict:` and `required:` aren't accepted there at all. The footgun to know about is a key with two doors. Give a `Pager` that declares `builder_method :pager` both `param :page, type: :integer` and `receives :page`, and it reads `3` from `?page=3` but `"3"` from `pager(page: "3")`, because the second value never went near the wire. Pass `3`.
 
 #### `required:` — refusing absence
 
@@ -119,7 +119,7 @@ param :order_id, type: :uuid, required: true
 
 If no source supplies `order_id`, Weft raises `Weft::MissingParam` — also a `Weft::BadRequest`, also 400. A required param may not declare a `default:`, since a default *is* the answer to absence; declaring both raises `Weft::InvalidDefinition` at class-load time.
 
-Note the two doors default opposite ways, and deliberately: a `param` is optional until you say `required: true`, because the wire is absent by nature, while a [`receives`](#receives--caller-handoffs) is required until you give it a `default:`, because a handoff is the call site's contract.
+The two doors default opposite ways: a `param` is optional until you say `required: true`, because the wire is absent by nature, while a [`receives`](#receives--caller-handoffs) is required until you give it a `default:`, because a handoff is the call site's contract.
 
 Inside the component, `params` returns the resolved values with method-style access:
 
@@ -217,7 +217,7 @@ receives :order
 receives :page_num, default: 1
 ```
 
-Some values can't ride a URL — an `ActiveRecord` object, a pre-built collection, anything rich. `receives` declares that a call site hands the value over directly: given an `OrderRow` that declares `builder_method :order_row`, a parent building `order_row(order: order)` fills `params.order` for the code inside `OrderRow`. The kwarg is consumed as the handoff, so it never becomes an HTML attribute on the wrapper, and the value never serializes into a URL.
+Some values can't ride a URL — an `ActiveRecord` object, a pre-built collection, anything rich. `receives` declares that a call site hands the value over directly: given an `OrderRow` that declares `builder_method :order_row`, a parent building `order_row(order: order)` fills `params.order` for the code inside `OrderRow`. The kwarg is consumed as the handoff, so it never becomes an HTML attribute on the wrapper, and the value never serializes into a URL. A spec hands it over the same way: `OrderRow.render({}, nil, order: order)` ([Testing components](arbre.md#testing-components)).
 
 A handoff is **required by default**: a call site that omits it raises `Weft::NotReceived`, with the backtrace pointing at the call site rather than deep inside the framework. Declaring a default makes it optional — `receives :page_num, default: 1`, and an explicit `default: nil` counts too (the presence of the keyword is what makes it optional, not the value).
 
@@ -306,7 +306,7 @@ end
 
 `type:` and `digest:` are declarable on `derives` and `receives` as well as on `param`, and say the same thing at each door, so the UUID above keeps its dashes exactly as `param :driver_id, type: :uuid` would rather than an app carrying two id styles for one kind of value. What differs is what Weft *does* about it: off the wire there is nothing to coerce and nobody to distrust, so the declaration describes the value for the places Weft consults a type. A key declared through two doors may not be given two different types: one key holds one value, so that's refused rather than resolved by precedence.
 
-`defines` takes neither, on purpose, and identifying by one is a sign the component wants a different identifier. Every instance of the class shares a pinned value, so the slot it contributes is *already* carried by the id's stem, which is invariant in the same way. A pin adds no way to tell two instances apart, whether it stands alone or sits beside slots that do. Weft acts on the difference between those two cases: an identity made up **only** of pins is refused, since every instance of the class would wear one id, while a pin sitting beside a key that varies is merely redundant and draws a warning naming it.
+`defines` takes neither, and identifying by one is a sign the component wants a different identifier. Every instance of the class shares a pinned value, so the slot it contributes is *already* carried by the id's stem, which is invariant in the same way. A pin adds no way to tell two instances apart, whether it stands alone or sits beside slots that do. Weft acts on the difference between those two cases: an identity made up **only** of pins is refused, since every instance of the class would wear one id, while a pin sitting beside a key that varies is merely redundant and draws a warning naming it.
 
 An identifying value must be a **scalar** — a String, Symbol, number, boolean, or `nil`. Anything else raises `Weft::InvalidIdentifierValue` naming the component and the param, because an Array or a Hash would otherwise stringify into a selector two instances could share, and a record's default `to_s` carries its memory address, which changes on every request.
 
@@ -476,7 +476,7 @@ announces "order-updated", on: :advance   # the status machine ran
 announces "order-editing", on: :edit      # responsibility handed to the editor
 ```
 
-There is deliberately no `when:` counterpart, though [`brings`](#brings--companions-in-the-same-response) has one. An announcement reports what a *callable* did, so a render-context filter has nothing to say about it: "fire when I render as a transfer target" describes a render that ran no callable, and "fire when I transfer away" is already `on: :that_action`.
+There is no `when:` counterpart, though [`brings`](#brings--companions-in-the-same-response) has one. An announcement reports what a *callable* did, so a render-context filter has nothing to say about it: "fire when I render as a transfer target" describes a render that ran no callable, and "fire when I transfer away" is already `on: :that_action`.
 
 Events follow the *action*, not the rendering: on a [`transfers`](#transfers--actions-that-render-something-else) response the declaring component's events fire — its callable is what ran — while the target's own events wait for the target's own actions. (The same rule is why a `dismisses` response, which renders no body at all, still announces.)
 
@@ -686,7 +686,7 @@ div confirm: "This affects the live feed. Continue?" do
 end
 ```
 
-There is deliberately no `prompt:` counterpart yet — htmx delivers the typed reply in a request header that action callables can't read today; the kwarg arrives once they can.
+There is no `prompt:` counterpart yet — htmx delivers the typed reply in a request header that action callables can't read today; the kwarg arrives once they can.
 
 ### Swap values
 

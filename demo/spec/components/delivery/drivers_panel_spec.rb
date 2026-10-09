@@ -9,12 +9,12 @@ RSpec.describe Delivery::DriversPanel, type: :component do
   end
 
   it "renders a content card with the driver count" do
-    html = render_weft_html { drivers_panel }
+    html = described_class.render({}, nil)
     expect(html).to include("Driver Roster (2)")
   end
 
   it "renders the driver table with all drivers" do
-    html = render_weft_html { drivers_panel }
+    html = described_class.render({}, nil)
     expect(html).to include("Alice")
     expect(html).to include("Bob")
     expect(html.scan(%r{<tr[^>]*>.*?</tr>}m).size).to be >= 2
@@ -22,14 +22,14 @@ RSpec.describe Delivery::DriversPanel, type: :component do
 
   it "renders pagination for large result sets" do
     28.times { |i| Delivery::Driver.create!(name: "Driver#{i}") }
-    html = render_weft_html { drivers_panel }
+    html = described_class.render({}, nil)
     expect(html).to include("Page 1 of 2")
     expect(html).to include("Next")
   end
 
   it "respects the page param" do
     28.times { |i| Delivery::Driver.create!(name: "Driver#{i}") }
-    html = render_weft_html(wire: { "page" => 2 }) { drivers_panel }
+    html = described_class.render({ page: 2 }, nil)
     expect(html).to include("Page 2 of")
   end
 end

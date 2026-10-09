@@ -217,7 +217,7 @@ Point your bundler's output at that directory and the integration is done. The [
 
 ## Testing the whole app
 
-[Component unit testing](arbre.md#testing-components) needs no server: `Component.render(wire, request)` returns the HTML string, with `nil` standing for an empty request. For request-level coverage — routes, actions, status codes, wire payloads — use Rack::Test against the Router:
+[Component unit testing](arbre.md#testing-components) needs no server: `Component.render(wire, request)` returns the HTML string, with `nil` standing for an empty request, and `Component.render_element` the rendered component for assertions on the element tree. For request-level coverage — routes, actions, status codes, wire payloads — use Rack::Test against the Router:
 
 ```ruby
 # spec/spec_helper.rb
