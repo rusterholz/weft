@@ -313,7 +313,7 @@ AttendeeRow.render({}, nil, attendee: priya)
 EventCard.render({ event_id: "trivia-night" }, nil) { para "Bring a dish to share!" }
 ```
 
-The block builds inside the component, as it would at a call site. A name that nothing in the render answers resolves on the spec itself, so a `let` reads naturally there:
+The block builds inside the component, as it would at a call site. A name that nothing in the render answers resolves on the spec itself, so a `let` reads naturally there, unless it shares a tag's name ([name collisions](#blocks-and-method-lookup): a `let` named `summary` builds a `<summary>`):
 
 ```ruby
 let(:reminder) { "Bring a dish to share!" }
@@ -323,6 +323,8 @@ it "puts caller content in the card's body" do
   expect(html).to include("<p>Bring a dish to share!</p>")
 end
 ```
+
+Instance variables don't carry into the block, so a `@reminder` set in a `before` reads as `nil` there; use a `let` or a local. Likewise, read `params` or `request` in the spec and pass the value in as a local, rather than reaching for them inside the block.
 
 To assert on the element tree rather than the string, `render_element` takes the same arguments and returns the rendered component itself: its tag, its classes, what it built inside, and the params it resolved.
 
