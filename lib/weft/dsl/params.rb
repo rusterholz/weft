@@ -319,9 +319,9 @@ module Weft
         end
 
         # What a facet keyword's value would have to look like for the reader
-        # to have plausibly meant it. `default:` is absent on purpose: every
-        # value is a plausible default, so there is nothing to discriminate on
-        # and the check would fire on every key honestly named `default`.
+        # to have plausibly meant it. `default:` has no shape: every value is a
+        # plausible default, so a check would fire on every key honestly named
+        # `default`.
         BOOLEAN_FACET = ->(v) { [true, false].include?(v) }
         FACET_SHAPES = {
           type: ->(v) { !Weft::Types.lookup(v).nil? },
@@ -520,9 +520,9 @@ module Weft
       # param names legitimately collide with attribute names (title, size,
       # value, ...). Set#add? races just double-warn; harmless.
       #
-      # Deliberately not suppressed for known HTML attribute names: the kwarg
-      # does reach the DOM as that attribute, so nobody is stuck, and this is
-      # the migration signal for call sites that used to pass params inline.
+      # Known HTML attribute names warn too: the kwarg still reaches the DOM as
+      # that attribute, and the warning is the migration signal for call sites
+      # that used to pass params inline.
       def warn_declared_chrome_collisions(attributes)
         attributes.each_key do |key|
           door = collision_door(key) or next
