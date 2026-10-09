@@ -29,11 +29,10 @@ RSpec.describe Delivery::DriverTable, type: :component do
     drivers = 2.times.map { |i| Delivery::Driver.create!(name: "Driver #{i}") }
     html = described_class.render({}, nil, drivers: drivers)
 
-    # The id carries the driver's UUID whole, dashes included. A uuid is the one
-    # value A′ composition does not sanitize dash-free, because its width is
-    # fixed and so its boundaries are unambiguous without the separator marking
-    # them — and the row says which it is by declaring `type: :uuid` on the
-    # derivation, exactly as it would on a param.
+    # The id carries the driver's UUID whole, dashes included. Weft strips
+    # dashes from the values it composes into an id, except a UUID: its fixed
+    # width marks where it starts and ends. The row declares `type: :uuid` on
+    # the derivation to say it holds one, as it would on a param.
     drivers.each do |driver|
       expect(html).to include(%(id="delivery-driver-row-#{driver.id}"))
     end
