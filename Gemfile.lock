@@ -106,7 +106,7 @@ GEM
       diff-lcs (>= 1.2.0, < 2.0)
       rspec-support (~> 3.13.0)
     rspec-support (3.13.7)
-    rubocop (1.90.0)
+    rubocop (1.91.0)
       json (>= 2.3)
       language_server-protocol (~> 3.17.0.2)
       lint_roller (~> 1.1.0)
@@ -168,7 +168,7 @@ DEPENDENCIES
   rack-test (~> 2.1)
   rake (~> 13.4)
   rspec (~> 3.13)
-  rubocop (~> 1.88)
+  rubocop (~> 1.91)
   rubocop-rake
   rubocop-rspec
   webmock (~> 3.26)
